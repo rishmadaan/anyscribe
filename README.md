@@ -112,7 +112,7 @@ with no warranty. You may use, modify, and redistribute anyscribe, including
 commercially, under those terms. Modified versions used over a network must
 offer their corresponding source to interacting users as required by AGPL.
 
-This change applies to the next release; previously published MIT releases keep
-their original permissions. Third-party components retain their own licenses;
+This release uses AGPLv3 or later; previously published MIT releases keep their
+original permissions. Third-party components retain their own licenses;
 see [NOTICE](NOTICE). Your transcripts are not automatically AGPL-licensed.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for source builds and distribution guidance.

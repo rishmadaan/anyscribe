@@ -2,6 +2,7 @@
 
 | Date | Type | Entry | TL;DR |
 |------|------|-------|-------|
+| 2026-09-13 | decision | [[journal/2026-09-13-v0165-agpl-release.md\|v0.16.5 AGPL release]] | First AGPLv3-or-later release after PR #14 review and merge; version and public wording updated, with matching source and notices. |
 | 2026-09-13 | troubleshooting | [[journal/2026-09-13-agpl-pr-audit.md\|AGPL PR read-only audit]] | Claude audited PR #14; fixed heading encoding, dashboard copyright, release-boundary copy, and standalone skill licensing with installer tests. |
 | 2026-09-13 | decision | [[journal/2026-09-13-agpl-license-adoption.md\|AGPLv3 adoption]] | First-party AGPL-3.0-or-later, preserved bundled MIT/ISC notices, editable UI in source archives, and CLI/UI license/source links. Applied locally; no release published. |
 | 2026-09-13 | research | [[journal/2026-09-13-gnu-license-migration-plan.md\|GNU license migration plan]] | Proposal only: GPLv3 default with AGPL alternative for hosted forks; provenance, dependency notices, corresponding source, metadata, and release checks. No license change applied. |

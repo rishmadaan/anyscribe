@@ -11,13 +11,15 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
-## Unreleased
+## 0.16.5 — 2026-09-13
 
 - anyscribe now uses GNU AGPLv3 or later. Modified versions offered over a network
   must offer corresponding source to their users under the license terms.
   Commercial use remains permitted; earlier MIT releases keep their permissions.
 - Source archives include the editable web UI and build files. Bundled frontend
   dependency notices are included in the package.
+- Standalone Claude skill installs include the full license and copyright notice;
+  reference files retain their UTF-8 text on Windows.
 
 ## 0.16.4 — 2026-08-09
 

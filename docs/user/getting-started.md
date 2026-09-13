@@ -1,5 +1,6 @@
 ---
 summary: One installer command, one setup wizard, one transcript — then how to keep anyscribe running in the background and where to go next.
+title: Getting Started
 read_when:
   - First time setting up anyscribe
   - You want the fastest path to a working transcription
@@ -352,3 +353,12 @@ anyscribe doctor
 Then head back to **Step 2 — First run** above.
 
 > **Developing on anyscribe?** [Clone the repo](https://github.com/rishmadaan/anyscribe) and install it editable — see the building docs.
+
+## License and source
+
+anyscribe is free software under [GNU AGPLv3 or later](https://github.com/rishmadaan/anyscribe#license),
+with no warranty. Commercial use is allowed under the license terms. If you
+distribute a modified version or let others use one over a network, follow its
+source-sharing requirements. Your transcripts are not automatically covered by
+the application's license. The dashboard sidebar links to source and dependency
+notices; CLI help links to license and source information.

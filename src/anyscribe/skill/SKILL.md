@@ -1,5 +1,6 @@
 ---
 name: anyscribe
+license: AGPL-3.0-or-later
 description: >
   Use anyscribe to transcribe video/audio from YouTube, Instagram,
   or local files into markdown. Activate when the user wants to transcribe a URL
@@ -7,6 +8,10 @@ description: >
   setup, batch-process multiple URLs, or troubleshoot anyscribe issues.
 allowed-tools: Bash(anyscribe *), Bash(scribe *), Read
 ---
+
+Copyright (c) 2026 Rishabh Madaan. This skill and its reference files are free
+software: you may modify and redistribute them under GNU AGPLv3 or later.
+Provided without warranty; see the accompanying [LICENSE](LICENSE) for the terms.
 
 # anyscribe — Transcription CLI Operator Guide
 

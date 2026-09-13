@@ -28,15 +28,18 @@ def copy_skill_files(quiet: bool = False) -> Path:
     refs_dir = ASCLI_SKILL_TARGET / "references"
     refs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy SKILL.md
-    with as_file(source.joinpath("SKILL.md")) as src:
-        (ASCLI_SKILL_TARGET / "SKILL.md").write_text(src.read_text())
+    # Keep the license with the independently distributed skill.
+    for name in ("SKILL.md", "LICENSE"):
+        with as_file(source.joinpath(name)) as src:
+            (ASCLI_SKILL_TARGET / name).write_text(
+                src.read_text(encoding="utf-8"), encoding="utf-8"
+            )
 
     # Copy reference files
     refs_source = source.joinpath("references")
     for name in ("commands.md", "providers.md", "troubleshooting.md", "config.md"):
         with as_file(refs_source.joinpath(name)) as src:
-            (refs_dir / name).write_text(src.read_text())
+            (refs_dir / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
 
     # Write version marker for auto-update detection
     (ASCLI_SKILL_TARGET / ".version").write_text(__version__)

@@ -229,6 +229,7 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 
 | Feature | CLI | Web UI | Notes |
 |---------|-----|--------|-------|
+| License and source information | `--help` footer | Sidebar links | Static notices, no backend state; `NOTICE` owns the first-party grant and Vite generates bundled JavaScript attribution. |
 | Transcribe URL/file | ✓ | ✓ | Same `orchestrator.process()` on both |
 | Duplicate detection (`cached`) + `--force` | ✓ (`--force`/`-f`) | ✓ ("Re-transcribe" on cached state) | Enforced in `orchestrator.process()` (dedup step 0), so all surfaces + MCP inherit it |
 | Delete transcript | ✓ (`anyscribe rm`) | ✓ (delete in History) | Same `vault/index.py::delete_transcript`; also MCP `delete_transcript` tool |

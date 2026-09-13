@@ -21,7 +21,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 - No analytics, no phone-home. `anyscribe update --check` reaches PyPI to compare versions, but only when you run it.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/rishmadaan/anyscribe/blob/main/LICENSE)
+[![License: AGPL v3 or later](https://img.shields.io/badge/license-AGPL_v3_or_later-blue.svg)](https://github.com/rishmadaan/anyscribe/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/anyscribe.svg)](https://pypi.org/project/anyscribe/)
 [![Platforms: macOS, Linux, Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)](https://pypi.org/project/anyscribe/)
 
@@ -106,4 +106,13 @@ The package, command, and app folder were renamed (the `scribe` and `ascli` comm
 
 ## License
 
-MIT
+Copyright (c) 2026 Rishabh Madaan. Licensed under the
+[GNU Affero General Public License v3.0 or later](LICENSE) (`AGPL-3.0-or-later`),
+with no warranty. You may use, modify, and redistribute anyscribe, including
+commercially, under those terms. Modified versions used over a network must
+offer their corresponding source to interacting users as required by AGPL.
+
+This change applies to the next release; previously published MIT releases keep
+their original permissions. Third-party components retain their own licenses;
+see [NOTICE](NOTICE). Your transcripts are not automatically AGPL-licensed.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source builds and distribution guidance.

@@ -683,7 +683,7 @@ Full plan, research citations, architecture, schema, and phases:
 - Topic file generation (Foundry-style, when 3+ transcripts share a topic)
 - Cost tracking (Whisper API usage per month)
 
-## Next release ? AGPLv3 migration
+## Next release — AGPLv3 migration
 
 - [x] First-party licensing changed to AGPL-3.0-or-later; preserve prior MIT grants.
 - [x] Package license metadata, frontend attribution, source archive, README, and landing copy updated.

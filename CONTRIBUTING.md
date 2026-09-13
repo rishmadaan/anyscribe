@@ -5,6 +5,10 @@ otherwise. Submit only material you have the right to contribute, disclose
 third-party material, and preserve its copyright and license notices. See
 [NOTICE](NOTICE), [LICENSE](LICENSE), and [CLAUDE.md](CLAUDE.md).
 
+The independently installed Claude skill carries its own copy of `LICENSE` and
+a copyright/license grant in `SKILL.md`. Keep its license text identical to the
+root license; `tests/test_skill_license.py` checks both consistency and installation.
+
 ## Build from source
 
 Use Python 3.10+ and Node.js 22.12+ (the release workflow uses Node 22).

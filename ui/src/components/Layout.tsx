@@ -81,6 +81,7 @@ export default function Layout() {
         {/* Bottom — branding + shutdown */}
         <div className="mt-auto px-3 pb-4 space-y-2">
           <div className="px-3 py-2 text-xs text-text-secondary space-y-1">
+            <p>&copy; 2026 Rishabh Madaan</p>
             <a href="https://github.com/rishmadaan/anyscribe#license" target="_blank" rel="noopener noreferrer" className="block hover:text-text underline">
               AGPLv3 or later · no warranty
             </a>

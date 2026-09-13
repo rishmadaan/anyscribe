@@ -1,5 +1,6 @@
 ---
 summary: Complete reference for all anyscribe commands, flags, and options.
+title: Command Reference
 read_when:
   - You want to know what flags are available
   - You need the exact syntax for a command
@@ -978,6 +979,9 @@ anyscribe install-skill
 ```
 
 Copies skill files from the anyscribe package to `~/.claude/skills/anyscribe/`. Requires Claude Code to be installed (`~/.claude/` must exist).
+
+The installed skill includes its copyright notice and full AGPLv3 license text.
+Keep these with the skill if you share or modify it.
 
 ### Flags
 

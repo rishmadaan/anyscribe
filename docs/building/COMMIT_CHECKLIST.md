@@ -112,6 +112,7 @@ A "surface-facing feature" is anything a user can see or trigger from either the
 ## After licensing or bundled dependency changes
 
 - [ ] First-party grant in `NOTICE`, `LICENSE`, README, landing, and frontend package metadata agrees.
+- [ ] The standalone skill retains its copyright/grant and full license; run `tests/test_skill_license.py` to check the bundled copy and installer.
 - [ ] Rebuild the UI; preserve generated `THIRD-PARTY-LICENSES.md` and Tailwind's notice in `NOTICE`.
 - [ ] Inspect wheel/sdist license metadata and included license files; keep the distribution's SPDX expression consistent with bundled components.
 - [ ] Source archive includes editable `ui/src`, manifests, lockfile, build config, and Python source, without secrets or `node_modules`.

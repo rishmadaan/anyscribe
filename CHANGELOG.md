@@ -11,6 +11,14 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## Unreleased
+
+- anyscribe now uses GNU AGPLv3 or later. Modified versions offered over a network
+  must offer corresponding source to their users under the license terms.
+  Commercial use remains permitted; earlier MIT releases keep their permissions.
+- Source archives include the editable web UI and build files. Bundled frontend
+  dependency notices are included in the package.
+
 ## 0.16.4 — 2026-08-09
 
 **Fixed**

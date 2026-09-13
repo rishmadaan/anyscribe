@@ -109,6 +109,14 @@ A "surface-facing feature" is anything a user can see or trigger from either the
 3. [ ] If it's on both surfaces, confirm both call the same shared backend module (not via subprocess) — this is architecturally load-bearing
 4. [ ] If it's CLI-only or UI-only by design, state the reason in the matrix row's Notes column so future readers know it wasn't a gap
 
+## After licensing or bundled dependency changes
+
+- [ ] First-party grant in `NOTICE`, `LICENSE`, README, landing, and frontend package metadata agrees.
+- [ ] Rebuild the UI; preserve generated `THIRD-PARTY-LICENSES.md` and Tailwind's notice in `NOTICE`.
+- [ ] Inspect wheel/sdist license metadata and included license files; keep the distribution's SPDX expression consistent with bundled components.
+- [ ] Source archive includes editable `ui/src`, manifests, lockfile, build config, and Python source, without secrets or `node_modules`.
+- [ ] Publish source matching each binary; modified network deployments offer their own corresponding source, not just upstream's repository.
+
 ## Quick grep checks
 
 Run these to catch stale references:

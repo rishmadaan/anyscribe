@@ -31,6 +31,11 @@ app = typer.Typer(
     name="anyscribe",
     cls=DefaultToTranscribe,
     help="Download, transcribe, and convert video/audio to structured markdown.",
+    epilog=(
+        "Copyright (c) 2026 Rishabh Madaan. AGPL-3.0-or-later; no warranty. "
+        "You may redistribute under the license terms. "
+        "License and source: https://github.com/rishmadaan/anyscribe#license"
+    ),
     rich_markup_mode="rich",
     no_args_is_help=True,
 )

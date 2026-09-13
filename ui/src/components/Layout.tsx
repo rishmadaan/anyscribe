@@ -80,6 +80,18 @@ export default function Layout() {
 
         {/* Bottom — branding + shutdown */}
         <div className="mt-auto px-3 pb-4 space-y-2">
+          <div className="px-3 py-2 text-xs text-text-secondary space-y-1">
+            <a href="https://github.com/rishmadaan/anyscribe#license" target="_blank" rel="noopener noreferrer" className="block hover:text-text underline">
+              AGPLv3 or later · no warranty
+            </a>
+            <a href="https://github.com/rishmadaan/anyscribe" target="_blank" rel="noopener noreferrer" className="hover:text-text underline">
+              Source
+            </a>
+            {" · "}
+            <a href="/THIRD-PARTY-LICENSES.md" target="_blank" rel="noopener noreferrer" className="hover:text-text underline">
+              Third-party notices
+            </a>
+          </div>
           {/* KraftedX branding */}
           <a
             href="https://kraftedx.com"

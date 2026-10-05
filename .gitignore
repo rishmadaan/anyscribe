@@ -21,7 +21,8 @@ build/
 *.flac
 *.webm
 
-# Claude Code (local-only working state; skills + settings are shared)
+# Claude Code (local-only working state and machine-specific settings; skills are shared)
+.claude/settings.json
 .claude/settings.local.json
 
 # Node.js (frontend build tooling)

@@ -109,28 +109,23 @@ Includes safety checks: clean working tree, semver format, no duplicate tags, br
 
 ## Automated: CI Checks
 
-GitHub Actions runs lint, tests, and package build on pushes to `main` and pull requests. It also rebuilds the frontend and verifies the committed `src/anyscribe/web/static/` bundle is current.
+GitHub Actions runs lint, tests, and package build on pushes to `main` and pull requests. It also rebuilds the frontend and verifies the committed `src/anyscribe/web/static/` bundle is current. It also runs a fake-HOME migration rehearsal (`scripts/rehearse-migration.sh`) and a docs job (renders `docs/user` with `scripts/build-docs.py`, then `scripts/check-docs.py`).
+
+---
+
+## Automated: GitHub Releases
+
+**GitHub Releases:** the publish workflow creates a release with generated notes for every `v*` tag.
 
 ---
 
 ## NOT Automated (You Do These Manually)
 
-### GitHub Releases
-
-No automation. Optionally create with:
-```bash
-gh release create vX.Y.Z --title "..." --notes "..."
-```
-
 ### Documentation Updates
 
-All docs are manual. No auto-generation for:
-- User docs (`docs/user/`)
-- Building docs (`docs/building/`)
-- README
-- Changelog
+Doc *content* is manual. CI enforces: rendered `landing/docs` HTML matches `docs/user`, no stale version strings, every MCP tool in `agents.md`, and a `CHANGELOG.md` entry for the shipped version.
 
-The `COMMIT_CHECKLIST.md` exists as a reminder, but it's your discipline that enforces it.
+The `COMMIT_CHECKLIST.md` covers the rest; your discipline enforces it.
 
 ---
 
@@ -155,6 +150,6 @@ Things that could be automated but aren't yet:
 
 | What | How | Priority |
 |------|-----|----------|
-| Version sync check | Pre-commit hook comparing both files | Medium |
+| Version sync check | Pre-commit hook comparing `__init__.py` with `pyproject.toml` (publish already checks tag vs `pyproject.toml`; `check-docs.py` catches doc drift) | Medium |
 | Changelog generation | From git tags/commits | Low |
 | Startup update notification | Opt-in check on `anyscribe` launch with TTL | Low |

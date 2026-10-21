@@ -11,9 +11,10 @@ Maintenance rules (see CLAUDE.md → "Updating provider language lists"):
   1. Each entry's `code` MUST be the EXACT code the provider's API accepts —
      no translation. We use whatever format the upstream expects.
   2. "auto" is pinned by the client; do not include it here.
-  3. For Deepgram, entries with `"model": "nova"` route to the legacy Nova
-     model. The selector in deepgram.py:47 reads this. Currently only
-     `hi-Latn` needs it.
+  3. For Deepgram, entries with `"model": "nova"` need the legacy Nova
+     model. The key is documentation only: the selector in deepgram.py:47
+     uses its own hardcoded set, so add the lowercased code there too.
+     Currently only `hi-Latn` needs it.
   4. OpenRouter has no canonical list — it takes a prose instruction in the
      prompt. PROVIDER_LANGUAGES["openrouter"] is None.
   5. After editing, write a short journal entry under docs/building/journal/
@@ -131,7 +132,8 @@ WHISPER_LANGUAGES: list[dict[str, str]] = [
 
 # ── Deepgram ─────────────────────────────────────────────────────────────────
 # Mix of base ISO 639-1 and BCP-47 regional variants. Entries with
-# `"model": "nova"` need the legacy Nova model (deepgram.py:47 reads this).
+# `"model": "nova"` need the legacy Nova model (documentation only; the
+# router at deepgram.py:47 has its own hardcoded set, keep both in step).
 # Multilingual code "multi" enables Nova-3's mixed-language mode.
 DEEPGRAM_LANGUAGES: list[dict[str, str]] = [
     {"code": "ar", "name": "Arabic"},

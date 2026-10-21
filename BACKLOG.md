@@ -6,8 +6,8 @@ What's built, what's next, and what's on the horizon.
 
 This project uses **Semantic Versioning** (SemVer): `MAJOR.MINOR.PATCH`
 
-- **PATCH** (0.1.0 → 0.1.1): bug fixes, typos, small tweaks
-- **MINOR** (0.1.0 → 0.2.0): new features, new provider, new command — backwards compatible
+- **PATCH** (0.1.0 → 0.1.1): bug fixes and bounded feature additions (a new flag, a UI control)
+- **MINOR** (0.1.0 → 0.2.0): milestones (identity change, new surface, config-model redesign)
 - **MAJOR** (0.x → 1.0.0): breaking changes (config format, removed commands, renamed flags)
 
 The `0.x` prefix means pre-stable — breaking changes are allowed between minor versions. `1.0.0` signals stability.
@@ -27,6 +27,7 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.5.2 | Flatten workspace structure — remove date folders, auto-migrate | Released 2026-03-30 |
 | 0.5.3 | Auto-update stale yt-dlp before download | Released 2026-03-31 |
 | 0.5.4 | Windows compatibility — cross-platform yt-dlp invocation | Released 2026-04-01 |
+| 0.5.5 | Rename CLI to `scribe`, bare URL as default action | Released 2026-04-05 |
 | 0.6.0 | scribe rename, MCP server, skill auto-install/update | Released 2026-04-05 |
 | 0.7.0 | Multi-speaker diarization, Deepgram provider, diarized output | Released 2026-04-16 |
 | 0.7.1 | Fix stale skill files in PyPI, add Windows note to skill | Released 2026-04-16 |
@@ -42,6 +43,8 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.7.4.5 | Cross-platform install scripts, web UI setup banner, shutdown button | Released 2026-04-18 |
 | 0.7.4.6 | Sidebar quit button, close tab on shutdown | Released 2026-04-18 |
 | 0.7.4.6.1 | File browse button for local transcription, upload endpoint | Released 2026-04-18 |
+| 0.7.4.6.2 | KraftedX branding: sidebar logo + footer doodles | Released 2026-04-18 |
+| 0.7.4.6.3 | Version-string bump | Released 2026-04-18 |
 | 0.7.4.7 | Per-provider language `<datalist>` picker + provider key clarity (disabled options + Settings CTA) | Released 2026-04-18 |
 | 0.7.4.7.1 | Fix language datalist popup showing nothing — clear input on focus so all options are visible | Released 2026-04-18 |
 | 0.7.4.7.2 | Rename "Diarize" → "Multi-speaker" and "diarized" output → "with-speaker-labels" in the web UI (wire values unchanged) | Released 2026-04-18 |
@@ -64,12 +67,12 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.14.1 | Audit fixes (independent post-release audit): gpt-transcribe `languages` object parse (wrote a dict into frontmatter), `provider_models:` null-YAML crash, `-m` on local now rejected loudly, OpenAI diarize per spec (`diarized_json` + `chunking_strategy`), canonical turbo repo id (orphans turbo caches pulled during the brief 0.14.0 window — re-download), Sarvam `with_diarization` dropped (Batch-only upstream), diarized transcripts echo the requested language, doc contradiction fixes | Released 2026-07-29 |
 | 0.15.0 | **Config defaults, one knob.** `quality` gains `custom` and any provider write sets it (CLI/Web/MCP/onboard), so a chosen provider sticks. New `core/resolve.py::resolve_run` owns the single provider+model ladder for all four surfaces and returns visible notes — keyless tier now warns instead of falling back silently, and every run prints `→ provider · model (via)`. Bare `scribe config` is a defaults dashboard (`--json` = settings + `resolved` + `providers`, the one agent-discovery call). `core/config_set.py::set_value` becomes the single write path for every key incl. API keys. OpenAI default → `gpt-transcribe` with automatic `whisper-1` switch for timestamped/diarized output (explicit `-m` opts out). Catalogs: Deepgram +`nova-2`, ElevenLabs `scribe_v2` only, Sarvam `saaras:v3` only (v2.5 + legacy endpoint deleted, old pins auto-migrated). New `extra_models.openrouter` for user-added slugs (openrouter only — closed catalogs stay release-managed). `OPENROUTER_MODEL` env var removed. Onboarding gains a model step + `--quality`/`--model` headless flags | Released 2026-07-29 |
 | 0.15.1 | Full Web-UI config parity: Settings leads with a "Next run" banner (`_resolved` on GET/PUT `/api/config`, error-guarded), provider+model controls un-hidden (were gated behind picking "custom"), new Downloads & media section (`prompt_download`, `local_file_media`, `keep_media`, real `instagram.browser` select via a new `instagram` field on ConfigUpdateRequest), `resolve_run` warns on unknown quality values. Rule set in docs: nothing is terminal-only | Released 2026-07-29 |
-| 0.16.3 | **MCP SDK v2 / protocol `2026-07-28`** — `FastMCP` → `MCPServer`, server identity now `anyscribe` + version string (resource URIs deliberately unchanged). Fixes a live install break: the unbounded `mcp>=1.0` resolved onto the v2 major released 2026-07-28, which deleted `mcp.server.fastmcp`, so every fresh `pip install "anyscribe[mcp]"` failed on import. Now pinned `mcp>=2,<3`. Root cause of the blind spot: CI installed `.[dev]` and never `.[mcp]`, so the MCP test importorskipped away on every run — CI now installs `.[dev,mcp]` and asserts the registered tool/resource surface | Released 2026-08-09 |
-| 0.16.5 | **AGPLv3-or-later migration** - first-party licensing, bundled MIT/ISC notices, editable frontend source, standalone skill license, and audited CLI/UI/legal documentation | **Current** |
-| 0.16.4 | **`CHANGELOG.md` + dependency-drift fix** — a user-facing changelog covering every release (`BACKLOG.md` keeps the implementation detail and roadmap), with a new `check-docs.py` gate that fails CI when the shipped version has no entry, so it can't silently rot. Drops the dead `typer[all]` extra (typer stopped declaring it; plain `typer` has bundled rich + shellingham since 0.12) and bounds it `>=0.12,<1` — same latent-drift shape as the 0.16.3 `mcp` break, caught in that release's clean-install check | Released 2026-08-09 |
-| 0.16.2 | **Voice sweep + polish** — all 104 user-visible runtime strings speak `anyscribe` (matching the docs), `sarvam` accepted as a spelling for the `sargam` provider everywhere a provider name enters (nine call sites, false-green key checks closed), `anyscribe ui` auto-retries up to 10 busy ports (65535-clamped, parser-validated `--port`), grammar fixes, README/landing screenshot downscaled 46% | Released 2026-08-09 |
-| 0.16.1 | **User-facing docs rebuild** — three-door docs site (`agents.md` skill-vs-MCP guide, installer-first getting-started with keep-it-running chapter, commands + troubleshooting split, provider cost table), commit-time docs pipeline with CI honesty gates, install.sh Apple-Silicon fixes + `[tray]` default, keys/status counts local, Groq wizard card, macOS open-at-login toggle | Released 2026-08-09 |
 | 0.16.0 | **Rename `anyscribecli` → `anyscribe`** — new PyPI package, `anyscribe` primary command (`scribe`/`ascli` kept as permanent aliases), `~/.anyscribecli/` → `~/.anyscribe/` config dir with automatic + one-shot `anyscribe migrate`. Old `anyscribecli` PyPI project ships a final shim release that re-declares `scribe`/`ascli`/`scribe-mcp` so upgrades don't lose the console scripts | Released 2026-07-31 |
+| 0.16.1 | **User-facing docs rebuild** — three-door docs site (`agents.md` skill-vs-MCP guide, installer-first getting-started with keep-it-running chapter, commands + troubleshooting split, provider cost table), commit-time docs pipeline with CI honesty gates, install.sh Apple-Silicon fixes + `[tray]` default, keys/status counts local, Groq wizard card, macOS open-at-login toggle | Released 2026-08-09 |
+| 0.16.2 | **Voice sweep + polish** — all 104 user-visible runtime strings speak `anyscribe` (matching the docs), `sarvam` accepted as a spelling for the `sargam` provider everywhere a provider name enters (nine call sites, false-green key checks closed), `anyscribe ui` auto-retries up to 10 busy ports (65535-clamped, parser-validated `--port`), grammar fixes, README/landing screenshot downscaled 46% | Released 2026-08-09 |
+| 0.16.3 | **MCP SDK v2 / protocol `2026-07-28`** — `FastMCP` → `MCPServer`, server identity now `anyscribe` + version string (resource URIs deliberately unchanged). Fixes a live install break: the unbounded `mcp>=1.0` resolved onto the v2 major released 2026-07-28, which deleted `mcp.server.fastmcp`, so every fresh `pip install "anyscribe[mcp]"` failed on import. Now pinned `mcp>=2,<3`. Root cause of the blind spot: CI installed `.[dev]` and never `.[mcp]`, so the MCP test importorskipped away on every run — CI now installs `.[dev,mcp]` and asserts the registered tool/resource surface | Released 2026-08-09 |
+| 0.16.4 | **`CHANGELOG.md` + dependency-drift fix** — a user-facing changelog covering every release (`BACKLOG.md` keeps the implementation detail and roadmap), with a new `check-docs.py` gate that fails CI when the shipped version has no entry, so it can't silently rot. Drops the dead `typer[all]` extra (typer stopped declaring it; plain `typer` has bundled rich + shellingham since 0.12) and bounds it `>=0.12,<1` — same latent-drift shape as the 0.16.3 `mcp` break, caught in that release's clean-install check | Released 2026-08-09 |
+| 0.16.5 | **AGPLv3-or-later migration** - first-party licensing, bundled MIT/ISC notices, editable frontend source, standalone skill license, and audited CLI/UI/legal documentation | Released 2026-09-13 (current) |
 | 1.0.0 | Stable: broader test coverage and release hardening | Future |
 
 ### How to bump versions
@@ -371,9 +374,9 @@ All features originally planned for v0.2.0–v0.5.0, built in one session:
   - [x] Before transcribing: check if the source URL/path was already transcribed (matches each transcript's frontmatter `source:`)
   - [x] If already transcribed, return the existing transcript with `cached: true` instead of re-transcribing
   - [x] `--force` flag to bypass the check and re-transcribe (transcribe + batch, plus Web UI and MCP)
-- [ ] Full test suite (pytest — unit tests for providers, downloaders, vault, config)
+- [x] Full test suite (pytest — unit tests for providers, downloaders, vault, config) — shipped incrementally 0.11.0-0.16.x
 - [x] Comprehensive error handling and retry logic (network failures, API rate limits)
-- [ ] Suppress instaloader's noisy retry output (redirect to log file)
+- [ ] ~~Suppress instaloader's noisy retry output (redirect to log file)~~ — moot: instaloader removed in 0.8.3/0.10.0
 - [x] `scribe logs` command to view recent log files — shipped as `scribe logs` in v0.12.0
 
 ---
@@ -404,9 +407,9 @@ Turn `scribe ui` into a click-to-open, always-there experience without adopting 
 Scope (minimal-first, stop whenever "enough"):
 
 - [x] `scribe tray` — cross-platform tray icon (pystray) that supervises the FastAPI server as a subprocess. Menu: Open UI, Status, Restart, Check for updates, Quit.
-- [x] `anyscribecli[tray]` extra — keeps base install CLI-only; tray deps (pystray, Pillow, pyobjc on macOS) only pulled when requested.
+- [x] `anyscribe[tray]` extra — keeps base install CLI-only; tray deps (pystray, Pillow, pyobjc on macOS) only pulled when requested.
 - [x] `scribe install-service` / `scribe uninstall-service` — writes launchd plist on macOS first; Linux systemd user unit and Windows startup shortcut deferred, as planned (no demand yet).
-- [x] Port probe + pidfile at `~/.anyscribecli/tray.pid` — detect an already-running instance instead of failing with a port collision.
+- [x] Port probe + pidfile at `~/.anyscribe/tray.pid` — detect an already-running instance instead of failing with a port collision.
 - [x] Update-from-tray as planned — "Check for updates" opens the GitHub releases page in the browser rather than performing an in-place update. Revisit once install-mode detection (pipx vs pip vs venv) is bulletproof.
 - [x] Graceful shutdown via existing `/shutdown` endpoint → SIGTERM fallback after 5s.
 
@@ -419,9 +422,9 @@ Accepted tradeoffs:
 
 ---
 
-## v0.14.0 — Rename to anyscribe
+## v0.16.0 (planned as v0.14.0): Rename to anyscribe ✅
 
-**Status:** in progress (branch `rename/anyscribe`)
+**Status:** released 2026-07-31
 
 Identity change (a milestone, hence the minor bump). Five identities renamed
 independently: PyPI distribution, Python import package (`src/anyscribecli/` →
@@ -436,7 +439,8 @@ independently: PyPI distribution, Python import package (`src/anyscribecli/` →
 - [x] `anyscribe migrate` — one-shot mover (config/keys/sessions/downloads),
       skill refresh, MCP re-key, command verification; `--dry-run` writes nothing
 - [x] Skill + docs + landing lead with `anyscribe`
-- [ ] Final `anyscribecli` shim release re-declaring `scribe`/`ascli`/`scribe-mcp`
+- [x] Final `anyscribecli` shim release re-declaring `scribe`/`ascli`/`scribe-mcp`
+      (`anyscribecli` 0.15.2 on PyPI, 2026-07-31, requires `anyscribe>=0.16.0`)
       (pip uninstalls the old package *after* installing the new one, which would
       otherwise delete the shared console scripts — proven with a repro)
 
@@ -584,6 +588,14 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 
 ---
 
+## v0.16.5 — AGPLv3 migration
+
+- [x] First-party licensing changed to AGPL-3.0-or-later; preserve prior MIT grants.
+- [x] Package license metadata, frontend attribution, source archive, README, and landing copy updated.
+- [x] Assign version 0.16.5; publish matching wheel/source artifacts through the tagged release workflow and verify their license metadata.
+
+---
+
 ## v1.0.0 — Stable Release
 
 - [x] PyPI published (`pip install anyscribe`) — live since v0.3.1
@@ -660,11 +672,9 @@ Full plan, research citations, architecture, schema, and phases:
 
 **Goal:** a public landing / showcase page for anyscribe so anyone can discover it, read what it does, and install it without being handed CLI instructions by a friend. Reference point: [openclaw.ai](https://openclaw.ai) and similar single-command CLI tools that ship a polished marketing site alongside the repo.
 
-**Status:** the v3 design direction was executed — `landing/index.html` reworked with a quality-picker section and claims updated to match the current product (quality tiers, seven providers, tray companion). `.github/workflows/pages.yml` deploys `landing/` to GitHub Pages on every push touching `landing/**`, but **Pages hosting is not yet enabled** for the repo (Settings → Pages → Source: GitHub Actions) — pending user approval. The workflow no-ops gracefully until then.
+**Status:** shipped; hosted on Vercel (`vercel.json`) since 0.13.2. The GitHub Pages workflow was removed.
 
 **Historical note (parked 2026-04-18 → unparked 2026-07-04):** two earlier design iterations (commits `c5c8fa5`, `ff48224`) didn't land; the blocker was converging on an aesthetic, not writing the HTML. v3 — dark warm charcoal (`#0E0D0B`) with a single warm amber accent (`#F5A524`), Unbounded display + Instrument Serif italic + Geist body, animated SVG waveform motif — is what finally shipped. Self-contained static HTML, no build step.
-
-**Remaining step:** a human needs to flip Settings → Pages → Source: GitHub Actions in the repo to actually go live; the workflow is ready and waiting.
 
 ---
 
@@ -674,18 +684,12 @@ Full plan, research citations, architecture, schema, and phases:
 
 - **Deepgram diarizer v2**: our diarize requests send the legacy `diarize=true` param, which Deepgram routes to their older v1 diarizer; their docs now recommend the newer diarizer selection param for better speaker separation. Verify the exact param against current docs and switch (found by the 0.15.0 audit; pre-existing, no request fails today).
 
-- **Windows zero-config PATH**: Current v0.5.4 workaround is `python -m anyscribecli` as one-time bootstrap (prints PowerShell PATH fix on first run). Acceptable but not great — user has to know the `python -m` incantation. Explore: custom Windows installer (`.msi` or `winget` package), PowerShell install script (`install.ps1` analogous to `install.sh`), or a shim that pip can place in a well-known location. The goal: `pip install anyscribecli` → `ascli` just works, no extra steps.
-- GUI (web UI via FastAPI + React, or TUI via Textual)
+- **Windows zero-config PATH**: Current v0.5.4 workaround is `python -m anyscribe` as one-time bootstrap (prints PowerShell PATH fix on first run). Acceptable but not great — user has to know the `python -m` incantation. Explore: custom Windows installer (`.msi` or `winget` package), or a shim that pip can place in a well-known location. The goal: `pip install anyscribe` → `anyscribe` just works, no extra steps.
+- TUI via Textual (the web UI shipped in 0.7.4)
 - AI-generated summaries (TL;DR via LLM after transcription)
 - Chapter/section detection
-- Search across all transcripts (`ascli search <query>`)
+- Search across all transcripts (`anyscribe search <query>`)
 - Export formats beyond markdown (PDF, DOCX, SRT subtitles)
 - Podcast RSS feed ingestion
 - Topic file generation (Foundry-style, when 3+ transcripts share a topic)
 - Cost tracking (Whisper API usage per month)
-
-## v0.16.5 — AGPLv3 migration
-
-- [x] First-party licensing changed to AGPL-3.0-or-later; preserve prior MIT grants.
-- [x] Package license metadata, frontend attribution, source archive, README, and landing copy updated.
-- [x] Assign version 0.16.5; publish matching wheel/source artifacts through the tagged release workflow and verify their license metadata.

@@ -1,6 +1,6 @@
 # Architecture
 
-**Last updated:** 2026-07-04 (v0.13.0 — menu-bar tray companion + launchd auto-start, GitHub Releases automation)
+**Last updated:** 2026-10-21 (v0.16.5)
 
 ## Overview
 
@@ -58,7 +58,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 ### CLI Layer (`cli/`)
 - Typer app with `rich_markup_mode="rich"`, custom `DefaultToTranscribe(TyperGroup)` class for bare-URL routing
 - Primary command: `anyscribe` (aliases: `scribe`, `ascli` for backward compat)
-- Commands: `onboard`, `transcribe`, `download`, `batch`, `rm`, `logs`, `config`, `providers`, `local`, `model`, `ui`, `tray`, `install-service`, `uninstall-service`, `update`, `doctor`, `install-skill`
+- Commands: `onboard`, `transcribe`, `download`, `batch`, `rm`, `logs`, `config`, `providers`, `local`, `model`, `ui`, `tray`, `install-service`, `uninstall-service`, `update`, `doctor`, `install-skill`, `migrate`
 - **Tray supervision model** (`cli/tray_cmd.py` + `core/tray.py`): `anyscribe tray` is a `pystray` menu-bar icon that supervises `anyscribe ui` as a subprocess — attaches to an already-running server instead of colliding (TCP connect-probe), guards against double-launch with a pidfile at `~/.anyscribe/tray.pid`, and tears down via a `signal.pthread_sigmask` + `signal.sigwait` watcher thread rather than a plain `signal.signal` handler (pystray's macOS Cocoa event loop can block Python bytecode from running, so a normal handler can miss SIGTERM/SIGINT). `core/service.py` registers a macOS launchd LaunchAgent (`anyscribe install-service`) that runs `{python} -m anyscribe tray` at login.
 - Bare URL: `anyscribe "url"` auto-routes to transcribe (first arg not a known subcommand → prepend `transcribe`)
 - `--json` and `--quiet` available on main commands (transcribe, download, batch, config show, providers list)
@@ -85,15 +85,22 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 ### Web UI Layer (`web/` + `ui/`)
 - FastAPI backend serving a built React SPA at `127.0.0.1:8457`
 - Launched via `anyscribe ui` — core dependency, not optional
-- REST API: `/api/config`, `/api/providers`, `/api/transcripts`, `/api/transcribe`, `/api/health`, `/api/shutdown`
+- REST API (`web/routes/*.py`):
+  - Config/keys: GET/PUT `/api/config`, GET `/api/providers`, GET `/api/providers/{name}/languages`, POST `/api/providers/{name}/test`, GET `/api/keys/status`, PUT `/api/keys`, DELETE `/api/keys/{provider_name}`
+  - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
+  - History: GET `/api/transcripts`, GET/DELETE `/api/transcripts/{transcript_id}`, GET `/api/workspace/info`
+  - System: GET `/api/health`, GET/PUT `/api/autostart`, POST `/api/shutdown`
+  - Local: GET `/api/local/status`, GET `/api/local/setup/log`, POST `/api/local/setup`, POST `/api/local/teardown`
+  - Models: GET `/api/models/local`, POST `/api/models/local/{size}/pull`, POST `/api/models/local/{size}/reinstall`, DELETE `/api/models/local/{size}`
+  - Onboarding: GET `/api/onboarding/status`, POST `/api/onboarding/save`
 - WebSocket: `/api/ws/jobs/{job_id}` for real-time transcription progress
 - JobManager runs `process()` in ThreadPoolExecutor, bridges to async via `asyncio.Queue` + `call_soon_threadsafe`
 - Orchestrator's `on_progress` callback emits `ProgressEvent` at each pipeline step (download, transcribe, write, index)
 - Frontend: React 19 + TypeScript + Vite + Tailwind CSS v4, builds to `web/static/`
 - SPA routing: catch-all `/{full_path:path}` serves `index.html` for non-API paths
 - Server stashed on `app.state.server` for graceful `/shutdown` via `server.should_exit = True`
-- Port conflict detection before starting uvicorn
-- 17 smoke tests via FastAPI TestClient
+- Busy port: `anyscribe ui` rolls forward up to 10 ports (clamped to 65535) and only errors when all are busy
+- Web tests: `tests/test_web*.py`, `test_autostart_route.py`, `test_keys_status.py`, `test_ui_port.py` (FastAPI TestClient)
 
 ### Skill Layer (`skill/`)
 - Claude Code skill files bundled in package, auto-installed to `~/.claude/skills/anyscribe/`
@@ -120,7 +127,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
   - **Deepgram**: Nova-3 (nova-2 also pickable), native diarization, `hi-Latn` support
   - **ElevenLabs**: Scribe v2, word-level timestamps, 90+ languages
   - **OpenRouter**: Audio-via-chat (`openai/gpt-audio-mini`), no timestamps, freeform model slugs
-  - **Sargam/Sarvam**: Indic languages, `saaras:v3` only, auto-chunks to 30s REST API limit
+  - **Sargam/Sarvam**: Indic languages, `saaras:v3` only, auto-chunks to 28 s (sync REST limit is 30 s, exclusive)
   - **Groq**: `whisper-large-v3-turbo`, OpenAI-compatible — thin subclass of `OpenAIProvider`. Cheapest + fastest.
   - **Local**: faster-whisper, offline, CPU/GPU, no API key
 - Lazy-import registry — each provider only loaded when requested
@@ -140,10 +147,16 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 ### Core Layer (`core/`)
 - Orchestrator ties the pipeline together; runs the dedup check (step 0) before any download, skippable with `force=True`
 - Dedup (`core/dedup.py`) — `find_existing_transcript(source)` scans `sources/*/*.md` frontmatter for a matching `source:` line; no cache file, the vault is the source of truth
-- Audio module handles chunking (18-min for Whisper 25MB limit, 30s for Sarvam)
+- Audio module handles chunking (18-min for Whisper 25MB limit); the Sarvam provider chunks its own input to 28 s (`providers/sargam.py`)
+- Pre-flight (`core/preflight.py`) — prerequisite checks before the pipeline starts
+- Checkpoint (`core/checkpoint.py`) — chunk save/resume for partial transcriptions
+- Errors (`core/errors.py`) — structured provider errors + retry logic
+- File utilities (`core/fileutil.py`) — atomic writes + file locking
+- Local setup (`core/local_setup.py`) — local faster-whisper install/teardown
+- Config writes (`core/config_set.py`) — the single validated settings write path (CLI, Web UI, MCP)
 - Dependency checker detects OS (macOS, Linux, Windows), checks/installs yt-dlp, ffmpeg, Python; auto-updates stale yt-dlp (>60 days) before download. Uses module-based detection for pip-installed tools (`python -m module --version`) and `shutil.which` for system binaries
 - Updater supports both git-based (dev) and pip-based (user) installs
-- Migrations run at startup: workspace path rename, media→downloads, date folder flattening
+- Migrations run at startup: app home `~/.anyscribecli` → `~/.anyscribe`, workspace path rename, media → downloads, date-folder flattening, stale Sarvam model pin
 
 ## Key Technical Decisions
 
@@ -151,14 +164,14 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - **yt-dlp via `python -m yt_dlp`** (not bare `yt-dlp` binary): invoked as a Python module via `sys.executable` to avoid PATH issues on Windows. Auto-updated when stale — YouTube changes streaming formats frequently, causing 403s with old extractors. `get_command("yt-dlp")` in `core/deps.py` centralizes invocation for all call sites
 - **yt-dlp for Instagram (0.8.3+)**: replaced instaloader to eliminate the rate-limit-prone `test_login()` GraphQL probe and the password-on-disk requirement. Cookies come from the user's existing browser via `--cookies-from-browser`. See `docs/building/journal/2026-04-29-instagram-yt-dlp-migration.md` for the decision record.
 - **httpx** over requests: async-capable for batch processing
-- **Dataclasses** over pydantic: fewer deps, sufficient for config/results
+- **Dataclasses** over pydantic for config/results; pydantic only for web request/response models (`web/models.py`), via FastAPI
 - **src/ layout**: prevents accidental imports from project root
 - **Audio: 16kHz mono 64kbps**: proven optimal for Whisper from AnyScribe web app
 - **Lazy imports**: optional deps (faster-whisper for local provider) only imported when needed
 - **Three install paths**: install.sh (users), pip from PyPI (recommended), git clone (devs)
 - **SemVer**: 0.x for pre-stable, 1.0.0 when all platforms + providers stable
 - **Auto-migration**: Startup migrations handle legacy paths transparently (workspace rename, media→downloads, date folder flattening)
-- **CI + PyPI automation**: GitHub Actions runs lint, tests, package build, and frontend bundle freshness checks on pushes/PRs. Tag pushes publish to PyPI via trusted publishing; `scripts/release.sh` handles one-command releases. The same workflow also runs `gh release create --generate-notes` after publish, so every tag gets a GitHub Release automatically.
+- **CI + PyPI automation**: GitHub Actions runs lint, tests, package build, and frontend bundle freshness checks on pushes/PRs. Tag pushes publish to PyPI via trusted publishing; `scripts/release.sh` handles one-command releases. The same workflow also runs `gh release create --generate-notes` after publish, so every tag gets a GitHub Release automatically. CI also runs a fake-HOME migration rehearsal (`scripts/rehearse-migration.sh`) and a docs job (rendered-HTML freshness, version drift, MCP-tool and CHANGELOG gates).
 - **Tray as a supervisor, not a rewrite**: `anyscribe tray` spawns/attaches to the existing `anyscribe ui` server rather than embedding a webview or rewriting the UI as a native app — the browser stays the UI surface, the tray only adds discoverability and process supervision.
 - **AI-first skill management**: Claude Code skill auto-installs and auto-updates on every CLI invocation. `.version` marker pattern borrowed from gitstow — one file read + string compare, never blocks CLI
 - **MCP server**: Thin wrapper around core modules. Both CLI and MCP use same orchestrator/providers/settings — only output format differs (Rich console vs JSON)
@@ -190,11 +203,11 @@ Hard-coded constants and where they live:
 
 | Constant | Value | Source | Why fixed |
 |----------|-------|--------|-----------|
-| Audio profile | 16 kHz · mono · 64 kbps mp3 | `downloaders/youtube.py:58`, `instagram.py:149`, `local_file.py:52`, `core/audio.py:97` | Proven optimal for Whisper accuracy-per-byte. Duplicated across 4 files — no shared constant yet. |
+| Audio profile | 16 kHz · mono · 64 kbps mp3 | `downloaders/youtube.py:58`, `instagram.py:105`, `local_file.py:52`, `core/audio.py:97` | Proven optimal for Whisper accuracy-per-byte. Duplicated across 4 files — no shared constant yet. |
 | Whisper size trigger | 25 MB (`WHISPER_MAX_BYTES`) | `core/audio.py:9` | OpenAI upload cap |
 | Whisper duration trigger | 30 min (`WHISPER_MAX_DURATION_SECONDS`) | `core/audio.py:16` | HTTP timeout ceiling |
 | Chunk length / overlap | 18 min / 5 s | `core/audio.py:20,23` | Stays under 25 MB at 64 kbps |
-| Sarvam chunk | 30 s (`SARVAM_MAX_DURATION`) | `providers/sargam.py:27` | Sarvam sync REST cap |
+| Sarvam chunk | 28 s (`SARVAM_MAX_DURATION`) | `providers/sargam.py:29` | Sarvam sync REST cap is 30 s, exclusive |
 | Provider model catalogs | `PROVIDER_MODELS` in `providers/__init__.py` (defaults: `gpt-transcribe`, `nova-3`/`nova`, `scribe_v2`, `saaras:v3`, `openai/gpt-audio-mini`, `whisper-large-v3-turbo`); diarize pins `gpt-4o-transcribe-diarize` | `providers/__init__.py` + each `providers/*.py` | Pickable since 0.14.0 via `settings.provider_models` / `--model`; the `quality` tier still picks the provider, the pin rides on top. **Closed catalogs are release-managed** — each entry needs response-parsing code, so users can't extend them. `settings.extra_models` is the one escape hatch and is openrouter-only (0.15.0), because an open-model provider forwards any slug. Read catalogs via `get_models(name, extra_models)`, never `PROVIDER_MODELS` directly |
 | App home | `~/.anyscribe` | `config/paths.py:6` | Fixed root for config + state |
 | Web bind host | `127.0.0.1` (port is configurable via `--port`) | `web/app.py:63` | Localhost-only by design; server has no auth |
@@ -248,7 +261,9 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 | System diagnostics | ✓ (`anyscribe doctor`) | ✓ (Settings → System section, lighter) | UI surfaces a subset |
 | Self-update | ✓ (`anyscribe update`) | — | CLI-only. Updating a running server is weird |
 | Claude Code skill install | ✓ (`anyscribe install-skill`) | — | CLI-only; runs automatically anyway |
-| Menu-bar tray + login auto-start | ✓ (`anyscribe tray`, `install-service`/`uninstall-service`) | — | CLI-only by nature — a tray icon and a launchd registration aren't Web UI concepts; the tray supervises the Web UI server, it doesn't compete with it |
+| Menu-bar tray | ✓ (`anyscribe tray`) | — | CLI-only by nature — a tray icon isn't a Web UI concept; the tray supervises the Web UI server, it doesn't compete with it |
+| Login auto-start | ✓ (`install-service`/`uninstall-service`) | ✓ (Settings open-at-login toggle, macOS, needs `[tray]` extra) | Same `core/service.py` (`GET/PUT /api/autostart`) |
+| Legacy config migration | ✓ (`anyscribe migrate`, `--dry-run`) | — | CLI-only; the app-home move also runs automatically on every config/app-home read (`core/migrate.py::migrate_app_home_once`) |
 | Drag-and-drop upload | — | ✓ | UI-only |
 | API key management | ✓ (`anyscribe config set <prov>_api_key`) | ✓ (inline per-provider with Test) | UI has richer UX |
 

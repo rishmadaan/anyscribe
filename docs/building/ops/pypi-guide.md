@@ -114,7 +114,7 @@ If something is wrong (bad description, missing metadata), fix it and bump the v
 
 See [release-checklist.md](release-checklist.md) for the full step-by-step process you follow every release.
 
-The core commands:
+Normal releases: `./scripts/release.sh X.Y.Z "desc"`; the tag triggers `.github/workflows/publish.yml`, which publishes via PyPI trusted publishing (no token). Manual twine is only for the legacy `anyscribecli` shim or a failed workflow:
 
 ```bash
 rm -rf dist/

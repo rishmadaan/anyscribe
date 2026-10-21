@@ -1,6 +1,6 @@
 # Providers
 
-**Last updated:** 2026-07-29
+**Last updated:** 2026-10-21
 
 ## Model Picker
 
@@ -104,7 +104,7 @@ tier would silently re-override the user's choice on the next run.
 - Uses `scribe_v2` model, `xi-api-key` auth header (migrated from `scribe_v1`, which ElevenLabs removed 2026-07-09; v2 is the current top-accuracy model)
 - Returns word-level timestamps (grouped into ~30-word segments for readability)
 - ElevenLabs API accepts up to 3GB, but anyscribe chunks at 25MB (same `WHISPER_MAX_BYTES` threshold) for consistency
-- This is the provider the `accuracy` quality tier (default) selects
+- This is the provider the `accuracy` quality tier selects
 
 ### OpenRouter (`providers/openrouter.py`)
 - No dedicated STT endpoint — sends base64 audio to chat models
@@ -119,8 +119,7 @@ tier would silently re-override the user's choice on the next run.
 - Auto-chunks audio into 28s segments (different from the standard 18-min Whisper chunks)
 - `api-subscription-key` auth header
 - Best for Indian languages; not suited for non-Indian languages
-- Diarize support: `with_diarization=true` param, parses speaker turns from response
-- Note: 28s chunks mean speaker IDs may restart per chunk — known limitation
+- Diarization: not sent (Sarvam's sync endpoints don't support it; Batch API only). The response parser still reads `turns` if present (sargam.py:148)
 - **Future:** adopt Sarvam's batch API (no 30s cap, native diarization, 2hr/file) to escape sync chunking — see the [landscape audit](journal/2026-06-27-transcription-landscape-and-config-audit.md).
 
 ### Groq (`providers/groq.py`)
@@ -129,26 +128,28 @@ tier would silently re-override the user's choice on the next run.
 - Chunking and `_parse_response` inherited unchanged
 - Diarize path overridden to raise — Groq has no diarization model
 - This is the provider the `cost` quality tier selects
+- No entry in `PROVIDER_LANGUAGES` (`providers/languages.py`), so the Web UI language picker shows no list for Groq
 
 ### Local (`providers/local.py`)
 - Uses `faster-whisper` (CTranslate2-based, up to 4x faster than original Whisper)
 - Auto-detects GPU (CUDA) or falls back to CPU with int8
-- Default model: `base` (override via `ASCLI_LOCAL_MODEL` env var)
-- Available models: tiny, base, small, medium, large-v3
+- Model: `settings.local_model` (default `base`, settings.py:49); `ASCLI_LOCAL_MODEL` env var overrides (local.py:30)
+- Sizes: `MODEL_SIZES` in local_models.py (tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5)
 - VAD filtering enabled for speed
-- Requires: `pip install faster-whisper`
+- Setup: `anyscribe local setup --model <size>` (installs faster-whisper + downloads the model) or `pip install "anyscribe[local]"`
 
 ## Adding a Provider
 
 1. Create `src/anyscribe/providers/<name>.py`
 2. Implement `TranscriptionProvider` from `base.py`:
    - `name` property returning the provider name
-   - `transcribe(audio_path, language)` returning `TranscriptResult`
-3. Add entry to `PROVIDER_REGISTRY` in `providers/__init__.py`
+   - `transcribe(audio_path, language="auto", diarize=False)` returning `TranscriptResult`
+3. Add to `PROVIDER_REGISTRY`, `PROVIDER_KEY_ENV` and `PROVIDER_MODELS` in `providers/__init__.py`
 4. Add provider info to `PROVIDER_INFO` in `cli/onboard.py`
-5. Add any required env vars (e.g., `<NAME>_API_KEY`)
+5. Add to `PROVIDER_LANGUAGES` in `providers/languages.py`
 6. Update `docs/user/providers.md` and `docs/user/commands.md`
-7. Update this doc
+7. Update `src/anyscribe/skill/references/providers.md`
+8. Update this doc
 
 ## Provider Interface
 

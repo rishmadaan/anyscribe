@@ -1,8 +1,8 @@
 # Plan — rename `anyscribecli` → `anyscribe`
 
 **Date:** 2026-07-21
-**Status:** approved, not started
-**Target release:** `0.14.0` (milestone bump — identity change is a milestone)
+**Status:** shipped in 0.16.0 (2026-07-31). Kept for its hazard analysis.
+**Target release:** `0.14.0` (milestone bump — identity change is a milestone); shipped as 0.16.0
 **Adversarial review:** Fable, 2026-07-21 — 4 blockers + 3 serious found, all folded in below.
 Repro artifacts for B2/B3 lived in the session scratchpad under `repro/`.
 

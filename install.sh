@@ -26,6 +26,7 @@ RUN_UI=false
 VERBOSE=false
 DRY_RUN=false
 USED_PIPX=false
+POST_INSTALL_SKIPPED=false
 PY="python3"
 
 # ── Colors ────────────────────────────────────────────────────
@@ -276,10 +277,10 @@ install_with_pipx() {
             brew install pipx
         else
             case "$LINUX_PKG" in
-                apt)    sudo apt install -y pipx ;;
+                apt)    sudo apt update -qq && sudo apt install -y pipx ;;
                 dnf)    sudo dnf install -y pipx ;;
                 pacman) sudo pacman -S --noconfirm python-pipx ;;
-                *)      "$PY" -m pip install --user pipx ;;
+                *)      "$PY" -m pip install --user pipx || die "Could not install pipx automatically. Install pip or pipx for $PY (https://pipx.pypa.io), then re-run the installer." ;;
             esac
         fi
     fi
@@ -359,8 +360,9 @@ run_post_install() {
         # only edits the profile), and $PY never received anyscribe.
         cmd=("$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/anyscribe")
         if [[ ! -x "${cmd[0]}" ]]; then
-            warn "Could not find the pipx-installed anyscribe at ${cmd[0]}."
-            echo "    Skipping the post-install step; open a new terminal and run anyscribe from there."
+            warn "Automatic launch skipped: the anyscribe executable could not be found. Run \`pipx list\` to inspect the installation."
+            echo "    (looked for ${cmd[0]})"
+            POST_INSTALL_SKIPPED=true
             return 0
         fi
     else
@@ -405,7 +407,7 @@ main() {
     run_post_install
 
     echo ""
-    if [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; then
+    if [[ "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; then
         echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
         echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
@@ -422,6 +424,10 @@ main() {
         echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
         echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
         echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
+        if [[ "$POST_INSTALL_SKIPPED" == true ]]; then
+            echo ""
+            warn "anyscribe was installed, but the launch you asked for did not run (see above)."
+        fi
         if [[ "$USED_PIPX" == true ]]; then
             echo ""
             warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"

@@ -23,6 +23,9 @@ anyscribe uses two locations: a visible workspace for your transcripts and a hid
 | Logs | `~/.anyscribe/logs/` | Processing logs |
 | Sessions | `~/.anyscribe/sessions/` | Cached sessions (legacy; no longer used for Instagram) |
 | Temp | `~/.anyscribe/tmp/` | Temporary downloads (auto-cleaned) |
+| Recovery | `~/.anyscribe/recovery/` | Audio kept from failed runs (listed by `anyscribe logs`) |
+| Checkpoints | `~/.anyscribe/checkpoints/` | Finished chunks of a long run, so a retry resumes instead of starting over |
+| Tray PID | `~/.anyscribe/tray.pid` | Process ID of the running tray companion |
 
 > **Upgrading from an older version?** If you have transcripts at `~/.anyscribe/workspace/`, anyscribe will automatically move them to `~/anyscribe/` on your next transcription.
 
@@ -58,8 +61,8 @@ instagram:                 # Instagram settings
 > **Adding and removing keys:** Set a key with `anyscribe config set openai_api_key sk-…`, or in the Web UI under **Settings → Providers** (expand a provider to paste one). To **remove** a saved key, open that provider in the Web UI and click **Remove key → Remove?** — it's deleted from `.env`. You can also just delete the line from `~/.anyscribe/.env` by hand. A key you set through your shell environment (e.g. `export OPENAI_API_KEY=…` in your shell profile) isn't stored in `.env`, so the Web UI can't remove it — unset it in your shell.
 
 > **Everything here is also editable in the Web UI** (`anyscribe ui` → Settings) —
-> the page opens with a "Next run" banner showing exactly what your next
-> transcription will use and why, the provider and model controls are always
+> the page opens with a "Next run" banner showing the plan selected from
+> current defaults and any substitution notes, the provider and model controls are always
 > visible (a tier just pre-selects them), and a "Downloads & media" section
 > covers download prompting, local-file handling, kept media, and the
 > Instagram cookie browser. Nothing needs the terminal.
@@ -104,7 +107,7 @@ Which API to use for transcription when `quality` is `custom`. Default: `openai`
 | `deepgram` | Deepgram Nova (diarization + hi-Latn) | `DEEPGRAM_API_KEY` |
 | `openrouter` | OpenRouter (audio-via-chat models) | `OPENROUTER_API_KEY` |
 | `elevenlabs` | ElevenLabs Scribe v2 (highest accuracy, 90+ languages) | `ELEVENLABS_API_KEY` |
-| `sargam` | Sarvam AI (23 Indic languages + English) | `SARGAM_API_KEY` |
+| `sargam` | Sarvam AI (22 Indic languages + English) | `SARGAM_API_KEY` |
 | `groq` | Groq (fast, cheap Whisper large-v3-turbo) | `GROQ_API_KEY` |
 | `local` | faster-whisper (offline, free) | None needed |
 
@@ -113,7 +116,7 @@ Which API to use for transcription when `quality` is `custom`. Default: `openai`
 
 > **Why multiple providers?** Different services handle different languages better. OpenAI Whisper is a good default, ElevenLabs has high accuracy across 90+ languages, Sarvam excels at Indian languages, and the local provider is free and works offline.
 
-> **Local provider** requires `pip install faster-whisper`. Models download automatically on first use. Works on CPU (slower) or GPU (fast with CUDA).
+> **Local provider** needs a one-time `anyscribe local setup --model base` (or the Web UI's "Set up local transcription" button), which installs faster-whisper and downloads the model. Runs on CPU, or on an NVIDIA GPU with CUDA.
 
 #### provider_models
 
@@ -232,7 +235,7 @@ What language to expect in the audio. Default: `auto` (let the API auto-detect).
 
 Use standard language codes: `en` (English), `es` (Spanish), `fr` (French), `hi` (Hindi), `ar` (Arabic), `zh` (Chinese), `ja` (Japanese), `ko` (Korean), etc.
 
-Each provider expects codes in a slightly different format — Whisper-family providers (`openai`, `local`) use ISO 639-1 like `en`, Deepgram uses BCP-47 codes (a standard format for language tags, like `en-US` or `hi-Latn`), and Sarvam uses BCP-47 with `-IN` suffixes like `hi-IN`. If you're unsure, the web UI (`anyscribe ui`) shows a per-provider dropdown of every supported code on the Transcribe page Options panel.
+Each provider expects codes in a slightly different format — Whisper-family providers (`openai`, `local`) use ISO 639-1 like `en`, Deepgram uses BCP-47 codes (a standard format for language tags, like `en-US` or `hi-Latn`), and Sarvam uses BCP-47 with `-IN` suffixes like `hi-IN`. If you're unsure, the language input in the web UI (`anyscribe ui`, Transcribe page, Options panel) shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.
 
 > **When to set this explicitly:** Auto-detection works well for most videos, but if you're transcribing content in a specific language and getting wrong results, setting the language explicitly helps. You can also override per-video: `anyscribe transcribe <url> --language hi`
 
@@ -262,9 +265,9 @@ How to format the transcript text. Default: `clean`.
 
 Whether to enable speaker diarization (identifying who said what) by default. Default: `false`.
 
-When enabled, providers that support diarization (OpenAI, Deepgram, Sarvam) will label each speaker in the transcript. You can also enable per-transcription with `--diarize` without changing this default.
+When enabled, providers that support diarization (OpenAI and Deepgram) will label each speaker in the transcript. You can also enable per-transcription with `--diarize` without changing this default.
 
-> **Auto-routing:** When `--diarize` is used (or this is set to `true`) without an explicit `--provider`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram handles large files natively and produces the most consistent speaker labels. Override with `--provider openai` if needed.
+> **Auto-routing:** When `--diarize` is used (or this is set to `true`) without an explicit `--provider`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram's diarization is native and produces the most consistent speaker labels (files over 25 MB or 30 minutes are still split into 18-minute pieces, and labels are not matched across pieces). Override with `--provider openai` if needed.
 
 > **Automatic speaker detection:** The number of speakers is detected automatically from the audio — you never need to specify how many speakers are in the recording. Deepgram analyzes voice characteristics (pitch, tone, cadence) to distinguish speakers.
 
@@ -313,7 +316,7 @@ Which Whisper model the `local` provider uses when transcribing. Default: `base`
 
 > **Want better quality without the wait?** `large-v3-turbo` is the sweet spot — close to `large-v3` accuracy at roughly six times the speed on a CPU, and half the download. Pick `distil-large-v3.5` only if everything you transcribe is in English.
 
-Change it with `anyscribe config set local_model small` or from the default-model dropdown inside the Local provider panel in the Web UI. You can only select a model that's been cached — pull others with `anyscribe model pull <size>`. A one-off override is available via `ASCLI_LOCAL_MODEL=medium anyscribe "<url>"` (`ASCLI_` is the legacy env prefix, still honored).
+Change it with `anyscribe config set local_model small` or from the default-model dropdown inside the Local provider panel in the Web UI. Pull it first with `anyscribe model pull <size>`; the Web UI only lists cached models, but `config set` does not check. A one-off override is available via `ASCLI_LOCAL_MODEL=medium anyscribe "<url>"` (`ASCLI_` is the legacy env prefix, still honored).
 
 > **Not set until setup.** This field has no effect until you run `anyscribe local setup --model <size>` (or the equivalent Web UI button). The field is still present in `config.yaml` with the default value of `base`.
 
@@ -412,6 +415,9 @@ Your transcripts live in the workspace (pure markdown, no binaries). Downloaded 
 │   ├── audio/<platform>/                  # Audio files (if keep_media=true)
 │   └── video/<platform>/                  # Video files (anyscribe download)
 ├── sessions/                              # Cached sessions (legacy; no longer used for Instagram)
+├── recovery/                              # Audio kept from failed runs
+├── checkpoints/                           # Chunk progress, so retries resume
+├── tray.pid                               # Running tray companion's process ID
 └── logs/                                  # Processing logs
 ```
 
@@ -481,7 +487,7 @@ workspace location, the local model, and all your API keys.
 | What's fixed | Current value | Why it's not a setting |
 |--------------|---------------|------------------------|
 | Audio quality | 16 kHz, mono, 64 kbps mp3 | Tuned for the best transcription accuracy per megabyte. Higher quality wouldn't improve the text. |
-| File-splitting limits | Split if over 25 MB or 30 min, into 18-min pieces | Driven by the transcription APIs' own upload and timeout limits, not your preference. |
+| File-splitting limits | Most cloud providers split files over 25 MB or 30 min into pieces of about 18 min. Sarvam always uses 28-second pieces. OpenAI with `--diarize` refuses larger files instead of splitting them | Driven by the transcription APIs' own upload and timeout limits, not your preference. |
 | The list of models you can pick from | e.g. OpenAI offers `gpt-transcribe`, `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | Each provider's list is curated to models anyscribe knows how to read. You choose freely *within* the list via `provider_models` or `--model`; new entries arrive with anyscribe releases (`anyscribe update`). **OpenRouter is the exception** — it forwards any model name, so you can add your own with `extra_models.openrouter`. |
 | App folder location | `~/.anyscribe` | The fixed home for config, logs, and downloads. Your transcripts' location (`workspace_path`) *is* configurable. |
 | Web UI address | `127.0.0.1` (your machine only) | The Web UI has no password, so it only listens to your own computer. The port is changeable with `anyscribe ui --port 9000`. |

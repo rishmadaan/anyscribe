@@ -1446,7 +1446,7 @@
       </div>
       <div class="install-alt">
         <span>or</span>
-        <kbd>pip install anyscribe</kbd>
+        <kbd>pip install "anyscribe[tray]"</kbd>
         <span>·</span>
         <span>windows:</span>
         <kbd>irm https://…/install.ps1 | iex</kbd>
@@ -1483,7 +1483,7 @@
         does the <span class="amber">scribing.</span>
       </h2>
       <p class="sec-sub">
-        anyscribe was built agent-first. It ships as a Claude Code skill that installs itself during onboarding, plus an MCP server that plugs into Claude Desktop, Cursor, and any MCP host. You describe the outcome. The agent picks the flags, runs it, and hands back a markdown file you own.
+        anyscribe was built agent-first. It ships as a Claude Code skill that installs itself the first time you run a command like <code>anyscribe ui</code>, plus an MCP server that plugs into Claude Desktop, Cursor, and any MCP host. You describe the outcome. The agent picks the flags, runs it, and hands back a markdown file you own.
       </p>
     </div>
 
@@ -1523,8 +1523,8 @@
     <div class="agent-facts">
       <div class="af">
         <span class="af-eyebrow">Claude Code skill</span>
-        <p>Onboarding detects Claude Code and installs a skill that teaches it how to drive anyscribe: a decision tree, safety rules, and JSON patterns. No config to write.</p>
-        <code class="af-cmd"><span class="p">$</span>anyscribe install-skill <span class="d"># or auto during onboarding</span></code>
+        <p>If Claude Code is installed, a skill that teaches it how to drive anyscribe (a decision tree, safety rules, and JSON patterns) installs itself the first time you run a command like <code>anyscribe ui</code> (or run <code>anyscribe install-skill</code>). No config to write.</p>
+        <code class="af-cmd"><span class="p">$</span>anyscribe install-skill <span class="d"># or automatic on first real command</span></code>
       </div>
       <div class="af">
         <span class="af-eyebrow">MCP server</span>
@@ -1532,8 +1532,8 @@
         <code class="af-cmd"><span class="p">$</span>pip install "anyscribe[mcp]"</code>
       </div>
       <div class="af">
-        <span class="af-eyebrow">JSON on every command</span>
-        <p>Add <code>--json</code> to any primary command for machine-readable metadata, file paths, and provider info. Structured exit codes, no silent defaults.</p>
+        <span class="af-eyebrow">JSON for scripting</span>
+        <p>Transcription, batch, config, logs, and model commands take <code>--json</code> for structured results. The docs list every command that supports it.</p>
         <code class="af-cmd"><span class="p">$</span>anyscribe "url" --json</code>
       </div>
     </div>
@@ -1616,12 +1616,12 @@
 <span class="k">duration</span>: <span class="s">"12:34"</span><br/>
 <span class="k">provider</span>: <span class="v">deepgram</span><br/>
 <span class="k">word_count</span>: <span class="v">1847</span><br/>
-<span class="k">tags</span>: [<span class="v">transcript</span>, <span class="v">coffee</span>]
+<span class="k">tags</span>: [<span class="v">transcript</span>, <span class="v">youtube</span>]
         </div>
         <p class="dh">How to Pull the Perfect Espresso</p>
         <div class="dh-meta">transcribed · deepgram · 2 speakers</div>
-        <p class="line"><span class="ts">00:04</span><span class="spk">HOST</span>Today we're going to talk about the three variables that actually matter when you're pulling espresso: grind, dose, and yield.</p>
-        <p class="line"><span class="ts">00:19</span><span class="spk">GUEST</span>Right, and the trick is that none of them matter in isolation. It's the ratio between them that defines the shot.</p>
+        <p class="line"><span class="ts">00:04</span><span class="spk">SPEAKER 0</span>Today we're going to talk about the three variables that actually matter when you're pulling espresso: grind, dose, and yield.</p>
+        <p class="line"><span class="ts">00:19</span><span class="spk">SPEAKER 1</span>Right, and the trick is that none of them matter in isolation. It's the ratio between them that defines the shot.</p>
         <p class="more">… 1,798 more words, timestamped and speaker-labelled</p>
       </div>
     </div>
@@ -1658,7 +1658,7 @@
         <span class="fn">01</span>
         <h3 class="ft">Your AI agent can <span class="it">drive it</span></h3>
         <p class="fd">
-          <code>--json</code> on every primary command for clean machine output. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install anyscribe[mcp]</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
+          <code>--json</code> on transcription, batch, config, and more. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install "anyscribe[mcp]"</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
         </p>
       </div>
 
@@ -1758,11 +1758,11 @@
           <h3 class="name">OpenAI <span class="it">Whisper</span></h3>
           <span class="tag">general</span>
         </div>
-        <p class="desc">The reliable workhorse. General-purpose, multilingual, word-level timestamps. Files &gt;25 MB get auto-chunked.</p>
+        <p class="desc">The reliable workhorse. General-purpose, multilingual. Defaults to gpt-transcribe and switches to whisper-1 automatically when you want timestamps. Long files (over 25 MB or 30 min) are split automatically, except with speaker labels, where OpenAI refuses them.</p>
         <div class="specs">
-          <span><b>~$0.006</b> / min</span>
-          <span>57 languages</span>
-          <span>word-level ts</span>
+          <span><b>~$0.0045</b> / min</span>
+          <span>100 language codes</span>
+          <span>segment ts</span>
         </div>
       </div>
 
@@ -1774,7 +1774,7 @@
         <p class="desc">Best-in-class speaker separation. Native diarization, Hinglish support, $200 free credit on signup.</p>
         <div class="specs">
           <span><b>~$0.0043</b> / min</span>
-          <span>36+ languages</span>
+          <span>89 language codes</span>
           <span>native diarize</span>
         </div>
       </div>
@@ -1784,11 +1784,11 @@
           <h3 class="name">ElevenLabs <span class="it">Scribe</span></h3>
           <span class="tag">accuracy tier</span>
         </div>
-        <p class="desc">99 languages, top-tier accuracy on Western European audio. Word-level timestamps plus per-word confidence scores.</p>
+        <p class="desc">92 language codes in its list, top-tier accuracy on Western European audio. Timestamps on every ~30-word segment.</p>
         <div class="specs">
           <span><b>~$0.005</b> / min</span>
-          <span>99 languages</span>
-          <span>word confidence</span>
+          <span>92 language codes</span>
+          <span>segment ts</span>
         </div>
       </div>
 
@@ -1810,10 +1810,10 @@
           <h3 class="name">Sarvam <span class="it">AI</span></h3>
           <span class="tag">indic</span>
         </div>
-        <p class="desc">Purpose-built for Indic languages. Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati, Punjabi.</p>
+        <p class="desc">Purpose-built for Indic languages; renders Hindi, Tamil, Telugu, Bengali and more as an English translation.</p>
         <div class="specs">
           <span><b>rupee-priced</b></span>
-          <span>11 Indic langs</span>
+          <span>22 Indic + English</span>
           <span>made in India</span>
         </div>
       </div>
@@ -1823,7 +1823,7 @@
           <h3 class="name">Open<span class="it">Router</span></h3>
           <span class="tag">flexible</span>
         </div>
-        <p class="desc">Audio-via-chat through GPT-4o-audio-preview and friends. One API key, many models, pay per-token.</p>
+        <p class="desc">Audio-via-chat through models like gpt-audio-mini and Gemini Flash. One API key, many models, pay per-token.</p>
         <div class="specs">
           <span><b>model choice</b></span>
           <span>per-token</span>
@@ -1836,7 +1836,7 @@
           <h3 class="name">Local <span class="it">whisper</span></h3>
           <span class="tag">free · offline</span>
         </div>
-        <p class="desc">faster-whisper on your own CPU or GPU. No API key, no network, no bills, no audio leaving the building. Perfect for sensitive recordings, or a flight. Set it up once with <code style="font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; color: var(--phosphor);">anyscribe local setup --model base</code>.</p>
+        <p class="desc">faster-whisper on your own CPU or GPU. No API key, no internet needed, no bills, no audio leaving the building. Perfect for sensitive recordings, or a flight. Set it up once with <code style="font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; color: var(--phosphor);">anyscribe local setup --model base</code>.</p>
         <div class="specs">
           <span><b>$0</b> · forever</span>
           <span>offline</span>
@@ -1869,7 +1869,7 @@
             <span class="num">i.</span>
             <div>
               <h4>Your vault, your files.</h4>
-              <p>Everything under <code>~/anyscribe/</code>. Change the path with <code>anyscribe config set workspace_path</code>. Point Obsidian at it and it just works.</p>
+              <p>Everything under <code>~/anyscribe/</code>. Change the path with <code>anyscribe config set workspace_path "$HOME/Documents/transcripts"</code>. Point Obsidian at it and it just works.</p>
             </div>
           </div>
           <div class="vault-point">
@@ -1910,7 +1910,7 @@
 <span class="k">word_count</span>: <span class="v">4212</span><br/>
 <span class="k">reading_time</span>: <span class="s">"21 min"</span><br/>
 <span class="k">provider</span>: <span class="v">deepgram</span><br/>
-<span class="k">tags</span>: [<span class="v">transcript</span>, <span class="v">meetings</span>]
+<span class="k">tags</span>: [<span class="v">transcript</span>, <span class="v">local</span>]
           </div>
 
           <p class="dh">Weekly Team Standup</p>
@@ -1918,10 +1918,10 @@
 
           <p class="dh2">Transcript</p>
 
-          <p class="line"><span class="ts">00:02</span><span class="spk">SPEAKER 1</span>Quick round: what shipped this week, and what's blocked.</p>
-          <p class="line"><span class="ts">00:09</span><span class="spk">SPEAKER 2</span>The payments retry logic went out on Tuesday. Error rate is back under one percent.</p>
-          <p class="line"><span class="ts">00:21</span><span class="spk">SPEAKER 1</span>Good. Anything blocked?</p>
-          <p class="line"><span class="ts">00:24</span><span class="spk">SPEAKER 2</span>Waiting on the schema review before I can merge the export job…</p>
+          <p class="line"><span class="ts">00:02</span><span class="spk">SPEAKER 0</span>Quick round: what shipped this week, and what's blocked.</p>
+          <p class="line"><span class="ts">00:09</span><span class="spk">SPEAKER 1</span>The payments retry logic went out on Tuesday. Error rate is back under one percent.</p>
+          <p class="line"><span class="ts">00:21</span><span class="spk">SPEAKER 0</span>Good. Anything blocked?</p>
+          <p class="line"><span class="ts">00:24</span><span class="spk">SPEAKER 1</span>Waiting on the schema review before I can merge the export job…</p>
 
           <p class="more">… 4,140 more words</p>
         </div>
@@ -1942,7 +1942,7 @@
         the wizard. <span class="amber">Go.</span>
       </h2>
       <p class="sec-sub">
-        One command installs everything. Then <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">anyscribe ui</code> opens a wizard in your browser that checks your system and walks you through picking an engine — the install command itself already brought in <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">yt-dlp</code> and <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">ffmpeg</code>. From nothing to your first transcript in about five minutes.
+        One command installs everything. Then <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">anyscribe ui</code> opens a wizard in your browser that walks you through picking an engine — the install command itself already brought in <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">yt-dlp</code> and <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">ffmpeg</code>. From nothing to your first transcript in about five minutes.
       </p>
     </div>
 
@@ -1968,7 +1968,7 @@
     </div>
     <div class="tab-panel" data-panel="pip">
       <div class="big-cmd">
-        <span class="p">$</span><span id="pip-cmd">pip install anyscribe</span>
+        <span class="p">$</span><span id="pip-cmd">pip install "anyscribe[tray]"</span>
         <button class="copy-btn" data-copy="pip-cmd">copy</button>
       </div>
       <p class="big-cmd-note">If you already have Python 3.10+, yt-dlp and ffmpeg, pip is the shortest path there is.</p>
@@ -1986,7 +1986,7 @@
         <span class="n">ii.</span>
         <div>
           <h4>Ask Claude to transcribe it, or run it yourself</h4>
-          <p>The Claude Code skill auto-installs during onboarding, so you can just ask Claude to transcribe a talk and pull out the notes. Rather type it? Pass a YouTube URL, an Instagram reel, or a local file and the markdown lands in <code>~/anyscribe/</code>. Add <code>--diarize</code> for speaker labels. &nbsp;&nbsp;<code>anyscribe "https://youtube.com/watch?v=&hellip;"</code></p>
+          <p>The Claude Code skill installs itself the first time you run a command like <code>anyscribe ui</code>, so you can just ask Claude to transcribe a talk and pull out the notes. Rather type it? Pass a YouTube URL, an Instagram reel, or a local file and the markdown lands in <code>~/anyscribe/</code>. Add <code>--diarize</code> for speaker labels. &nbsp;&nbsp;<code>anyscribe "https://youtube.com/watch?v=&hellip;"</code></p>
         </div>
       </div>
       <div class="step">

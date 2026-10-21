@@ -18,7 +18,7 @@ By the end of this guide you will have:
 - Your first video transcribed to markdown
 - anyscribe running in the background, if you want it there
 
-> **anyscribe has three equivalent surfaces.** The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every *setting* can be changed from either the CLI or the Web UI. A few maintenance commands are CLI-only: `batch`, `logs`, `doctor`, `update`, and `tray`. Pick whichever fits:
+> **anyscribe has three equivalent surfaces.** The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every *setting* can be changed from either the CLI or the Web UI. A few commands are CLI-only: `batch`, `download`, `logs`, `doctor`, `update`, `migrate`, `install-skill`, and `tray`. Pick whichever fits:
 >
 > - **Prefer clicking?** → `anyscribe ui` opens a browser dashboard with a setup wizard on first launch. See Option A in Step 2.
 > - **Prefer typing?** → `anyscribe onboard` runs an arrow-key terminal wizard. See Option B.
@@ -26,7 +26,7 @@ By the end of this guide you will have:
 >
 > All three write the same config and land you in the same place. Transcriptions you start from one surface show up in all of them.
 
-> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up, no telemetry. The only time anyscribe touches the internet is when *you* ask it to: downloading a YouTube/Instagram source you pointed it at, calling whichever transcription API provider you set up, or pulling a Whisper model for offline transcription (once, the first time). Point it at a local file with the local provider and the whole pipeline runs offline — your audio never leaves your machine.
+> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote for a cloned install), and upgrades yt-dlp when your copy is over 60 days old. Local files with the local provider work with no internet connection, and your audio never leaves your machine.
 
 ## What you need
 
@@ -87,9 +87,9 @@ anyscribe ui
 
 Opens a local dashboard at `http://127.0.0.1:8457`. A **setup wizard pops up on first launch**:
 
-1. **Pick a provider** — cards for `openai` (general purpose, multilingual), `deepgram` (fast, native diarization), `groq` (cheapest and fastest cloud Whisper), `elevenlabs` (high accuracy, 99 languages), `sargam` (Sarvam AI, Indic languages), `openrouter` (many models, one API), plus `local` for free offline transcription on your own machine.
-2. **Paste your API key** — with a **Test key** button so you know it works before you continue. (Skipped if you picked `local`.)
-3. **Choose whether to also enable offline transcription** — installs faster-whisper and a Whisper model so you have a free fallback.
+1. **Pick a provider** — cards for `openai` (general purpose, multilingual), `deepgram` (fast, native diarization), `groq` (cheapest and fastest cloud Whisper), `elevenlabs` (high accuracy, 90+ languages), `sargam` (Sarvam AI, Indic languages), `openrouter` (many models, one API), plus `local` for free offline transcription on your own machine.
+2. **Paste your API key.** The **Test key** button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for `local`.
+3. **Choose whether to also enable offline transcription** — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
 4. **Confirm your workspace** — where your transcripts live, default `~/anyscribe/`.
 
 Click around — no commands to memorize.
@@ -106,17 +106,18 @@ python -m anyscribe onboard      # Windows (first time — prints PATH fix)
 The wizard uses arrow-key selectors — navigate with **↑↓** and press **Enter** to select:
 
 1. **Check your system** — makes sure `yt-dlp` and `ffmpeg` are installed. Offers to install missing ones.
-2. **Choose your provider** — 7 options: OpenAI (default), Deepgram, ElevenLabs, Sarvam AI, Groq, OpenRouter, Local.
+2. **Choose your provider** — 7 options: OpenAI (default), OpenRouter, ElevenLabs, Sarvam AI, Deepgram, Groq, Local.
 3. **Choose that provider's model** — only if it offers more than one. The first is the recommended default; press Enter to take it.
 4. **Enter your API key** — stored locally at `~/.anyscribe/.env`. Never sent anywhere except your provider.
-5. **Add more provider keys** (optional) — configure multiple providers now or later.
-6. **Configure Instagram** (optional) — choose which browser to read Instagram cookies from. Needed only for rate-limited or private reels.
-7. **Choose language** — auto-detect (default) or pick a specific language.
-8. **Keep audio files** — whether to save the transcription audio to `~/.anyscribe/downloads/audio/`.
-9. **Local file handling** — what to do with original files when transcribing local audio/video (skip/copy/move/ask).
-10. **Post-transcription downloads** — whether anyscribe should offer to download the full video after each transcription (never/ask/always).
-11. **Choose workspace location** — where to store transcripts (default: `~/anyscribe/`).
-12. **Create workspace** — sets up your Obsidian vault at the chosen location.
+5. **Also enable offline transcription?** (optional) — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
+6. **Add more provider keys** (optional) — configure multiple providers now or later.
+7. **Configure Instagram** (optional) — choose which browser to read Instagram cookies from. Needed only for rate-limited or private reels.
+8. **Choose language** — auto-detect (default) or pick a specific language.
+9. **Keep audio files** — whether to save the transcription audio to `~/.anyscribe/downloads/audio/`.
+10. **Local file handling** — what to do with original files when transcribing local audio/video (skip/copy/move/ask).
+11. **Post-transcription downloads** — whether anyscribe should offer to download the full video after each transcription (never/ask/always).
+12. **Choose workspace location** — where to store transcripts (default: `~/anyscribe/`).
+13. **Create workspace** — sets up your Obsidian vault at the chosen location.
 
 > **Re-run anytime:** `anyscribe onboard --force` to change settings — it shows your current config and lets you choose which parts to update. `anyscribe onboard --skip-deps` to skip the dependency check. Or use the Web UI: Settings → **Run setup wizard**.
 
@@ -145,7 +146,7 @@ Replace `VIDEO_ID` with a real video ID. A short video (under 5 minutes) is good
 
 > **No subcommand needed.** Just `anyscribe "url"` — it knows you want to transcribe. You can also write `anyscribe transcribe "url"` explicitly, but it's not required.
 
-> **Always wrap URLs in quotes** (`"..."`). Shells like zsh break URLs with `?` in them. Or run `anyscribe` with no URL and paste it when prompted — no quoting needed.
+> **Always wrap URLs in quotes** (`"..."`). Shells like zsh break URLs with `?` in them. Or run `anyscribe transcribe` with no URL and paste it when prompted — no quoting needed.
 
 You'll see:
 
@@ -160,7 +161,7 @@ Transcription saved: ~/anyscribe/sources/youtube/how-to-make-perfect-coffee.md
 ### Also try
 
 ```bash
-# Local audio/video file (mp3, mp4, m4a, wav, opus, ogg, flac, webm)
+# Local audio/video file (mp3, mp4, m4a, wav, opus, ogg, flac, webm, aac, wma)
 anyscribe /path/to/podcast.mp3
 
 # Instagram reel
@@ -170,7 +171,7 @@ anyscribe "https://www.instagram.com/reel/SHORTCODE/"
 anyscribe download "https://www.youtube.com/watch?v=VIDEO_ID"
 
 # From clipboard (copy a URL first)
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 ```
 
 ### Browse it in Obsidian

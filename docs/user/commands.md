@@ -41,7 +41,7 @@ CLI-only.
 | `anyscribe config path` | Print config file location | — (CLI only) |
 | `anyscribe config list-keys` | Every settable key with its current value | Settings → Providers (key status) |
 | `anyscribe providers list` | Show available providers | Settings → Providers |
-| `anyscribe providers test [name]` | Test a provider's API key | Settings → Providers → Test |
+| `anyscribe providers test [name]` | Check provider loading and key presence | Settings → Providers → Test |
 | `anyscribe local setup --model <size>` | Install faster-whisper + download a Whisper model | Settings → Local provider card |
 | `anyscribe local status` | Report local-transcription readiness | Settings → Local provider card |
 | `anyscribe local teardown --yes` | Uninstall faster-whisper + delete all cached models | Settings → Local provider card → Remove local transcription |
@@ -90,13 +90,15 @@ anyscribe onboard
 2. Choose transcription provider (7 options, arrow keys)
 3. Choose that provider's model, if it has more than one (defaults to the first — press Enter to accept)
 4. Enter API key for your chosen provider
-5. Optionally add API keys for other providers
-6. Optionally configure Instagram browser (for cookie-based downloads)
-7. Choose default language (arrow-key selector with common options)
-8. Choose whether to keep audio files after transcription
-9. Choose post-transcription download behavior (never/ask/always)
-10. Choose workspace location (default: `~/anyscribe/`)
-11. Creates your Obsidian workspace
+5. Optionally enable offline/local transcription too
+6. Optionally add API keys for other providers
+7. Optionally configure Instagram browser (for cookie-based downloads)
+8. Choose default language (arrow-key selector with common options)
+9. Choose whether to keep audio files after transcription
+10. Choose what happens to original local files (skip/copy/move/ask)
+11. Choose post-transcription download behavior (never/ask/always)
+12. Choose workspace location (default: `~/anyscribe/`)
+13. Creates your Obsidian workspace
 
 > **Running this from an agent, a script, or CI?** `anyscribe onboard --yes` skips
 > the interactive flow entirely — the arrow-key TUI can't work without a
@@ -151,7 +153,7 @@ anyscribe ~/recordings/meeting.m4a
 anyscribe transcribe
 
 # 4. Copy a URL to your clipboard, then:
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 ```
 
 ### Flags
@@ -160,11 +162,11 @@ anyscribe --clipboard
 |------|-------|-------------|---------|
 | `--quality` | | Quality preset: `accuracy` \| `balanced` \| `cost` \| `free` (picks a provider) | From config (balanced) |
 | `--provider` | `-p` | Explicit provider — overrides `--quality` | From config |
-| `--model` | `-m` | Specific model to use within that provider | The provider's default |
-| `--language` | `-l` | Language code for transcription | `auto` (auto-detect) |
+| `--model` | `-m` | Specific model to use within that provider | Your pinned model for that provider if set, else its default (may be switched automatically) |
+| `--language` | `-l` | Language code for transcription | From config (`auto`) |
 | `--json` | `-j` | Output result as JSON | Off |
 | `--keep-media` | | Keep the downloaded audio file | From config (false) |
-| `--diarize` | `-d` | Enable speaker diarization (auto-routes to Deepgram if configured) | Off |
+| `--diarize` | `-d` | Enable speaker diarization (auto-routes to Deepgram if configured) | From config (`false` unless you set `diarize: true`) |
 | `--force` | `-f` | Re-transcribe even if this source was already transcribed | Off |
 | `--quiet` | `-q` | No progress output (just the result) | Off |
 | `--clipboard` | `-c` | Read URL from system clipboard | Off |
@@ -176,8 +178,8 @@ A **provider** is the service that does the transcribing (OpenAI, Deepgram, Groq
 Use `--model` (short: `-m`) when you want a different one for a single run:
 
 ```bash
-# OpenAI's newer model — cheaper and more accurate than the default
-anyscribe "https://youtube.com/watch?v=abc123" -p openai -m gpt-transcribe
+# OpenAI's cheapest model
+anyscribe "https://youtube.com/watch?v=abc123" -p openai -m gpt-4o-mini-transcribe
 
 # Groq's more accurate (slightly slower) model
 anyscribe "https://youtube.com/watch?v=abc123" -p groq -m whisper-large-v3
@@ -203,7 +205,7 @@ Every run prints one line naming what it's about to use:
 → deepgram · nova-3 (quality: balanced)
 ```
 
-- **provider · model** — exactly what will be called.
+- **provider · model** — the plan selected for this run. Read the notes for provider-specific model substitutions.
 - **(reason)** — `flag` (you passed `--provider`), `diarize` (auto-routed for speaker labels), `quality: <tier>`, or `config` (your `provider` setting).
 
 Anything anyscribe decided on your behalf is printed underneath, indented:
@@ -242,7 +244,7 @@ anyscribe "https://youtube.com/watch?v=abc123" --quality accuracy  # highest acc
 anyscribe "https://youtube.com/watch?v=abc123" --quality cost      # cheapest (Groq)
 
 # From clipboard
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 
 # Re-transcribe a source that's already in your vault (skip the "already transcribed" shortcut)
 anyscribe "https://youtube.com/watch?v=abc123" --force
@@ -274,32 +276,38 @@ When you use `--json`, anyscribe prints structured JSON to stdout (progress goes
 ```json
 {
   "success": true,
-  "file": "/Users/you/anyscribe/sources/youtube/video-title.md",
-  "title": "Video Title",
-  "platform": "youtube",
-  "duration": "12:34",
-  "language": "en",
-  "word_count": 1500,
-  "provider": "openai",
-  "model": "gpt-transcribe",
-  "cached": false
+  "data": {
+    "file": "/Users/you/anyscribe/sources/youtube/video-title.md",
+    "title": "Video Title",
+    "platform": "youtube",
+    "duration": "12:34",
+    "language": "en",
+    "word_count": 1500,
+    "provider": "openai",
+    "model": "gpt-transcribe",
+    "via": "config",
+    "notes": [],
+    "cached": false
+  },
+  "error": null
 }
 ```
 
-> **The `model` field** tells you which model actually ran — useful when anyscribe switched it for you (e.g. back to `whisper-1` for timestamps).
+> **`data.model`** is the model anyscribe picked for the run, including its automatic switch to `whisper-1` for timestamps. The provider can still call a different model for some jobs: Deepgram uses `nova` for `hi-Latn`, and OpenAI uses `gpt-4o-transcribe-diarize` for `--diarize`. When that happens, `data.notes` says so. For a cached result, `data.model` reflects today's settings, not the model that made the original transcript. For local runs it is usually `null`.
 
-> **The `cached` field:** `false` means anyscribe transcribed the source just now. `true` means the source was already in your vault and anyscribe returned the existing file (`file` points at it) instead of re-transcribing. Add `--force` to make it transcribe fresh.
+> **`data.cached`:** `false` means anyscribe transcribed the source just now. `true` means the source was already in your vault and anyscribe returned the existing file (`data.file` points at it) instead of re-transcribing. Add `--force` to make it transcribe fresh.
 
 On error:
 
 ```json
 {
   "success": false,
+  "data": null,
   "error": "yt-dlp download failed: Video unavailable"
 }
 ```
 
-> **Scripting tip:** Use `--json --quiet` together to get clean JSON with no extra output. Pipe to `jq` for filtering: `anyscribe "url" --json -q | jq '.file'`
+> **Scripting tip:** Use `--json --quiet` together to hide the usual progress output, then pipe to `jq`: `anyscribe "url" --json -q | jq '.data.file'`. One catch: a few startup messages can still land in that output. The common one is the automatic yt-dlp update, which runs when your yt-dlp is over 60 days old. When that happens, `jq` can't read that run's output.
 
 ### Speaker Diarization
 
@@ -308,8 +316,8 @@ The `--diarize` flag enables multi-speaker transcription — anyscribe identifie
 **How it works:**
 - **Automatic speaker detection** — the number of speakers is detected automatically from audio characteristics (pitch, tone, cadence). You never need to specify how many speakers are in the recording.
 - **Speaker labels** — each speaker gets a label (`Speaker 0`, `Speaker 1`, `Speaker 2`, etc.) assigned in the order they first appear.
-- **Auto-routing to Deepgram** — when `--diarize` is used without `-p`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram handles files of any size natively and produces consistent speaker labels. Override with `-p openai` if needed.
-- **No file size limit with Deepgram** — unlike OpenAI (25MB limit for diarization), Deepgram processes the full audio in one shot regardless of length.
+- **Auto-routing to Deepgram** — when `--diarize` is used without `-p`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram's diarization is native and produces consistent speaker labels. Override with `-p openai` if needed.
+- **Long recordings** — Deepgram splits files over 25 MB or 30 minutes into pieces of about 18 minutes. Each piece is labelled on its own, so on long recordings `Speaker 0` in one piece is not guaranteed to be the same person in the next. OpenAI's diarization can't split at all: it refuses files over 25 MB or 30 minutes, so use Deepgram for long recordings.
 
 **Language and diarization:**
 - **Auto-detect (default)** — works well for English and English-with-some-Hindi conversations. Use this for most meetings.
@@ -360,15 +368,16 @@ anyscribe batch urls.txt
 |------|-------|-------------|---------|
 | `--quality` | | Quality preset: `accuracy` \| `balanced` \| `cost` \| `free` | From config |
 | `--provider` | `-p` | Override provider (wins over `--quality`) | From config |
-| `--model` | `-m` | Specific model within that provider, applied to every URL in the batch | The provider's default |
-| `--language` | `-l` | Override language | `auto` |
+| `--model` | `-m` | Specific model within that provider, applied to every URL in the batch | Your pinned model for that provider if set, else its default (may be switched automatically) |
+| `--language` | `-l` | Override language | From config (`auto`) |
 | `--json` | `-j` | Output results as JSON | Off |
 | `--keep-media` | | Keep audio files | From config |
-| `--diarize` | `-d` | Enable speaker diarization | Off |
+| `--diarize` | `-d` | Enable speaker diarization | From config (`false` unless you set `diarize: true`) |
 | `--force` | `-f` | Re-transcribe sources already in your vault | Off |
 | `--quiet` | `-q` | Suppress progress | Off |
 | `--stop-on-error` | | Stop at first failure | Off (continues) |
-| `--timeout` | | Per-URL timeout in seconds. A URL that runs longer is marked failed (`"timed out after Ns"`) and the batch moves on to the next one | None (no timeout) |
+| `--resume` | | Skip entries finished in the previous run of this file (tracked in `<file>.state.json`). Without it, that record is discarded and every entry is attempted again (already-transcribed ones still return `CACHED`) | Off |
+| `--timeout` | | Per-URL time limit in seconds. A URL that runs longer is reported as failed (`"timed out after Ns"`), but only after its work finishes: the batch waits for it first. See the note under Examples | None (no timeout) |
 
 > **Duplicate detection applies here too.** Any source already in your vault is skipped and returned from the existing file — the summary table marks those rows `CACHED` and each such result carries `"cached": true`. This makes it safe to re-run a batch file: only the new entries are actually transcribed. Pass `--force` to re-transcribe everything.
 
@@ -393,14 +402,14 @@ anyscribe batch urls.txt --stop-on-error
 # JSON output for scripting
 anyscribe batch urls.txt --json
 
-# Cap each URL at 5 minutes — slow ones fail and the batch keeps going
+# Report any URL that takes longer than 5 minutes as failed
 anyscribe batch urls.txt --timeout 300
 
 # Run the whole batch on a cheaper model
 anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe
 ```
 
-> **A timed-out URL doesn't stop cleanly mid-download or mid-transcription** — anyscribe can't kill that work outright, so it abandons it and moves on. This is fine for a normal batch run; just know the timed-out attempt may still be using network/API resources briefly in the background.
+> **`--timeout` doesn't cancel anything.** anyscribe can't stop a download or transcription once it has started. When a URL goes past the limit, the batch still waits for that work to finish, then marks the URL as failed and moves on. So a stuck URL can still hold up the batch, and the "failed" attempt may still save a transcript and use API credit.
 
 ---
 
@@ -409,9 +418,11 @@ anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe
 Delete a transcript from your vault and remove its row from the master index (`_index.md`). Use this to clean up a transcript you no longer want — or to clear the way before re-transcribing a source from scratch.
 
 ```bash
-anyscribe rm "sources/youtube/my-video.md"    # by file path
-anyscribe rm my-video                          # by slug
+anyscribe rm ~/anyscribe/sources/youtube/my-video.md    # by full path
+anyscribe rm my-video                                    # by slug
 ```
+
+A path is read relative to the folder you're in, so use the full path or just the slug.
 
 > **What's a "slug"?** The slug is a transcript's filename without the `.md` extension — the short, dash-separated name anyscribe generates from the title. For a file at `sources/youtube/my-video.md`, the slug is `my-video`. You can pass either the full path or just the slug.
 
@@ -429,8 +440,8 @@ If a slug matches more than one transcript (same title from different platforms,
 ### Examples
 
 ```bash
-# Delete by path (you'll be asked to confirm)
-anyscribe rm "sources/youtube/my-video.md"
+# Delete by full path (you'll be asked to confirm)
+anyscribe rm ~/anyscribe/sources/youtube/my-video.md
 
 # Delete by slug, no confirmation prompt
 anyscribe rm my-video --yes
@@ -442,7 +453,7 @@ anyscribe rm my-video --yes --json
 ### JSON Output
 
 ```json
-{ "success": true, "data": { "deleted": "sources/youtube/my-video.md" }, "error": null }
+{ "success": true, "data": { "deleted": "/Users/you/anyscribe/sources/youtube/my-video.md" }, "error": null }
 ```
 
 If nothing matches, the slug is ambiguous, or the file can't be deleted, `success` is `false`, `error` explains why, and the command exits with code 1.
@@ -588,13 +599,13 @@ How to read it:
 
 | Part | Meaning |
 |------|---------|
-| **Next run** | The provider and model that will actually be used, and why — `config`, `quality: <tier>`, `flag`, or `diarize` |
+| **Next run** | The provider and planned model selected from current defaults, plus the reason (`config`, `quality: <tier>`, `flag`, or `diarize`) and any substitution notes |
 | Indented lines under it | Anything anyscribe decided for you: a missing-key fallback, an automatic model switch, `hi-Latn` routing |
 | **→** | Marks the provider that wins right now — which is not always your `provider` setting, since a quality tier can override it |
 | **Default model** | What that provider would use: your pin if you set one, otherwise its first listed model |
 | **Alternatives** | The other models available (names when there are one or two, a count when there are more) |
 | **Key** | `✓` key present · `missing` key needed · `—` no key needed |
-| **Notes** | The quality tier that maps here, `pinned` if you set a model, `N custom` for added OpenRouter models, and the cached size for `local` |
+| **Notes** | The quality tier that maps here, `pinned` if you set a model, `N custom` for added OpenRouter models, and `local_model: <size>` for `local` |
 
 > **This is the command to run when you're not sure what anyscribe will do.** `anyscribe config show` dumps the raw settings file; `anyscribe config` answers "what happens if I hit enter".
 
@@ -657,7 +668,8 @@ The key is `provider_models.` followed by the provider name. Each provider gets 
 If you type a model that provider doesn't have, anyscribe refuses the change and prints the list of valid ones:
 
 ```
-Unknown model 'whisper-2' for openai. Available: gpt-transcribe, whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
+Unknown model 'whisper-2' for openai.
+Available: gpt-transcribe, whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
 ```
 
 > **OpenRouter is the exception.** It accepts any audio-capable model slug, so anyscribe doesn't check it — a typo won't be caught until the request reaches OpenRouter.
@@ -712,11 +724,11 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 | Column | Meaning |
 |--------|---------|
 | **Provider** | The service name you'd pass to `--provider` |
-| **Model** | The model that would actually be used right now — your pinned model if you set one, otherwise that provider's default |
+| **Model** | Your configured pin for this provider, or its catalog default. A transcription can substitute another model (for example `whisper-1` for timestamps); check the run plan and its notes with `anyscribe config`. |
 | **Also available** | The other models you could switch to with `-m` or `provider_models`. Models you added yourself are marked `(custom)` |
 | **Active** | Marks your `provider` setting |
 
-> **`Active` is your setting, not necessarily what runs.** A `quality` tier can override it. For what will actually run, use `anyscribe config`.
+> **Active is your saved provider setting.** A quality tier can override it. Use `anyscribe config` to inspect the plan selected from current defaults and any substitution notes.
 
 ### Available Providers
 
@@ -725,7 +737,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 | `openai` | `OPENAI_API_KEY` | General purpose, multilingual, diarization (default) |
 | `deepgram` | `DEEPGRAM_API_KEY` | Fast, accurate, native diarization + Hindi Latin |
 | `openrouter` | `OPENROUTER_API_KEY` | Access to various models |
-| `elevenlabs` | `ELEVENLABS_API_KEY` | High accuracy, 99 languages |
+| `elevenlabs` | `ELEVENLABS_API_KEY` | High accuracy, 90+ languages |
 | `sargam` | `SARGAM_API_KEY` | Indic languages (Hindi, Tamil, Telugu, etc.) |
 | `groq` | `GROQ_API_KEY` | Cheapest cloud option (the `cost` quality tier) |
 | `local` | None needed | Offline, free, runs on your machine |
@@ -766,13 +778,13 @@ Reports faster-whisper version, ffmpeg presence, cached models, disk usage, and 
 anyscribe local teardown --yes
 ```
 
-Uninstalls faster-whisper via the same method it was installed with, deletes every cached Whisper model, and resets `settings.provider` to `openai` if it was currently `local`. `--yes` is required.
+Uninstalls faster-whisper via the same method it was installed with, deletes every cached Whisper model, resets `provider` to `openai` if it was `local`, and sets `quality` to `custom` if the provider was `local` or the tier was `free`, so runs stop routing to what you just removed. Asks before uninstalling; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 ---
 
 ## anyscribe model
 
-Day-to-day management of the Whisper cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `rm` error out with a hint pointing you at setup).
+Day-to-day management of the Whisper cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `reinstall` error out with a hint pointing you at setup).
 
 Valid sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [providers.md → Local](providers.md) for download sizes, RAM needs, and speed.
 
@@ -802,7 +814,7 @@ Downloads an additional model into the cache. Idempotent — re-running on a cac
 anyscribe model rm tiny --yes
 ```
 
-Deletes a cached model from disk. `--yes` required (destructive action).
+Deletes a cached model from disk. Asks before deleting; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 ### anyscribe model reinstall
 
@@ -810,7 +822,7 @@ Deletes a cached model from disk. `--yes` required (destructive action).
 anyscribe model reinstall base --yes --json
 ```
 
-Delete + re-download in one call. Use when cached weights look corrupted or when you want to force a fresh copy. If the model wasn't cached to begin with, this is equivalent to `anyscribe model pull`. `--yes` is required (destructive).
+Delete + re-download in one call. Use when cached weights look corrupted or when you want to force a fresh copy. If the model wasn't cached to begin with, this is equivalent to `anyscribe model pull`. Asks before deleting; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 Returns `{status: "reinstalled", bytes_freed, bytes_downloaded}` when weights were replaced, or `{status: "downloaded_only"}` when the model wasn't cached.
 
@@ -840,7 +852,7 @@ Opens your browser at `http://127.0.0.1:8457` with three views:
 
 > **Managing API keys in Settings → Providers:** expand a provider to add or replace its key. Once a key is saved, a **Remove key** button appears — click it, then click **Remove?** to confirm, and the key is deleted from `~/.anyscribe/.env`. If a key comes from your shell environment instead (e.g. `export OPENAI_API_KEY=…` in your shell profile), the Remove button is hidden — anyscribe can't edit your shell, so unset it there instead.
 
-> **Web UI label conventions:** the `--diarize` CLI flag appears as a `Multi-speaker` toggle, and the `diarized` output format is labelled `with-speaker-labels`. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a `· needs key` suffix and a one-click link to Settings, and the language input is a per-provider dropdown of every supported code (clear the field on focus to see the full list).
+> **Web UI label conventions:** the `--diarize` CLI flag appears as a `Multi-speaker` toggle, and the `diarized` output format is labelled `with-speaker-labels`. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a `· needs key` suffix and a one-click link to Settings, and the language input shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.
 
 ### Flags
 
@@ -950,7 +962,7 @@ Remove the login auto-start registered by `anyscribe install-service`.
 anyscribe uninstall-service
 ```
 
-Unloads and deletes the LaunchAgent plist. This only removes the auto-start — it doesn't uninstall anyscribe itself or stop a tray that's currently running.
+Unloads and deletes the LaunchAgent plist (the file that starts the tray at login). If that login item started the tray you're running now, this also stops that tray and any server it started. A tray you started yourself with `anyscribe tray` keeps running until you quit it. anyscribe itself stays installed.
 
 ### Flags
 
@@ -966,7 +978,7 @@ anyscribe uninstall-service            # prompts for confirmation
 anyscribe uninstall-service --yes      # no prompt
 ```
 
-> **Fully removing the tray?** `anyscribe uninstall-service` stops it from auto-starting at login. If a tray is currently running, quit it separately from its menu (or Ctrl+C the terminal it's running in).
+> **Fully removing the tray?** `anyscribe uninstall-service` stops it from starting at login, and stops a tray that was started that way. A tray you started yourself keeps running: quit it from its menu (or Ctrl+C the terminal it's running in).
 
 ---
 
@@ -989,13 +1001,13 @@ Keep these with the skill if you share or modify it.
 |------|-------|-------------|
 | `--force` | `-f` | Overwrite existing skill files |
 
-> **Tip:** You usually don't need to run this manually. The skill **auto-installs** when Claude Code is detected and **auto-updates** on every CLI invocation when the version changes. Use `--force` only if you need to repair a corrupted install.
+> **Tip:** You usually don't need to run this manually. When `~/.claude` exists, normal commands such as `anyscribe ui` install or refresh the skill when its recorded version differs. Top-level `--version` and `--help` don't trigger this. Use `--force` to repair an existing copy.
 
 ---
 
 ## anyscribe update
 
-Update anyscribe to the latest version by pulling from git and reinstalling.
+Update anyscribe to the latest version: `pip install --upgrade` for normal installs, or `git pull` plus reinstall for a cloned (editable) install.
 
 ```bash
 anyscribe update
@@ -1005,7 +1017,7 @@ anyscribe update
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--force` | `-f` | Update even if you have local changes (stashes them first) |
+| `--force` | `-f` | Git (editable) installs only: update even with local changes (stashes them first) |
 | `--check` | `-c` | Only check if an update is available, don't install |
 
 ### Examples
@@ -1017,7 +1029,7 @@ anyscribe update --check
 # Update to latest
 anyscribe update
 
-# Force update (stashes any local changes)
+# Force update (git installs: stashes any local changes)
 anyscribe update --force
 ```
 
@@ -1135,33 +1147,42 @@ the MCP server already know all of this.
 
 ### The contract
 
-Every consequential command follows the same five rules:
+Most commands follow these rules. The details differ from command to command,
+so check each command's flags table:
 
-- **`--json` on every command that reports a result.** Machine-parseable output
-  on stdout; humans ignore it. Progress and status lines go to stderr, so
-  `--json` output is never polluted.
-- **`--yes` (`-y`) for non-interactive runs.** Anything that would stop to ask
-  "are you sure?" refuses to run without `--yes` when there's no TTY — that is,
-  when an agent or script is calling it. This is deliberate: a hung prompt an
-  agent can't see is worse than a clean failure.
+- **`--json` where a command lists it.** Many commands that report a result take
+  `--json` (the list is under "Quiet, parseable output" below). Some don't, such
+  as `anyscribe doctor` and `anyscribe providers test`. Progress lines are kept
+  out of the JSON where possible, but see the catch below.
+- **`--yes` (`-y`) skips confirmation.** Pass it when scripting commands that
+  ask for confirmation. Some commands explicitly reject non-interactive use
+  without it; `rm`, `install-service`, and `uninstall-service` instead attempt
+  to read a confirmation. The two service commands also skip confirmation with
+  `--json`.
 - **No silent defaults for choices an agent should make explicitly.** For
   example `anyscribe local setup` always requires `--model`; the CLI will never
   pick a model size on your behalf. Where there's a recommended value, it's
   documented so an agent knows what to pass.
-- **Structured exit codes.** `0` success · `1` operational failure · `2` usage
-  error. On exit `2`, stderr carries a JSON payload naming the missing or
-  invalid field.
+- **Exit codes.** `0` success · `1` operational failure · `2` usage error. Some
+  commands also print a JSON error on exit `2`, but not all, so don't count on
+  parsing it.
 - **Prefer environment variables for secrets.** Passing `--api-key` on the
   command line leaks it into shell history and process listings. Set
   `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, etc. in the environment instead.
 
 ### Quiet, parseable output
 
-`--json` and `--quiet` (`-q`) together give you nothing but the JSON object:
+`--json` and `--quiet` (`-q`) together hide the usual progress output, leaving
+the JSON object:
 
 ```bash
-anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.file'
+anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.data.file'
 ```
+
+> **One catch:** a few startup messages can still land in that output. The
+> common one is the automatic yt-dlp update, which runs when your yt-dlp is over
+> 60 days old. When it happens, `jq` can't read that run's output. The example
+> above assumes no such message appears.
 
 The result shape for a transcription is documented under
 [JSON Output](#json-output). Machine-readable output is also available from
@@ -1171,12 +1192,13 @@ The result shape for a transcription is documented under
 
 Two fields matter most when scripting a transcription:
 
-- **`cached`** — `true` means the source was already in the vault and anyscribe
-  returned the existing file instead of spending API credits. Pass `--force` if
-  you want a fresh run regardless.
-- **`model`** — the model that *actually* ran, which isn't always the one you
-  asked for (anyscribe swaps in a timestamp-capable model when your output format
-  needs one).
+- **`data.cached`** — `true` means the source was already in the vault and
+  anyscribe returned the existing file instead of spending API credits. Pass
+  `--force` if you want a fresh run regardless.
+- **`data.model`** — the model anyscribe picked for the run, which isn't always
+  the one you asked for (it swaps in a timestamp-capable model when your output
+  format needs one). The provider may still call a different model for some jobs;
+  `data.notes` says when. Ignore it when `data.cached` is `true`.
 
 ### Headless onboarding
 
@@ -1220,7 +1242,7 @@ anyscribe onboard \
 | `--provider` / `-p` | **yes** | none | One of `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or use env var) | none | Stored in `~/.anyscribe/.env`. Prefer setting the env var (e.g. `OPENAI_API_KEY`) to avoid leaking keys into shell history. |
 | `--local-model` | **yes when `--provider=local`** | none | Whisper size. Recommended: `base`. |
-| `--model` / `-m` | no | provider's default | Pin the model for `--provider` (written to `provider_models`). Rejected with the valid list if the provider doesn't offer it. Not for `local` — use `--local-model`. |
+| `--model` | no | provider's default | Pin the model for `--provider` (written to `provider_models`). Rejected with the valid list if the provider doesn't offer it. Not for `local` — use `--local-model`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, or `custom`. Omit it and onboarding writes `custom`, so the provider you just chose is the one that runs. |
 | `--workspace` | no | `~/anyscribe` | Absolute path to the Obsidian vault. |
 | `--language` | no | `auto` | Default language code. |
@@ -1232,8 +1254,8 @@ anyscribe onboard \
 
 **Exit codes:** 0 success · 1 setup failure (e.g., local install failed) · 2
 usage error (missing `--provider`, already configured without `--force`, etc.).
-On exit 2 stderr carries a structured JSON error with the missing field or the
-reason.
+With `--json`, headless validation errors are reported as JSON on stderr.
+Argument-parsing errors may still be plain text.
 
 ### Other commands that need `--yes`
 
@@ -1257,18 +1279,20 @@ anyscribe local status --json  # faster-whisper version, cached models, disk usa
 ```
 
 `anyscribe config --json` is the one to poll before transcribing: its `resolved`
-block (`provider`, `model`, `via`, `notes`) tells you exactly what will run and
-why, and the `providers` array tells you which API keys are actually present.
+block (`provider`, `model`, `via`, `notes`) describes a run using current
+defaults. Per-run flags and provider-specific substitutions can change the model
+used. The `providers` array tells you which API keys are actually present.
 
 ### Batch runs
 
 `anyscribe batch` is the built-in way to process a list without spawning a process
-per URL. `--timeout` caps each entry so one bad URL can't stall the whole job,
+per URL. `--timeout` marks slow entries as failed (it doesn't cancel them, so
+the batch still waits for each one; see [`anyscribe batch`](#anyscribe-batch)),
 and duplicate detection means re-running the same file only transcribes what's
 new:
 
 ```bash
-anyscribe batch urls.txt --json --quiet --timeout 300
+anyscribe batch urls.txt --json --quiet
 ```
 
 Use `--stop-on-error` if a single failure should abort the run; by default the
@@ -1277,6 +1301,6 @@ batch continues and reports per-entry results.
 ### When something fails
 
 Errors are documented by the literal text they print in
-[Troubleshooting](troubleshooting.md). For a machine-readable health snapshot to
+[Troubleshooting](troubleshooting.md). For a human-readable health report to
 attach to a bug report, `anyscribe doctor` covers dependencies, config,
-installation, and updates in one pass.
+installation, and updates.

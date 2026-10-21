@@ -65,14 +65,14 @@
 - Your first video transcribed to markdown
 - anyscribe running in the background, if you want it there</p>
 <blockquote>
-<p><strong>anyscribe has three equivalent surfaces.</strong> The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every <em>setting</em> can be changed from either the CLI or the Web UI. A few maintenance commands are CLI-only: <code>batch</code>, <code>logs</code>, <code>doctor</code>, <code>update</code>, and <code>tray</code>. Pick whichever fits:</p>
+<p><strong>anyscribe has three equivalent surfaces.</strong> The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every <em>setting</em> can be changed from either the CLI or the Web UI. A few commands are CLI-only: <code>batch</code>, <code>download</code>, <code>logs</code>, <code>doctor</code>, <code>update</code>, <code>migrate</code>, <code>install-skill</code>, and <code>tray</code>. Pick whichever fits:</p>
 <ul>
 <li><strong>Prefer clicking?</strong> → <code>anyscribe ui</code> opens a browser dashboard with a setup wizard on first launch. See Option A in Step 2.</li>
 <li><strong>Prefer typing?</strong> → <code>anyscribe onboard</code> runs an arrow-key terminal wizard. See Option B.</li>
 <li><strong>Writing a script or an AI agent?</strong> → <code>anyscribe onboard --provider X --api-key $KEY --yes --json</code>. See Option C.</li>
 </ul>
 <p>All three write the same config and land you in the same place. Transcriptions you start from one surface show up in all of them.</p>
-<p><strong>Everything runs locally.</strong> The Web UI at <code>http://127.0.0.1:8457</code> is a server on your own machine — no cloud account, no sign-up, no telemetry. The only time anyscribe touches the internet is when <em>you</em> ask it to: downloading a YouTube/Instagram source you pointed it at, calling whichever transcription API provider you set up, or pulling a Whisper model for offline transcription (once, the first time). Point it at a local file with the local provider and the whole pipeline runs offline — your audio never leaves your machine.</p>
+<p><strong>Everything runs locally.</strong> The Web UI at <code>http://127.0.0.1:8457</code> is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions when you run <code>anyscribe update --check</code> or <code>anyscribe doctor</code> (through pip's package index, or your git remote for a cloned install), and upgrades yt-dlp when your copy is over 60 days old. Local files with the local provider work with no internet connection, and your audio never leaves your machine.</p>
 </blockquote>
 <h2 id="what-you-need">What you need</h2>
 <ul>
@@ -115,9 +115,9 @@
 </code></pre>
 <p>Opens a local dashboard at <code>http://127.0.0.1:8457</code>. A <strong>setup wizard pops up on first launch</strong>:</p>
 <ol>
-<li><strong>Pick a provider</strong> — cards for <code>openai</code> (general purpose, multilingual), <code>deepgram</code> (fast, native diarization), <code>groq</code> (cheapest and fastest cloud Whisper), <code>elevenlabs</code> (high accuracy, 99 languages), <code>sargam</code> (Sarvam AI, Indic languages), <code>openrouter</code> (many models, one API), plus <code>local</code> for free offline transcription on your own machine.</li>
-<li><strong>Paste your API key</strong> — with a <strong>Test key</strong> button so you know it works before you continue. (Skipped if you picked <code>local</code>.)</li>
-<li><strong>Choose whether to also enable offline transcription</strong> — installs faster-whisper and a Whisper model so you have a free fallback.</li>
+<li><strong>Pick a provider</strong> — cards for <code>openai</code> (general purpose, multilingual), <code>deepgram</code> (fast, native diarization), <code>groq</code> (cheapest and fastest cloud Whisper), <code>elevenlabs</code> (high accuracy, 90+ languages), <code>sargam</code> (Sarvam AI, Indic languages), <code>openrouter</code> (many models, one API), plus <code>local</code> for free offline transcription on your own machine.</li>
+<li><strong>Paste your API key.</strong> The <strong>Test key</strong> button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for <code>local</code>.</li>
+<li><strong>Choose whether to also enable offline transcription</strong> — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (<code>-p local</code>).</li>
 <li><strong>Confirm your workspace</strong> — where your transcripts live, default <code>~/anyscribe/</code>.</li>
 </ol>
 <p>Click around — no commands to memorize.</p>
@@ -129,9 +129,10 @@ python -m anyscribe onboard      # Windows (first time — prints PATH fix)
 <p>The wizard uses arrow-key selectors — navigate with <strong>↑↓</strong> and press <strong>Enter</strong> to select:</p>
 <ol>
 <li><strong>Check your system</strong> — makes sure <code>yt-dlp</code> and <code>ffmpeg</code> are installed. Offers to install missing ones.</li>
-<li><strong>Choose your provider</strong> — 7 options: OpenAI (default), Deepgram, ElevenLabs, Sarvam AI, Groq, OpenRouter, Local.</li>
+<li><strong>Choose your provider</strong> — 7 options: OpenAI (default), OpenRouter, ElevenLabs, Sarvam AI, Deepgram, Groq, Local.</li>
 <li><strong>Choose that provider's model</strong> — only if it offers more than one. The first is the recommended default; press Enter to take it.</li>
 <li><strong>Enter your API key</strong> — stored locally at <code>~/.anyscribe/.env</code>. Never sent anywhere except your provider.</li>
+<li><strong>Also enable offline transcription?</strong> (optional) — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (<code>-p local</code>).</li>
 <li><strong>Add more provider keys</strong> (optional) — configure multiple providers now or later.</li>
 <li><strong>Configure Instagram</strong> (optional) — choose which browser to read Instagram cookies from. Needed only for rate-limited or private reels.</li>
 <li><strong>Choose language</strong> — auto-detect (default) or pick a specific language.</li>
@@ -159,7 +160,7 @@ python -m anyscribe onboard      # Windows (first time — prints PATH fix)
 <p>Replace <code>VIDEO_ID</code> with a real video ID. A short video (under 5 minutes) is good for your first try.</p>
 <blockquote>
 <p><strong>No subcommand needed.</strong> Just <code>anyscribe "url"</code> — it knows you want to transcribe. You can also write <code>anyscribe transcribe "url"</code> explicitly, but it's not required.</p>
-<p><strong>Always wrap URLs in quotes</strong> (<code>"..."</code>). Shells like zsh break URLs with <code>?</code> in them. Or run <code>anyscribe</code> with no URL and paste it when prompted — no quoting needed.</p>
+<p><strong>Always wrap URLs in quotes</strong> (<code>"..."</code>). Shells like zsh break URLs with <code>?</code> in them. Or run <code>anyscribe transcribe</code> with no URL and paste it when prompted — no quoting needed.</p>
 </blockquote>
 <p>You'll see:</p>
 <pre><code>Transcription saved: ~/anyscribe/sources/youtube/how-to-make-perfect-coffee.md
@@ -169,7 +170,7 @@ python -m anyscribe onboard      # Windows (first time — prints PATH fix)
   Words:    847
 </code></pre>
 <h3 id="also-try">Also try</h3>
-<pre><code class="language-bash"># Local audio/video file (mp3, mp4, m4a, wav, opus, ogg, flac, webm)
+<pre><code class="language-bash"># Local audio/video file (mp3, mp4, m4a, wav, opus, ogg, flac, webm, aac, wma)
 anyscribe /path/to/podcast.mp3
 
 # Instagram reel
@@ -179,7 +180,7 @@ anyscribe &quot;https://www.instagram.com/reel/SHORTCODE/&quot;
 anyscribe download &quot;https://www.youtube.com/watch?v=VIDEO_ID&quot;
 
 # From clipboard (copy a URL first)
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 </code></pre>
 <h3 id="browse-it-in-obsidian">Browse it in Obsidian</h3>
 <p>Open Obsidian and select "Open folder as vault", then choose:</p>

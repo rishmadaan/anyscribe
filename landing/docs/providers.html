@@ -195,8 +195,7 @@ falls back</strong> to your configured provider rather than failing:</p>
 <pre><code>→ openai · gpt-transcribe (config)
     WARNING: quality 'balanced' wants deepgram but no DEEPGRAM_API_KEY is set — using openai instead
 </code></pre>
-<p>Run <code>anyscribe config</code> (no subcommand) any time to see which provider and model the
-next run will actually use.</p>
+<p>Run <code>anyscribe config</code> to see the provider and planned model selected from current defaults, including substitution notes. Per-run flags can change that plan.</p>
 <h2 id="choosing-a-model-within-a-provider">Choosing a model within a provider</h2>
 <p>A <strong>provider</strong> is the company doing the transcribing. A <strong>model</strong> is the specific engine inside it. Each provider ships with a default model, so you can skip this section entirely and everything works.</p>
 <p>Change it for one run:</p>
@@ -294,20 +293,20 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <td>Offline / free</td>
 </tr>
 <tr>
-<td><strong>Languages</strong></td>
-<td>99</td>
-<td>89</td>
-<td>90+</td>
-<td>23 Indian + English</td>
-<td>99</td>
+<td><strong>Bundled language list</strong></td>
+<td>100 codes</td>
+<td>89 codes (languages and modes)</td>
+<td>92 codes</td>
+<td>22 Indian + English</td>
+<td>No bundled picker list</td>
 <td>Model-dependent</td>
-<td>99</td>
+<td>100 codes (Whisper's list)</td>
 </tr>
 <tr>
 <td><strong>Timestamps</strong></td>
 <td>Segment-level (<code>whisper-1</code>; auto-used when needed)</td>
-<td>Word-level</td>
-<td>Word-level</td>
+<td>Segments of ~30 words (speaker turns with <code>--diarize</code>)</td>
+<td>Segments of ~30 words</td>
 <td>No</td>
 <td>Segment-level</td>
 <td>No</td>
@@ -334,13 +333,13 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <td>Free</td>
 </tr>
 <tr>
-<td><strong>File limit</strong></td>
-<td>25 MB (auto-chunked)</td>
-<td>No hard limit</td>
-<td>25 MB (auto-chunked)</td>
-<td>30s (auto-chunked)</td>
-<td>25 MB (auto-chunked)</td>
-<td>25 MB (auto-chunked)</td>
+<td><strong>Long files</strong></td>
+<td>Split over 25 MB / 30 min (with <code>--diarize</code>: refused instead)</td>
+<td>Split over 25 MB / 30 min</td>
+<td>Split over 25 MB / 30 min</td>
+<td>Always 28-second pieces</td>
+<td>Split over 25 MB / 30 min</td>
+<td>Split over 25 MB / 30 min</td>
 <td>RAM only</td>
 </tr>
 <tr>
@@ -375,6 +374,10 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.</p>
+<p>Groq currently has no bundled language-picker list. Type the code yourself: <code>--language &lt;code&gt;</code> on the command line, or in the Web UI's language field.</p>
+</blockquote>
 <h2 id="provider-details">Provider Details</h2>
 <h3 id="openai-whisper-default">OpenAI Whisper (default)</h3>
 <p>The most widely used speech-to-text API. Good accuracy across most languages. Segment-level timestamps included.</p>
@@ -384,7 +387,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <li><strong>API key env var:</strong> <code>OPENAI_API_KEY</code></li>
 <li><strong>Get a key:</strong> <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a></li>
 <li><strong>Cost:</strong> $0.003–$0.006 per minute depending on the model (see below)</li>
-<li><strong>File limit:</strong> 25 MB for every model — anyscribe automatically chunks larger files into 18-minute segments</li>
+<li><strong>File limit:</strong> files over 25 MB or 30 minutes are split automatically into pieces of about 18 minutes. With <code>--diarize</code> there is no splitting: OpenAI refuses files over either limit, so use Deepgram for long recordings with speakers</li>
 <li><strong>Default model:</strong> <code>gpt-transcribe</code></li>
 <li><strong>Diarization:</strong> Yes — use <code>--diarize</code> flag to enable speaker-labeled transcripts</li>
 </ul>
@@ -447,7 +450,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <li><strong>Cost:</strong> ~$0.30/hour</li>
 <li><strong>Default model:</strong> <code>nova-3</code> (auto-falls back to <code>nova</code> for <code>hi-Latn</code>, which isn't supported on nova-3 yet)</li>
 <li><strong>Also available:</strong> <code>nova-2</code> — the previous generation. Pin it only if you're comparing against older transcripts: <code>anyscribe config set provider_models.deepgram nova-2</code></li>
-<li><strong>No file size limit</strong> — processes files of any length in a single request (unlike OpenAI's 25MB limit)</li>
+<li><strong>File limit:</strong> files over 25 MB or 30 minutes are split into pieces of about 18 minutes. Each piece is labelled on its own, so on long recordings <code>Speaker 0</code> in one piece is not guaranteed to be the same person in the next.</li>
 <li><strong>Diarization:</strong> Native — automatically detects the number of speakers from audio characteristics. No need to specify a speaker count.</li>
 <li><strong>Hindi Latin:</strong> Set <code>--language hi-Latn</code> for romanized Hindi / Hinglish output</li>
 </ul>
@@ -479,21 +482,21 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 </tbody>
 </table>
 <blockquote>
-<p><strong>When to use:</strong> Best choice for multi-speaker transcripts (meetings, interviews, podcasts). Handles long recordings (3+ hours) without chunking. Excellent for Hinglish content with <code>--language hi-Latn</code>. This is the provider anyscribe auto-selects when you use <code>--diarize</code>, and what the <strong><code>balanced</code></strong> quality tier (the default) selects.</p>
+<p><strong>When to use:</strong> Best choice for multi-speaker transcripts (meetings, interviews, podcasts). Excellent for Hinglish content with <code>--language hi-Latn</code>. This is the provider anyscribe auto-selects when you use <code>--diarize</code>, and what the <strong><code>balanced</code></strong> quality tier (the default) selects.</p>
 </blockquote>
 <h3 id="elevenlabs-scribe">ElevenLabs Scribe</h3>
-<p>High-accuracy transcription with word-level timestamps and optional speaker diarization (up to 32 speakers).</p>
+<p>High-accuracy transcription. Timestamps come in segments of about 30 words (anyscribe groups ElevenLabs' word timings; it doesn't show a time for every word). anyscribe does not request ElevenLabs speaker labels; use Deepgram for diarization.</p>
 <pre><code class="language-bash">anyscribe config set provider elevenlabs
 </code></pre>
 <ul>
 <li><strong>API key env var:</strong> <code>ELEVENLABS_API_KEY</code></li>
 <li><strong>Get a key:</strong> <a href="https://elevenlabs.io/app/settings/api-keys">elevenlabs.io/app/settings/api-keys</a></li>
 <li><strong>Cost:</strong> ~$0.22–0.40/hour depending on plan</li>
-<li><strong>File limit:</strong> The ElevenLabs API accepts up to 3 GB, but anyscribe chunks at 25 MB (same as OpenAI) for consistency</li>
+<li><strong>File limit:</strong> The ElevenLabs API accepts up to 3 GB, but anyscribe splits files over 25 MB or 30 minutes into pieces of about 18 minutes, the same as OpenAI</li>
 <li><strong>Model:</strong> <code>scribe_v2</code> (the most accurate model currently measured)</li>
 </ul>
 <blockquote>
-<p><strong>When to use:</strong> When you need the highest accuracy, word-level timestamps, or speaker identification. This is what the <strong><code>accuracy</code></strong> quality tier selects.</p>
+<p><strong>When to use:</strong> When you need the highest accuracy. This is what the <strong><code>accuracy</code></strong> quality tier selects.</p>
 </blockquote>
 <h3 id="sarvam-ai">Sarvam AI</h3>
 <p>Specialized for Indian languages. Supports 22 Indian languages plus English with Indian accent optimization.</p>
@@ -524,10 +527,10 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <li><strong>API key env var:</strong> <code>GROQ_API_KEY</code></li>
 <li><strong>Get a key:</strong> <a href="https://console.groq.com/keys">console.groq.com/keys</a></li>
 <li><strong>Cost:</strong> ~$0.04/hour — the cheapest cloud provider</li>
-<li><strong>File limit:</strong> 25 MB (auto-chunked, same as OpenAI)</li>
+<li><strong>File limit:</strong> files over 25 MB or 30 minutes are split into pieces of about 18 minutes, the same as OpenAI</li>
 <li><strong>Default model:</strong> <code>whisper-large-v3-turbo</code> — the fastest and cheapest</li>
 <li><strong>Also available:</strong> <code>whisper-large-v3</code> — more accurate, a bit slower, and Groq allows bigger uploads for it. Worth switching to if the turbo model is dropping words: <code>anyscribe config set provider_models.groq whisper-large-v3</code></li>
-<li><strong>Diarization:</strong> No — use the <code>accuracy</code> or <code>balanced</code> tier (or <code>--provider deepgram</code>) for speaker labels</li>
+<li><strong>Diarization:</strong> No. For speaker labels, add a Deepgram key and run <code>anyscribe "&lt;url&gt;" --provider deepgram --diarize</code></li>
 </ul>
 <blockquote>
 <p><strong>When to use:</strong> the <strong><code>cost</code></strong> quality tier maps here. Great for bulk, low-cost transcription where you don't need speaker labels. Fast enough that long files fly through.</p>
@@ -540,7 +543,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <li><strong>API key env var:</strong> <code>OPENROUTER_API_KEY</code></li>
 <li><strong>Get a key:</strong> <a href="https://openrouter.ai/keys">openrouter.ai/keys</a></li>
 <li><strong>Cost:</strong> Varies by model (per-token pricing, generally more expensive than dedicated STT)</li>
-<li><strong>File limit:</strong> 25 MB (auto-chunked, same as OpenAI)</li>
+<li><strong>File limit:</strong> files over 25 MB or 30 minutes are split into pieces of about 18 minutes, the same as OpenAI</li>
 <li><strong>No timestamps</strong> — returns plain text only</li>
 <li><strong>Default model:</strong> <code>openai/gpt-audio-mini</code></li>
 <li><strong>Also suggested:</strong> <code>google/gemini-2.5-flash-lite</code>, <code>google/gemini-2.5-flash</code>, <code>google/gemini-3-flash-preview</code>, <code>mistralai/voxtral-small-24b-2507</code>, <code>openai/gpt-audio</code></li>
@@ -575,7 +578,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 <p><strong>Switching the default model:</strong></p>
 <pre><code class="language-bash">anyscribe config set local_model small
 </code></pre>
-<p>or pick from the dropdown in the Web UI's Local provider panel. (The model has to be cached first — see next section.)</p>
+<p>or pick from the dropdown in the Web UI's Local provider panel. (Pull it first with <code>anyscribe model pull &lt;size&gt;</code>; the Web UI only lists cached models, but <code>config set</code> does not check.)</p>
 <p><strong>Managing downloaded models</strong> (after setup):</p>
 <table>
 <thead>
@@ -595,7 +598,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 </tr>
 <tr>
 <td><code>anyscribe model rm tiny --yes</code></td>
-<td>Delete a cached model (<code>--yes</code> required — destructive)</td>
+<td>Delete a cached model (asks first; <code>--yes</code> skips the prompt)</td>
 </tr>
 <tr>
 <td><code>anyscribe model info large-v3-turbo</code></td>
@@ -714,23 +717,22 @@ anyscribe config set groq_api_key gsk-...
 <pre><code class="language-bash">anyscribe onboard --force
 </code></pre>
 <p>Or edit <code>~/.anyscribe/.env</code> directly.</p>
-<p>Test that a provider works:</p>
+<p>Check that a provider loads and its API key is set. This does not validate the key or available credit:</p>
 <pre><code class="language-bash">anyscribe providers test elevenlabs
 </code></pre>
 <h2 id="picking-a-language-web-ui">Picking a language (Web UI)</h2>
-<p>The web UI (<code>anyscribe ui</code>) shows a per-provider language dropdown so you
-don't have to guess the right code. Open the <strong>Options</strong> accordion on the
-Transcribe page and the language input becomes a combobox listing every
-language that provider supports — <code>auto</code> at the top, then the full list.
-You can still type any code, including ones that aren't in the dropdown
-(useful if a provider added a language we haven't refreshed yet).</p>
+<p>Open Transcribe → Options to choose a language. The picker shows
+anyscribe's bundled suggestions where available; these are not an exhaustive
+list of current provider support. Groq currently has no bundled suggestions:
+type the code yourself (<code>--language en</code> on the command line, or in the Web
+UI's language field, which accepts typed codes).</p>
 <p>OpenRouter is the exception: it accepts a prose instruction in the prompt
 ("Spanish", "French"), not a code, so the input stays free-text for that
 provider.</p>
 <p>The same dropdown drives the <strong>Default language</strong> field on the Settings
 page — it follows whichever provider you pick as default.</p>
 <h2 id="diarization-auto-routing">Diarization Auto-Routing</h2>
-<p>When you use <code>--diarize</code> without specifying a provider (<code>-p</code>), anyscribe automatically switches to <strong>Deepgram</strong> if a Deepgram API key is configured. This is because Deepgram handles large files natively (no chunking needed) and produces the most consistent speaker labels across long recordings.</p>
+<p>When you use <code>--diarize</code> without specifying a provider (<code>-p</code>), anyscribe automatically switches to <strong>Deepgram</strong> if a Deepgram API key is configured. This is because Deepgram's diarization is native and produces the most consistent speaker labels.</p>
 <p>To override and use a specific provider for diarization:</p>
 <pre><code class="language-bash">anyscribe &quot;url&quot; --diarize --provider openai
 </code></pre>

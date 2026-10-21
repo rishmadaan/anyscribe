@@ -73,7 +73,7 @@
 anyscribe install-skill
 </code></pre>
 <p>That copies the skill into <code>~/.claude/skills/anyscribe/</code>. Claude Code picks it up on the next session — no restart dance beyond opening a new one.</p>
-<p><strong>You may already have it.</strong> If Claude Code is installed on this machine, anyscribe installs the skill for you the first time you run <em>any</em> anyscribe command, and quietly refreshes it whenever the copy on disk falls behind the installed version. No prompt, nothing to opt into. Run <code>anyscribe install-skill</code> when you want to re-install or confirm it explicitly — say, after deleting the folder or debugging why Claude isn't picking it up.</p>
+<p><strong>You may already have it.</strong> If Claude Code is installed on this machine (there's a <code>~/.claude</code> folder), anyscribe installs the skill for you the first time you run a normal anyscribe command, such as <code>anyscribe ui</code> or a transcription, and quietly refreshes it whenever the copy on disk falls behind the installed version. No prompt, nothing to opt into. <code>anyscribe --version</code> and <code>anyscribe --help</code> don't install it. Run <code>anyscribe install-skill</code> when you want to re-install or confirm it explicitly — say, after deleting the folder or debugging why Claude isn't picking it up.</p>
 <p>Then either type <code>/anyscribe</code> to invoke it explicitly, or just ask in plain English — the skill activates on its own when your request is about transcription:</p>
 <ul>
 <li>"Transcribe this YouTube link and drop it in my vault: <code>https://youtube.com/watch?v=...</code>"</li>
@@ -105,7 +105,7 @@ pip install -U "anyscribe[mcp]"</code></p>
 </code></pre>
 <p><strong>Other hosts</strong> (Cursor and friends) want the same two facts in whatever shape their config file takes: the command is <code>anyscribe-mcp</code>, and it needs no arguments.</p>
 <blockquote>
-<p><strong>Configure anyscribe first.</strong> The MCP server uses the same <code>~/.anyscribe/config.yaml</code> and API keys as the CLI. Run <code>anyscribe onboard</code> once before wiring up MCP, or the tools will start by telling your agent there's no provider configured.</p>
+<p><strong>Configure anyscribe first.</strong> The MCP server uses the same <code>~/.anyscribe/config.yaml</code> and API keys as the CLI. Run <code>anyscribe onboard</code> once before wiring up MCP, or the first transcription fails with a missing-API-key error (for example <code>OPENAI_API_KEY not set for provider 'openai'</code>).</p>
 </blockquote>
 <h2 id="what-your-agent-can-reach-skill-vs-mcp">What your agent can reach (skill vs MCP)</h2>
 <p>Both paths hit the same engine — the difference is how much of it is exposed.</p>
@@ -159,7 +159,7 @@ pip install -U "anyscribe[mcp]"</code></p>
 <td>✓ <code>list_providers</code></td>
 </tr>
 <tr>
-<td>Check an API key works</td>
+<td>Check a provider loads and its API key is set</td>
 <td>✓</td>
 <td>✓ <code>test_provider</code></td>
 </tr>

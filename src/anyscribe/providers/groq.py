@@ -33,6 +33,6 @@ class GroqProvider(OpenAIProvider):
 
     def _transcribe_diarize(self, audio_path: Path, language: str, api_key: str) -> dict:
         raise RuntimeError(
-            "Groq has no diarization model. Use the accuracy or balanced quality tier "
-            "(or --provider deepgram) for speaker labels."
+            "Groq has no diarization model. Use --provider deepgram or --provider openai "
+            "for speaker labels."
         )

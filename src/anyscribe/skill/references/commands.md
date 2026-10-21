@@ -87,9 +87,11 @@ Before transcribing, anyscribe scans the vault for a transcript whose frontmatte
 }
 ```
 
-`model` is the model that actually ran — read it rather than assuming the pin, since anyscribe may have switched it (timestamps) or the provider may have come from a tier. `via` says which rung picked the provider (`flag` | `diarize` | `quality: <tier>` | `config`), and `notes` carries every swap or warning in machine-readable form (keyless-tier fallback, whisper-1 timestamp switch, diarize routing) — surface any `WARNING:` note to the user even in `--quiet` runs. Batch `--json` carries `provider`, `model`, `via` and `notes` inside `data`.
+`model` reports the model selected by the run planner — read it rather than assuming the pin, since anyscribe may have switched it (timestamps) or the provider may have come from a tier. Provider-specific overrides can differ: OpenAI diarization uses `gpt-4o-transcribe-diarize`, and Deepgram hi-Latn uses `nova`. Read `notes` for these overrides. For cached results, no model runs and this field does not identify the model that created the saved transcript. `via` says which rung picked the provider (`flag` | `diarize` | `quality: <tier>` | `config`), and `notes` carries every swap or warning in machine-readable form (keyless-tier fallback, whisper-1 timestamp switch, diarize routing) — surface any `WARNING:` note to the user even in `--quiet` runs. Batch `--json` carries `provider`, `model`, `via` and `notes` inside `data`.
 
 When the source was already in the vault, the same shape comes back with `"cached": true` and the existing file's path.
+
+These examples describe completed transcription and batch-processing paths. Input and usage errors can produce stderr without JSON; empty or fully resumed batches can exit successfully without a JSON summary. Automatic yt-dlp updates can also prepend progress text to stdout despite `--quiet`. Check exit status and output before treating stdout as one JSON document.
 
 On error:
 ```json
@@ -198,7 +200,7 @@ https://youtube.com/watch?v=def456
 | `--force` | `-f` | Re-transcribe sources already in the vault | Off |
 | `--quiet` | `-q` | Suppress progress | Off |
 | `--stop-on-error` | | Stop at first failure | Off (continues) |
-| `--timeout` | | Per-URL timeout in seconds. A timed-out URL is marked failed (`"timed out after Ns"`) and the batch moves to the next URL | None (no timeout) |
+| `--timeout` | | Per-URL threshold in seconds. A URL whose processing exceeds it is marked failed (`"timed out after Ns"`). It currently does not cancel the worker or bound elapsed time: the batch waits for that worker to finish before advancing, and the worker may still write a transcript | None (no timeout) |
 
 Sources already in the vault are skipped (returned from cache) unless `--force` is passed. The summary table marks those rows `CACHED`, and each such result carries `"cached": true`.
 
@@ -208,8 +210,8 @@ Sources already in the vault are skipped (returned from cache) unless `--force` 
 {
   "success": false,
   "data": {
-    "total": 3,
-    "succeeded": 2,
+    "total": 2,
+    "succeeded": 1,
     "failed": 1,
     "provider": "deepgram",
     "model": "nova-3",
@@ -225,12 +227,12 @@ Sources already in the vault are skipped (returned from cache) unless `--force` 
 }
 ```
 
-Top-level `success` is `true` only when no URL failed. Exits 1 if any URL failed.
+Top-level `success` is `true` only when no URL failed. Exits 1 if any URL failed. A missing list file, an empty list, or a fully resumed batch produces no JSON summary (see the output caveat under transcribe).
 
 ### Examples
 
 ```bash
-# Cap each URL at 5 minutes; stop-on-error not set, so it moves to the next one
+# Mark a URL failed if it runs past 300s (it is not cancelled); stop-on-error not set, so the batch moves on
 anyscribe batch urls.txt --timeout 300
 
 # Run the whole batch on a cheaper model
@@ -249,7 +251,7 @@ anyscribe rm my-video                          # by slug (filename without .md)
 anyscribe rm my-video --yes --json             # skip prompt, machine output
 ```
 
-Accepts a full file path or a bare slug. If a slug matches more than one transcript, `rm` prints the matches and exits — pass a full path to disambiguate. Relative paths only work from inside the workspace folder. Daily logs under `daily/` are left untouched as history; only the transcript file and its master-index row are removed.
+Accepts a full file path or a bare slug. If a slug matches more than one transcript, `rm` prints the matches and exits — pass a full path to disambiguate. Relative paths are resolved from the current working directory, not from the workspace root. Prefer the `data.file` path returned by transcription. Daily logs under `daily/` are left untouched as history; only the transcript file and its master-index row are removed.
 
 ### Flags
 
@@ -385,7 +387,7 @@ anyscribe uninstall-service --yes --json   # unloads + deletes it
 | `--yes` | `-y` | Skip confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json` | `-j` | Output result as JSON: `{"success": true, "data": {...}, "error": null}` |
 
-`install-service` returns `{"plist": "<path>"}`; `uninstall-service` returns `{"removed": true|false}`. This only toggles login auto-start — it doesn't stop a tray that's currently running (quit that from its menu) and doesn't uninstall anyscribe itself.
+`install-service` returns `{"plist": "<path>"}`; `uninstall-service` returns `{"removed": true|false}`. Installation loads the LaunchAgent and can start the tray immediately as well as at login. Removal unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither command uninstalls anyscribe.
 
 ---
 
@@ -549,11 +551,11 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 **Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `base` unless the user asks otherwise.
 
-**Setup does not switch the provider.** `provider` and `quality` are left alone, so the default `balanced` tier keeps routing to Deepgram. Afterwards run `anyscribe config set provider local` (also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+**Setup does not switch the provider.** `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs away from local (to Deepgram, or to `provider` when no Deepgram key is set). Afterwards run `anyscribe config set provider local` (also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 **Exit codes:**
 - `0` — set up (or already set up).
-- `1` — install/download failure. With `--json` the failure is an NDJSON line on stdout, `{"status": "failed", "phase", "install", ...}`, carrying the exact command that failed and its stderr.
+- `1` — install/download failure. With `--json`, setup failures are NDJSON records on stdout: `{"status": "failed", "phase": "install"|"download", ...}`. Inspect `phase`: installation failures carry `install.command` and `install.stderr`; model-download failures carry `error`, while `install` describes the preceding installation step.
 - `2` — usage error (missing `--model`, unknown size, non-TTY without `--yes`).
 
 ### anyscribe local status
@@ -623,9 +625,9 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json # set a ti
 | `--force` / `-f` | no | off | Re-run over existing config. |
 | `--json` / `-j` | no | off | Emit the result as a single JSON object on stdout. |
 
-**Result JSON:** `{"status", "provider", "quality", "model", "workspace", "local_enabled", "api_keys_set", "skill_installed", "local_setup", "config_file"}`. Read `model` back rather than assuming — it reports the effective model, pinned or default.
+**Result JSON:** `{"status", "provider", "quality", "model", "workspace", "local_enabled", "api_keys_set", "skill_installed", "local_setup", "config_file"}`. `model` is the configured provider's pinned or default cloud model, or `null` for local. It does not resolve quality-tier routing. After setup, use `anyscribe config --json` to inspect the next-run plan and `anyscribe local status --json` for the default local model.
 
-**Exit codes:** 0 success · 1 partial setup: config was written but local setup failed; with `--json` the result is printed on stdout with `"status": "partial"`, and `local_setup` carries the failed pip command and captured stderr · 2 usage error (missing `--provider`, unknown provider, unknown `--model`/`--quality`, missing API key, already configured without `--force`, etc.). With `--json`, exit-2 stderr is a JSON object with `error` plus `choices` for a bad value, `env_var` and `hint` for a missing key, or `hint` and `config_file` when already configured.
+**Exit codes:** 0 success · 1 partial setup: config was written but local setup failed; with `--json` the result is printed on stdout with `"status": "partial"`, and `local_setup` carries the setup result: inspect its `phase` (an install failure carries `install.command` and `install.stderr`; a model-download failure carries `error`) · 2 usage error (missing `--provider`, unknown provider, unknown `--model`/`--quality`, missing API key, already configured without `--force`, etc.). With `--json`, exit-2 stderr is a JSON object with `error` plus `choices` for a bad value, `env_var` and `hint` for a missing key, or `hint` and `config_file` when already configured.
 
 ---
 

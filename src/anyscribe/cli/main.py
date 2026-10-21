@@ -279,7 +279,8 @@ def update(
 ) -> None:
     """[bold yellow]Update[/bold yellow] anyscribe to the latest version.
 
-    Pulls the latest changes from git and reinstalls the package.
+    Normal installs upgrade with pip (from PyPI, falling back to GitHub); an
+    editable install inside a git clone pulls the latest changes and reinstalls.
     """
     from anyscribe.core.updater import check_for_updates, update as do_update
 

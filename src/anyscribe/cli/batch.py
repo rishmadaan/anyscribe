@@ -245,12 +245,13 @@ def _process_url(
         if timeout is None:
             result = process(url, settings, quiet=quiet, force=force, model=model)
         else:
-            # ponytail: Python can't kill a running thread, so a timed-out worker
-            # keeps transcribing in the background even though we've moved on and
-            # reported it failed. Fine for a CLI batch run; if this ever needs to
+            # ponytail: Python can't kill a running thread, and leaving the `with`
+            # block waits for the worker, so a timed-out URL is reported failed only
+            # after its worker finishes (it may still write a transcript). Fine for a
+            # CLI batch run; if this ever needs to
             # actually cancel work (e.g. to free API concurrency), switch to
             # subprocess isolation (multiprocessing/concurrent.futures.ProcessPoolExecutor)
-            # so the timeout can terminate the process, not just abandon the thread.
+            # so the timeout can terminate the process, not just wait it out.
             from concurrent.futures import ThreadPoolExecutor
             from concurrent.futures import TimeoutError as FutureTimeoutError
 

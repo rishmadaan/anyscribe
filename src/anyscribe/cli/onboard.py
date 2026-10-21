@@ -178,7 +178,7 @@ PROVIDER_INFO = {
     },
     "elevenlabs": {
         "label": "ElevenLabs Scribe",
-        "description": "High accuracy, 99 languages, word-level timestamps",
+        "description": "High accuracy, 90+ languages, word-level timestamps",
         "env_var": "ELEVENLABS_API_KEY",
         "key_url": "https://elevenlabs.io/app/settings/api-keys",
     },

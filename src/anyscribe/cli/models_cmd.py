@@ -156,7 +156,10 @@ def model_pull(
 def model_rm(
     size: str = typer.Argument(..., help="Model size to delete from the cache."),
     yes: bool = typer.Option(
-        False, "--yes", "-y", help="Skip confirmation. Required for destructive action."
+        False,
+        "--yes",
+        "-y",
+        help="Skip the confirmation prompt (required when there is no terminal).",
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
@@ -210,7 +213,7 @@ def model_reinstall(
         False,
         "--yes",
         "-y",
-        help="Skip confirmation. Required — reinstall deletes the existing weights.",
+        help="Skip the confirmation prompt (required when there is no terminal).",
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:

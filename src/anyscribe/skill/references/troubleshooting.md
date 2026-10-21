@@ -225,7 +225,7 @@ Two cases that look like bugs but aren't:
 
 **Fix:**
 1. `anyscribe providers test <name>` confirms the key is set (it makes no API call).
-2. If the error says 'Invalid or missing API key', the key is wrong or unfunded: re-set it with `anyscribe config set <provider>_api_key`.
+2. If the error says 'Invalid or missing API key', the key is wrong or unfunded: re-set it with `anyscribe config set <provider>_api_key YOUR_KEY`.
 3. Try a different provider: `anyscribe transcribe "url" --provider openai`
 
 ### "Invalid or missing API key for <provider>."
@@ -268,7 +268,7 @@ Pre-flight checks on a local file. The path must exist and end in one of `.mp3`,
 
 OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 30 min.
 
-**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`) and re-run with `--diarize`, which then routes to Deepgram; or drop `--diarize` and let OpenAI chunk the file.
+**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`). After setting a Deepgram key, retry the original source with `-p deepgram --diarize`, replacing any existing provider flag. To use OpenAI without speaker labels, omit `--diarize`; if `diarize` is enabled in config, first run `anyscribe config set diarize false`.
 
 ### "Groq has no diarization model"
 
@@ -340,7 +340,7 @@ anyscribe tray --port 9000
 2. Remove login auto-start (macOS): `anyscribe uninstall-service --yes`
 3. Optionally uninstall the extra: `pip uninstall pystray Pillow`
 
-`uninstall-service` only removes the login LaunchAgent — it doesn't stop an already-running tray or uninstall anyscribe itself.
+`uninstall-service` unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither service command uninstalls anyscribe.
 
 ### Permission denied errors
 

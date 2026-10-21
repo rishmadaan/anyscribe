@@ -110,9 +110,9 @@ class OpenAIProvider(TranscriptionProvider):
                 raise RuntimeError(
                     f"File is {size_mb:.0f}MB — OpenAI's diarize endpoint has a 25MB limit "
                     f"and doesn't support chunking.\n\n"
-                    f"Use Deepgram instead (handles large files natively with better speaker detection):\n"
+                    f"Use Deepgram instead (chunks long files and has native speaker detection):\n"
                     f"  anyscribe config set deepgram_api_key YOUR_KEY\n"
-                    f'  anyscribe "{audio_path.name}" --diarize\n\n'
+                    f'  anyscribe "{audio_path.name}" -p deepgram --diarize\n\n'
                     f"Or transcribe without diarization (will chunk automatically):\n"
                     f'  anyscribe "{audio_path.name}" -p openai'
                 )

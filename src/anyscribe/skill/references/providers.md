@@ -84,7 +84,7 @@ does not. So don't pass `-m gpt-transcribe` for a user who wants timestamps.
 
 | | OpenAI Whisper | Deepgram Nova | ElevenLabs Scribe | Sarvam AI | Groq | OpenRouter | Local |
 |---|---|---|---|---|---|---|---|
-| **Best for** | General purpose | Diarization + Hinglish | Highest accuracy | Indian languages | Cheapest + fastest | Model variety | Offline / free |
+| **Best for** | General purpose | Diarization + Hinglish | Highest accuracy | Indian languages → English | Cheapest + fastest | Model variety | Offline / free |
 | **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Varies | 99 |
 | **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Word-level | Word-level | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No | No (Sarvam Batch API only — not integrated) | No | No | No |
@@ -161,7 +161,7 @@ Specialized for Indian languages. Dramatically better than Whisper for Hindi, Ta
 - **Get key:** https://dashboard.sarvam.ai
 - **Spelling:** the canonical provider name is `sargam`. `sarvam` (the vendor's real spelling) is accepted wherever a *provider* is named — `--provider`, `config set provider`, `providers test`, `onboard --provider`, the web routes — and canonicalized to `sargam`. Don't correct a user who types it, and don't expect it back in `config` output. **Exception: the key name is not aliased.** `config set sarvam_api_key` exits 1 with *Unknown key*; use `sargam_api_key` / `SARGAM_API_KEY`.
 
-**When to recommend:** Any content in Indian languages. Handles code-mixed audio (e.g., Hindi-English) well. Not suited for non-Indian languages. Leave the model on `saaras:v3`.
+**When to recommend:** Indian-language audio when an English transcript is wanted (it translates; it never returns the original language). For an original-language transcript use Deepgram (`--language hi` / `hi-Latn`) or OpenAI. Handles code-mixed audio (e.g., Hindi-English) well. Not suited for non-Indian languages. Leave the model on `saaras:v3`.
 
 ## Groq (provider: `groq`)
 
@@ -171,7 +171,7 @@ Cheapest and fastest cloud option. Runs Whisper `large-v3-turbo` on Groq acceler
 - **Also available:** `whisper-large-v3` — higher accuracy, and Groq allows a larger upstream file limit for it. Pin with `-m whisper-large-v3` when the turbo output is missing words.
 - **Cost:** ~$0.04/hr — the cheapest cloud provider
 - **Chunking:** over 25 MB or 30 min auto-chunked (same as OpenAI)
-- **Diarization:** No — use the `accuracy`/`balanced` tier or `--provider deepgram`
+- **Diarization:** No. For speaker labels use `--diarize` with a Deepgram key set (it auto-routes), or `-p deepgram` / `-p openai`. Quality tiers are not applied to diarized runs.
 - **Get key:** https://console.groq.com/keys
 - **Quick setup:** `anyscribe config set groq_api_key ...`
 
@@ -196,7 +196,7 @@ Routes to various AI models via a unified API. Uses audio-capable chat models wi
 
 ## Local / faster-whisper (provider: `local`)
 
-Runs entirely on-device. No API key, no internet, no cost. **Opt-in** — nothing is installed or downloaded unless the user runs setup.
+Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached size can trigger a download on the next local run. **Opt-in**: faster-whisper is installed only by `anyscribe local setup`.
 
 - **Engine:** faster-whisper (CTranslate2-based, up to 4x faster than original Whisper)
 - **Recommended model:** `base` (~145 MB, good quality for most use cases)

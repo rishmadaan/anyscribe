@@ -33,7 +33,7 @@ If not installed: suggest `pip install anyscribe`. If installed but not configur
 
 ## Core Principle: Use --json for Machine Output
 
-When YOU run anyscribe commands, always use `--json --quiet` flags so you can parse structured output. Show the user a clean summary, not raw JSON.
+When YOU run anyscribe commands: for transcribe, download, and batch, use `--json --quiet`. For other commands, use only the flags documented for that command. Some support `--json` without `--quiet`; others return human-readable output only. Show the user a clean summary, not raw JSON.
 
 ```bash
 anyscribe "URL" --json --quiet
@@ -67,7 +67,7 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Add an OpenRouter model to the pickers | `anyscribe config set extra_models.openrouter "<slug>,<slug>"` (openrouter only) |
 | Check a provider's key is set | `anyscribe providers test <name>` (no API call: a pass does not prove the key is valid or funded) |
 | List providers | `anyscribe providers list` |
-| Set up offline transcription | `anyscribe local setup --model base --yes --json`, then `anyscribe config set provider local` *(see rule below)* |
+| Set up offline transcription | `anyscribe local setup --model base --yes --json` (does not switch the provider; to make local the default, `anyscribe config set provider local`; ask first if the user already uses another provider) *(see rule below)* |
 | Check offline-transcription state | `anyscribe local status --json` |
 | Download another Whisper model | `anyscribe model pull <size> --json` |
 | List downloaded Whisper models | `anyscribe model list --json` |
@@ -129,9 +129,9 @@ The `local` provider runs Whisper on the user's own machine via `faster-whisper`
 anyscribe local setup --model base --yes --json
 ```
 
-`--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` — the error payload carries the exact pip/pipx command that failed and the captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.).
+`--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` and inspect `phase`: installation failures (`"phase": "install"`) carry `install.command` and `install.stderr`, the exact pip/pipx command that failed and its captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.); model-download failures (`"phase": "download"`) carry `error`, while `install` describes the preceding installation step.
 
-**Setup does not make local the provider.** It installs and downloads only; `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs to Deepgram. Afterwards run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+**Setup does not make local the provider.** It installs and downloads only; `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs away from local (to Deepgram, or to `provider` when no Deepgram key is set). Afterwards run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 **When to suggest local setup:**
 
@@ -195,7 +195,7 @@ When the user asks which provider to use, or when you need to suggest one:
 
 | Scenario | Recommend | Why |
 |---|---|---|
-| General purpose | the default `balanced` tier (Deepgram); **openai** if that is the only key the user has | Strong accuracy and speaker labels; OpenAI covers the most languages |
+| General purpose | the default `balanced` tier (Deepgram); **openai** if that is the only key the user has | Strong accuracy; native speaker labels with `--diarize`; OpenAI covers the most languages |
 | Multi-speaker (meetings, interviews) | `--diarize` (auto-routes to **deepgram**) | Native diarization, auto-detects speaker count; files over 25 MB or 30 min are auto-chunked, so speaker numbering may not stay consistent across chunks |
 | Hindi with speakers (meetings, calls) | `--diarize --language hi-Latn` | **Default for any Hindi/Hinglish multi-speaker content.** Romanized Latin script output, speaker labels, auto-routes to Deepgram Nova |
 | Mostly English + some Hindi | `--diarize` (no language flag needed) | Auto-detect handles English well, Hindi words transcribed phonetically |
@@ -288,8 +288,9 @@ anyscribe rm my-video --yes --json                          # by slug (filename,
 ```
 
 - Accepts a full path or a bare slug. If a slug matches more than one file, `rm` lists the
-  matches and exits — pass a full path to disambiguate. Relative paths only work from
-  inside the workspace folder.
+  matches and exits — pass a full path to disambiguate. Relative paths are resolved from
+  the current working directory, not from the workspace root. Prefer the `data.file`
+  path returned by transcription.
 - `--yes` / `-y` skips the confirmation prompt (required in agent contexts — the prompt
   needs a TTY).
 - The master `_index.md` row is removed automatically. Daily logs are left intact as history.
@@ -308,8 +309,10 @@ EOF
 anyscribe batch /tmp/anyscribe-urls.txt --json --quiet
 ```
 
-Pass `--timeout <seconds>` to cap how long each URL is allowed to run; a timed-out
-URL is marked failed (`"timed out after Ns"`) and the batch continues to the next
+Pass `--timeout <seconds>` to mark a URL failed (`"timed out after Ns"`) when its
+processing exceeds the threshold. It currently does not cancel the worker or bound
+elapsed time: the batch waits for that worker to finish before advancing, and the
+worker may still write a transcript. After a timeout the batch continues to the next
 URL (combine with `--stop-on-error` to halt instead):
 
 ```bash
@@ -342,7 +345,7 @@ When something goes wrong:
 
 ## Safety Rules
 
-1. **Never read or display `~/.anyscribe/.env`** — it contains API keys and passwords
+1. **Never read or display `~/.anyscribe/.env`** — it contains API keys
 2. **Use `anyscribe config show`** to display settings (it masks sensitive values)
 3. **Never hardcode API keys** in commands or output
 4. **Never run `anyscribe onboard` without `--yes`** (interactive, takes over the terminal). Tell the user before running the headless form, since it writes config and keys

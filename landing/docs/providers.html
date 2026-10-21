@@ -299,7 +299,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 <td>89 codes (languages and modes)</td>
 <td>92 codes</td>
 <td>22 Indian + English</td>
-<td>100 codes (Whisper's list)</td>
+<td>No bundled picker list</td>
 <td>Model-dependent</td>
 <td>100 codes (Whisper's list)</td>
 </tr>
@@ -377,6 +377,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 </table>
 <blockquote>
 <p>The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.</p>
+<p>Groq currently has no registered language-picker list. Use <code>--language</code> to supply a language code.</p>
 </blockquote>
 <h2 id="provider-details">Provider Details</h2>
 <h3 id="openai-whisper-default">OpenAI Whisper (default)</h3>
@@ -717,7 +718,7 @@ anyscribe config set groq_api_key gsk-...
 <pre><code class="language-bash">anyscribe onboard --force
 </code></pre>
 <p>Or edit <code>~/.anyscribe/.env</code> directly.</p>
-<p>Test that a provider works:</p>
+<p>Check that a provider loads and its API key is set. This does not validate the key or available credit:</p>
 <pre><code class="language-bash">anyscribe providers test elevenlabs
 </code></pre>
 <h2 id="picking-a-language-web-ui">Picking a language (Web UI)</h2>

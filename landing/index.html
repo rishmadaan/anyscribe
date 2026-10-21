@@ -1523,7 +1523,7 @@
     <div class="agent-facts">
       <div class="af">
         <span class="af-eyebrow">Claude Code skill</span>
-        <p>If Claude Code is installed, the first real anyscribe command you run (say, <code>anyscribe ui</code>; not <code>--version</code> or <code>--help</code>) installs a skill that teaches it how to drive anyscribe: a decision tree, safety rules, and JSON patterns. No config to write.</p>
+        <p>If Claude Code is installed, a skill that teaches it how to drive anyscribe (a decision tree, safety rules, and JSON patterns) installs itself the first time you run a command like <code>anyscribe ui</code> (or run <code>anyscribe install-skill</code>). No config to write.</p>
         <code class="af-cmd"><span class="p">$</span>anyscribe install-skill <span class="d"># or automatic on first real command</span></code>
       </div>
       <div class="af">
@@ -1532,8 +1532,8 @@
         <code class="af-cmd"><span class="p">$</span>pip install "anyscribe[mcp]"</code>
       </div>
       <div class="af">
-        <span class="af-eyebrow">JSON on every command</span>
-        <p>Add <code>--json</code> to any primary command for machine-readable metadata, file paths, and provider info. Structured exit codes, no silent defaults.</p>
+        <span class="af-eyebrow">JSON for scripting</span>
+        <p>Transcription and many result-reporting commands accept <code>--json</code>. Check each command's flags. Some startup messages can still appear on stdout.</p>
         <code class="af-cmd"><span class="p">$</span>anyscribe "url" --json</code>
       </div>
     </div>
@@ -1658,7 +1658,7 @@
         <span class="fn">01</span>
         <h3 class="ft">Your AI agent can <span class="it">drive it</span></h3>
         <p class="fd">
-          <code>--json</code> on every primary command for clean machine output. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install "anyscribe[mcp]"</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
+          JSON output on supported commands, with documented limits. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install "anyscribe[mcp]"</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
         </p>
       </div>
 

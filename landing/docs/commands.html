@@ -155,7 +155,7 @@ CLI-only.</p>
 </tr>
 <tr>
 <td><code>anyscribe providers test [name]</code></td>
-<td>Test a provider's API key</td>
+<td>Check provider loading and key presence</td>
 <td>Settings → Providers → Test</td>
 </tr>
 <tr>
@@ -464,7 +464,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; -p groq -m whisper-larg
 <pre><code>→ deepgram · nova-3 (quality: balanced)
 </code></pre>
 <ul>
-<li><strong>provider · model</strong> — exactly what will be called.</li>
+<li><strong>provider · model</strong> — the plan selected for this run. Read the notes for provider-specific model substitutions.</li>
 <li><strong>(reason)</strong> — <code>flag</code> (you passed <code>--provider</code>), <code>diarize</code> (auto-routed for speaker labels), <code>quality: &lt;tier&gt;</code>, or <code>config</code> (your <code>provider</code> setting).</li>
 </ul>
 <p>Anything anyscribe decided on your behalf is printed underneath, indented:</p>
@@ -941,7 +941,7 @@ Or pick a tier:  anyscribe config set quality accuracy|balanced|cost|free|custom
 <tbody>
 <tr>
 <td><strong>Next run</strong></td>
-<td>The provider and model that will actually be used, and why — <code>config</code>, <code>quality: &lt;tier&gt;</code>, <code>flag</code>, or <code>diarize</code></td>
+<td>The provider and planned model selected from current defaults, plus the reason (<code>config</code>, <code>quality: &lt;tier&gt;</code>, <code>flag</code>, or <code>diarize</code>) and any substitution notes</td>
 </tr>
 <tr>
 <td>Indented lines under it</td>
@@ -1153,7 +1153,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 <tr>
 <td><code>elevenlabs</code></td>
 <td><code>ELEVENLABS_API_KEY</code></td>
-<td>High accuracy, 92 language codes in its list</td>
+<td>High accuracy, 90+ languages</td>
 </tr>
 <tr>
 <td><code>sargam</code></td>
@@ -1447,7 +1447,7 @@ Keep these with the skill if you share or modify it.</p>
 </tbody>
 </table>
 <blockquote>
-<p><strong>Tip:</strong> You usually don't need to run this manually. The skill <strong>auto-installs</strong> when Claude Code is detected and <strong>auto-updates</strong> on every CLI invocation when the version changes. Use <code>--force</code> only if you need to repair a corrupted install.</p>
+<p><strong>Tip:</strong> You usually don't need to run this manually. When <code>~/.claude</code> exists, normal commands such as <code>anyscribe ui</code> install or refresh the skill when its recorded version differs. Top-level <code>--version</code> and <code>--help</code> don't trigger this. Use <code>--force</code> to repair an existing copy.</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-update">anyscribe update</h2>
@@ -1585,11 +1585,11 @@ so check each command's flags table:</p>
   <code>--json</code> (the list is under "Quiet, parseable output" below). Some don't, such
   as <code>anyscribe doctor</code> and <code>anyscribe providers test</code>. Progress lines are kept
   out of the JSON where possible, but see the catch below.</li>
-<li><strong><code>--yes</code> (<code>-y</code>) for non-interactive runs.</strong> Commands that would stop to ask
-  "are you sure?" refuse to run without <code>--yes</code> when there's no terminal, which
-  is the case when an agent or script calls them. A hung prompt an agent can't
-  see is worse than a clean failure. One exception: <code>install-service</code> and
-  <code>uninstall-service</code> also skip the question when you pass <code>--json</code>.</li>
+<li><strong><code>--yes</code> (<code>-y</code>) skips confirmation.</strong> Pass it when scripting commands that
+  ask for confirmation. Some commands explicitly reject non-interactive use
+  without it; <code>rm</code>, <code>install-service</code>, and <code>uninstall-service</code> instead attempt
+  to read a confirmation. The two service commands also skip confirmation with
+  <code>--json</code>.</li>
 <li><strong>No silent defaults for choices an agent should make explicitly.</strong> For
   example <code>anyscribe local setup</code> always requires <code>--model</code>; the CLI will never
   pick a model size on your behalf. Where there's a recommended value, it's
@@ -1742,8 +1742,8 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json
 </table>
 <p><strong>Exit codes:</strong> 0 success · 1 setup failure (e.g., local install failed) · 2
 usage error (missing <code>--provider</code>, already configured without <code>--force</code>, etc.).
-On exit 2 stderr carries a structured JSON error with the missing field or the
-reason.</p>
+With <code>--json</code>, headless validation errors are reported as JSON on stderr.
+Argument-parsing errors may still be plain text.</p>
 <h3 id="other-commands-that-need-yes">Other commands that need <code>--yes</code></h3>
 <table>
 <thead>
@@ -1786,23 +1786,24 @@ anything — both are safe to call first, on every run:</p>
 anyscribe local status --json  # faster-whisper version, cached models, disk usage (always exits 0)
 </code></pre>
 <p><code>anyscribe config --json</code> is the one to poll before transcribing: its <code>resolved</code>
-block (<code>provider</code>, <code>model</code>, <code>via</code>, <code>notes</code>) tells you exactly what will run and
-why, and the <code>providers</code> array tells you which API keys are actually present.</p>
+block (<code>provider</code>, <code>model</code>, <code>via</code>, <code>notes</code>) describes a run using current
+defaults. Per-run flags and provider-specific substitutions can change the model
+used. The <code>providers</code> array tells you which API keys are actually present.</p>
 <h3 id="batch-runs">Batch runs</h3>
 <p><code>anyscribe batch</code> is the built-in way to process a list without spawning a process
 per URL. <code>--timeout</code> marks slow entries as failed (it doesn't cancel them, so
 the batch still waits for each one; see <a href="#anyscribe-batch"><code>anyscribe batch</code></a>),
 and duplicate detection means re-running the same file only transcribes what's
 new:</p>
-<pre><code class="language-bash">anyscribe batch urls.txt --json --quiet --timeout 300
+<pre><code class="language-bash">anyscribe batch urls.txt --json --quiet
 </code></pre>
 <p>Use <code>--stop-on-error</code> if a single failure should abort the run; by default the
 batch continues and reports per-entry results.</p>
 <h3 id="when-something-fails">When something fails</h3>
 <p>Errors are documented by the literal text they print in
-<a href="/docs/troubleshooting">Troubleshooting</a>. For a machine-readable health snapshot to
+<a href="/docs/troubleshooting">Troubleshooting</a>. For a human-readable health report to
 attach to a bug report, <code>anyscribe doctor</code> covers dependencies, config,
-installation, and updates in one pass.</p>
+installation, and updates.</p>
 </main>
 </body>
 </html>

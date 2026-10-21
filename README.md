@@ -4,7 +4,7 @@
 
 Built agent-first, with three ways to reach it, in priority order:
 
-- **With your AI agent** (primary) — anyscribe ships as a Claude Code skill that installs itself the first time you run a normal anyscribe command such as `anyscribe ui` (if Claude Code is set up on this machine; `--version` and `--help` don't trigger it, and `anyscribe install-skill` does it on demand), plus an MCP server (`pip install "anyscribe[mcp]"`, ten tools) for Claude Desktop, Cursor, and any MCP host. Most commands that report results also take `--json`, and the ones that would stop to ask take `--yes` — for agents, CI, and scripts.
+- **With your AI agent** (primary) — anyscribe ships as a Claude Code skill that installs itself the first time you run a command like `anyscribe ui` (or run `anyscribe install-skill`), plus an MCP server (`pip install "anyscribe[mcp]"`, ten tools) for Claude Desktop, Cursor, and any MCP host. Most commands that report results also take `--json`, and the ones that would stop to ask take `--yes` — for agents, CI, and scripts.
 - **The web UI** (`anyscribe ui`) — a clean local dashboard at `127.0.0.1:8457` for when you want to see it: paste a URL, watch progress live, browse history, change settings, first-run wizard included.
 - **The CLI** (`anyscribe "<url>"`, `anyscribe onboard`) — one command with arrow-key prompts, for when you want your hands on it.
 
@@ -17,7 +17,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
   - **Downloading a YouTube or Instagram source** — obvious; you gave it the URL.
   - **Calling an API provider** (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — your audio goes to the provider you picked, and nothing else. Your data stays between you and them.
   - **Installing what you set up** — for example, local transcription installs faster-whisper and downloads Whisper model weights from Hugging Face.
-- **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model base`) = zero network traffic. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
+- **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model base`) work with no internet connection. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
 - **No analytics or telemetry.** Besides the above, anyscribe checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote if you installed from a cloned repo). A download also upgrades yt-dlp first if your copy is over 60 days old.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)

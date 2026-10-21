@@ -275,18 +275,21 @@ paragraphs, one of these is true:</p>
 <li><strong>Your <code>output_format</code> is <code>clean</code>.</strong> There were never going to be timestamps:
    <code>anyscribe config set output_format timestamped</code></li>
 </ol>
-<p><strong>Check what actually ran:</strong></p>
+<p><strong>Check what the current defaults would select:</strong></p>
 <pre><code class="language-bash">anyscribe config --json     # resolved.provider, resolved.model, resolved.notes
 </code></pre>
+<p>This does not reconstruct a previous run or its per-run flags. Use that run's
+output and notes when diagnosing it.</p>
 <p>To force Whisper on every OpenAI run:
 <code>anyscribe config set provider_models.openai whisper-1</code>. Deepgram and ElevenLabs
 also give timestamps, in segments of about 30 words; anyscribe doesn't show a
 time for every word.</p>
 <h3 id="a-long-video-is-taking-forever">A long video is taking forever</h3>
-<p>Anything over 30 minutes (or 25 MB) is split into pieces and transcribed piece by
-piece, then merged. That's normal, not a hang. (Sarvam always works in 28-second
-pieces. OpenAI with <code>--diarize</code> doesn't split: it refuses files that long, so use
-Deepgram for long recordings with speakers.)</p>
+<p>With cloud providers, anything over 30 minutes (or 25 MB) is split into pieces
+and transcribed piece by piece, then merged. That's normal, not a hang. (Sarvam
+always works in 28-second pieces. OpenAI with <code>--diarize</code> doesn't split: it
+refuses files that long, so use Deepgram for long recordings with speakers. The
+local provider doesn't split at all; it works through the whole file in one go.)</p>
 <p><strong>Rough guide:</strong> cloud providers run at roughly real-time speed. Local
 transcription on CPU ranges from about real time (<code>large-v3</code>) to about 10× faster
 than real time (<code>tiny</code>); the usual <code>base</code> runs about 7× faster.</p>

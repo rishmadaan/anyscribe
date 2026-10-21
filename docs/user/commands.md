@@ -41,7 +41,7 @@ CLI-only.
 | `anyscribe config path` | Print config file location | — (CLI only) |
 | `anyscribe config list-keys` | Every settable key with its current value | Settings → Providers (key status) |
 | `anyscribe providers list` | Show available providers | Settings → Providers |
-| `anyscribe providers test [name]` | Test a provider's API key | Settings → Providers → Test |
+| `anyscribe providers test [name]` | Check provider loading and key presence | Settings → Providers → Test |
 | `anyscribe local setup --model <size>` | Install faster-whisper + download a Whisper model | Settings → Local provider card |
 | `anyscribe local status` | Report local-transcription readiness | Settings → Local provider card |
 | `anyscribe local teardown --yes` | Uninstall faster-whisper + delete all cached models | Settings → Local provider card → Remove local transcription |
@@ -205,7 +205,7 @@ Every run prints one line naming what it's about to use:
 → deepgram · nova-3 (quality: balanced)
 ```
 
-- **provider · model** — exactly what will be called.
+- **provider · model** — the plan selected for this run. Read the notes for provider-specific model substitutions.
 - **(reason)** — `flag` (you passed `--provider`), `diarize` (auto-routed for speaker labels), `quality: <tier>`, or `config` (your `provider` setting).
 
 Anything anyscribe decided on your behalf is printed underneath, indented:
@@ -597,7 +597,7 @@ How to read it:
 
 | Part | Meaning |
 |------|---------|
-| **Next run** | The provider and model that will actually be used, and why — `config`, `quality: <tier>`, `flag`, or `diarize` |
+| **Next run** | The provider and planned model selected from current defaults, plus the reason (`config`, `quality: <tier>`, `flag`, or `diarize`) and any substitution notes |
 | Indented lines under it | Anything anyscribe decided for you: a missing-key fallback, an automatic model switch, `hi-Latn` routing |
 | **→** | Marks the provider that wins right now — which is not always your `provider` setting, since a quality tier can override it |
 | **Default model** | What that provider would use: your pin if you set one, otherwise its first listed model |
@@ -735,7 +735,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 | `openai` | `OPENAI_API_KEY` | General purpose, multilingual, diarization (default) |
 | `deepgram` | `DEEPGRAM_API_KEY` | Fast, accurate, native diarization + Hindi Latin |
 | `openrouter` | `OPENROUTER_API_KEY` | Access to various models |
-| `elevenlabs` | `ELEVENLABS_API_KEY` | High accuracy, 92 language codes in its list |
+| `elevenlabs` | `ELEVENLABS_API_KEY` | High accuracy, 90+ languages |
 | `sargam` | `SARGAM_API_KEY` | Indic languages (Hindi, Tamil, Telugu, etc.) |
 | `groq` | `GROQ_API_KEY` | Cheapest cloud option (the `cost` quality tier) |
 | `local` | None needed | Offline, free, runs on your machine |
@@ -999,7 +999,7 @@ Keep these with the skill if you share or modify it.
 |------|-------|-------------|
 | `--force` | `-f` | Overwrite existing skill files |
 
-> **Tip:** You usually don't need to run this manually. The skill **auto-installs** when Claude Code is detected and **auto-updates** on every CLI invocation when the version changes. Use `--force` only if you need to repair a corrupted install.
+> **Tip:** You usually don't need to run this manually. When `~/.claude` exists, normal commands such as `anyscribe ui` install or refresh the skill when its recorded version differs. Top-level `--version` and `--help` don't trigger this. Use `--force` to repair an existing copy.
 
 ---
 
@@ -1152,11 +1152,11 @@ so check each command's flags table:
   `--json` (the list is under "Quiet, parseable output" below). Some don't, such
   as `anyscribe doctor` and `anyscribe providers test`. Progress lines are kept
   out of the JSON where possible, but see the catch below.
-- **`--yes` (`-y`) for non-interactive runs.** Commands that would stop to ask
-  "are you sure?" refuse to run without `--yes` when there's no terminal, which
-  is the case when an agent or script calls them. A hung prompt an agent can't
-  see is worse than a clean failure. One exception: `install-service` and
-  `uninstall-service` also skip the question when you pass `--json`.
+- **`--yes` (`-y`) skips confirmation.** Pass it when scripting commands that
+  ask for confirmation. Some commands explicitly reject non-interactive use
+  without it; `rm`, `install-service`, and `uninstall-service` instead attempt
+  to read a confirmation. The two service commands also skip confirmation with
+  `--json`.
 - **No silent defaults for choices an agent should make explicitly.** For
   example `anyscribe local setup` always requires `--model`; the CLI will never
   pick a model size on your behalf. Where there's a recommended value, it's
@@ -1252,8 +1252,8 @@ anyscribe onboard \
 
 **Exit codes:** 0 success · 1 setup failure (e.g., local install failed) · 2
 usage error (missing `--provider`, already configured without `--force`, etc.).
-On exit 2 stderr carries a structured JSON error with the missing field or the
-reason.
+With `--json`, headless validation errors are reported as JSON on stderr.
+Argument-parsing errors may still be plain text.
 
 ### Other commands that need `--yes`
 
@@ -1277,8 +1277,9 @@ anyscribe local status --json  # faster-whisper version, cached models, disk usa
 ```
 
 `anyscribe config --json` is the one to poll before transcribing: its `resolved`
-block (`provider`, `model`, `via`, `notes`) tells you exactly what will run and
-why, and the `providers` array tells you which API keys are actually present.
+block (`provider`, `model`, `via`, `notes`) describes a run using current
+defaults. Per-run flags and provider-specific substitutions can change the model
+used. The `providers` array tells you which API keys are actually present.
 
 ### Batch runs
 
@@ -1289,7 +1290,7 @@ and duplicate detection means re-running the same file only transcribes what's
 new:
 
 ```bash
-anyscribe batch urls.txt --json --quiet --timeout 300
+anyscribe batch urls.txt --json --quiet
 ```
 
 Use `--stop-on-error` if a single failure should abort the run; by default the
@@ -1298,6 +1299,6 @@ batch continues and reports per-entry results.
 ### When something fails
 
 Errors are documented by the literal text they print in
-[Troubleshooting](troubleshooting.md). For a machine-readable health snapshot to
+[Troubleshooting](troubleshooting.md). For a human-readable health report to
 attach to a bug report, `anyscribe doctor` covers dependencies, config,
-installation, and updates in one pass.
+installation, and updates.

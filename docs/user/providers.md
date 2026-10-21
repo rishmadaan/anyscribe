@@ -148,7 +148,7 @@ anyscribe providers list    # same model info, provider-focused
 | | OpenAI Whisper | Deepgram Nova | ElevenLabs Scribe | Sarvam AI | Groq | OpenRouter | Local |
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization (auto-selected) + Hinglish | Highest accuracy | Indian languages | Cheapest + fastest | Model flexibility | Offline / free |
-| **Bundled language list** | 100 codes | 89 codes (languages and modes) | 92 codes | 22 Indian + English | 100 codes (Whisper's list) | Model-dependent | 100 codes (Whisper's list) |
+| **Bundled language list** | 100 codes | 89 codes (languages and modes) | 92 codes | 22 Indian + English | No bundled picker list | Model-dependent | 100 codes (Whisper's list) |
 | **Timestamps** | Segment-level (`whisper-1`; auto-used when needed) | Segments of ~30 words (speaker turns with `--diarize`) | Segments of ~30 words | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No (via anyscribe) | No | No | No | No |
 | **Pricing** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies by model | Free |
@@ -158,6 +158,8 @@ anyscribe providers list    # same model info, provider-focused
 | **Quality tier** | — | `balanced` | `accuracy` | — | `cost` | — | `free` |
 
 > The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.
+>
+> Groq currently has no registered language-picker list. Use `--language` to supply a language code.
 
 ## Provider Details
 
@@ -458,7 +460,7 @@ anyscribe onboard --force
 
 Or edit `~/.anyscribe/.env` directly.
 
-Test that a provider works:
+Check that a provider loads and its API key is set. This does not validate the key or available credit:
 
 ```bash
 anyscribe providers test elevenlabs

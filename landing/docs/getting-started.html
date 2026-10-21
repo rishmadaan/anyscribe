@@ -72,7 +72,7 @@
 <li><strong>Writing a script or an AI agent?</strong> → <code>anyscribe onboard --provider X --api-key $KEY --yes --json</code>. See Option C.</li>
 </ul>
 <p>All three write the same config and land you in the same place. Transcriptions you start from one surface show up in all of them.</p>
-<p><strong>Everything runs locally.</strong> The Web UI at <code>http://127.0.0.1:8457</code> is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions (through pip's package index, or your git remote for a cloned install) and upgrades yt-dlp when your copy is over 60 days old. Point it at a local file with the local provider and the whole pipeline runs offline — your audio never leaves your machine.</p>
+<p><strong>Everything runs locally.</strong> The Web UI at <code>http://127.0.0.1:8457</code> is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions when you run <code>anyscribe update --check</code> or <code>anyscribe doctor</code> (through pip's package index, or your git remote for a cloned install), and upgrades yt-dlp when your copy is over 60 days old. Local files with the local provider work with no internet connection, and your audio never leaves your machine.</p>
 </blockquote>
 <h2 id="what-you-need">What you need</h2>
 <ul>
@@ -115,8 +115,8 @@
 </code></pre>
 <p>Opens a local dashboard at <code>http://127.0.0.1:8457</code>. A <strong>setup wizard pops up on first launch</strong>:</p>
 <ol>
-<li><strong>Pick a provider</strong> — cards for <code>openai</code> (general purpose, multilingual), <code>deepgram</code> (fast, native diarization), <code>groq</code> (cheapest and fastest cloud Whisper), <code>elevenlabs</code> (high accuracy, 92 language codes in its list), <code>sargam</code> (Sarvam AI, Indic languages), <code>openrouter</code> (many models, one API), plus <code>local</code> for free offline transcription on your own machine.</li>
-<li><strong>Paste your API key</strong> — with a <strong>Test key</strong> button so you know it works before you continue. (Skipped if you picked <code>local</code>.)</li>
+<li><strong>Pick a provider</strong> — cards for <code>openai</code> (general purpose, multilingual), <code>deepgram</code> (fast, native diarization), <code>groq</code> (cheapest and fastest cloud Whisper), <code>elevenlabs</code> (high accuracy, 90+ languages), <code>sargam</code> (Sarvam AI, Indic languages), <code>openrouter</code> (many models, one API), plus <code>local</code> for free offline transcription on your own machine.</li>
+<li><strong>Paste your API key.</strong> The <strong>Test key</strong> button performs a provider check where available; for Groq and Sarvam it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for <code>local</code>.</li>
 <li><strong>Choose whether to also enable offline transcription</strong> — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (<code>-p local</code>).</li>
 <li><strong>Confirm your workspace</strong> — where your transcripts live, default <code>~/anyscribe/</code>.</li>
 </ol>

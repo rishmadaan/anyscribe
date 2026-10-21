@@ -163,7 +163,7 @@ The model that ran doesn't return segment timestamps, so there's nothing to rend
 anyscribe config --json     # resolved.provider, resolved.model, resolved.notes
 ```
 
-anyscribe writes Deepgram and ElevenLabs timestamps per ~30-word segment, so they are not finer than Whisper's segments. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
+Without diarization, anyscribe groups Deepgram and ElevenLabs timing entries into approximately 30-word segments. With diarization, Deepgram segments follow speaker turns. These outputs expose segment timestamps rather than individual word timestamps. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
 
 ### "Next run" isn't the provider I set
 
@@ -268,11 +268,11 @@ Pre-flight checks on a local file. The path must exist and end in one of `.mp3`,
 
 OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 30 min.
 
-**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`). After setting a Deepgram key, retry the original source with `-p deepgram --diarize`, replacing any existing provider flag. To use OpenAI without speaker labels, omit `--diarize`; if `diarize` is enabled in config, first run `anyscribe config set diarize false`.
+**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`). After setting a Deepgram key, retry your original URL or file path with `-p deepgram --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag. To use OpenAI without speaker labels, omit `--diarize`; if `diarize` is enabled in config, first run `anyscribe config set diarize false`.
 
 ### "Groq has no diarization model"
 
-`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). Use `-p deepgram` or `-p openai` for speaker labels, or drop `--diarize`. On a file over 25 MB or 30 min the error instead reads `File is NMB ... OpenAI's diarize endpoint has a 25MB limit` because Groq shares OpenAI's code path. The fix is the same: retry with `-p deepgram --diarize`.
+`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). For speaker labels, retry with `-p deepgram --diarize` or `-p openai --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag. To keep using Groq without speaker labels, omit `--diarize`; if diarization is enabled in config, first run `anyscribe config set diarize false`. On a file over 25 MB or 30 min the error instead reads `File is NMB ... OpenAI's diarize endpoint has a 25MB limit` because Groq shares OpenAI's code path. The fix is the same: retry with `-p deepgram --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag.
 
 ### Large video taking very long
 

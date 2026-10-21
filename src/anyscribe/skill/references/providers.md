@@ -86,10 +86,10 @@ does not. So don't pass `-m gpt-transcribe` for a user who wants timestamps.
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization + Hinglish | Highest accuracy | Indian languages → English | Cheapest + fastest | Model variety | Offline / free |
 | **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Varies | 99 |
-| **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Segment-level (~30-word groups; speaker turns with `--diarize` on Deepgram) | Segment-level (~30-word groups; speaker turns with `--diarize` on Deepgram) | No | Segment-level | No | Segment-level |
+| **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Segment-level (~30-word groups; speaker turns with `--diarize` on Deepgram) | Segment-level (~30-word groups) | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No | No (Sarvam Batch API only — not integrated) | No | No | No |
 | **Cost** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies | Free |
-| **File limit** | 25 MB | Auto-chunked over 25 MB / 30 min | 25 MB | 30 sec | 25 MB | 25 MB | RAM only |
+| **File limit** | Auto-chunked over 25 MB / 30 min (diarize: 25 MB / 30 min, no chunking) | Auto-chunked over 25 MB / 30 min | Auto-chunked over 25 MB / 30 min | Auto-chunked into 28-sec pieces | Auto-chunked over 25 MB / 30 min | Auto-chunked over 25 MB / 30 min | RAM only |
 | **Offline** | No | No | No | No | No | No | Yes |
 | **API key env** | `OPENAI_API_KEY` | `DEEPGRAM_API_KEY` | `ELEVENLABS_API_KEY` | `SARGAM_API_KEY` | `GROQ_API_KEY` | `OPENROUTER_API_KEY` | None |
 | **Quality tier** | — | `balanced` | `accuracy` | — | `cost` | — | `free` |
@@ -171,7 +171,7 @@ Cheapest and fastest cloud option. Runs Whisper `large-v3-turbo` on Groq acceler
 - **Also available:** `whisper-large-v3` — higher accuracy, and Groq allows a larger upstream file limit for it. Pin with `-m whisper-large-v3` when the turbo output is missing words.
 - **Cost:** ~$0.04/hr — the cheapest cloud provider
 - **Chunking:** over 25 MB or 30 min auto-chunked (same as OpenAI)
-- **Diarization:** No. For speaker labels use `--diarize` with a Deepgram key set (it auto-routes), or `-p deepgram` / `-p openai`. Quality tiers are not applied to diarized runs.
+- **Diarization:** No. For speaker labels use `--diarize` with a Deepgram key set (it auto-routes), or `-p deepgram` / `-p openai` (remove any per-run `-m` or `--model` flag, since Groq model names are rejected by other providers). Quality tiers are not applied to diarized runs.
 - **Get key:** https://console.groq.com/keys
 - **Quick setup:** `anyscribe config set groq_api_key ...`
 
@@ -216,7 +216,7 @@ anyscribe local setup --model base --yes --json
 2. Installs `faster-whisper` into the same Python env as anyscribe.
 3. Downloads the chosen Whisper model from HuggingFace.
 4. Persists `local_model` in `config.yaml`.
-5. Does not change `provider`, `quality` or `diarize`. For one local run pass `-p local` (local has no speaker labels). To make local the default: if the user already uses another provider, ask first; if `diarize` is on in config it must be turned off or runs will still route to Deepgram, so run `anyscribe config set diarize false` and then `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free` (selects local only when diarize is off). Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+5. Does not change `provider`, `quality` or `diarize`. For one local run pass `-p local` (local has no speaker labels). To make local the default: (1) if the user already uses another provider, ask first; (2) if `diarize` is true in `anyscribe config --json`, run `anyscribe config set diarize false` (local has no speaker labels; otherwise runs still go to Deepgram when a key is set); (3) run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`. Confirm `resolved.provider` is `local`.
 
 Idempotent — re-running with an already-set-up model just updates the default.
 
@@ -260,6 +260,8 @@ Uninstalls faster-whisper, deletes every cached model; if provider was `local` i
 ```bash
 anyscribe config set provider elevenlabs
 ```
+
+If `diarize` is on (per run or saved) and a DEEPGRAM_API_KEY is set, Deepgram runs instead unless `-p` is passed.
 
 **Override for one transcription:**
 ```bash

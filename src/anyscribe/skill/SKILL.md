@@ -67,7 +67,7 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Add an OpenRouter model to the pickers | `anyscribe config set extra_models.openrouter "<slug>,<slug>"` (openrouter only) |
 | Check a provider's key is set | `anyscribe providers test <name>` (no API call: a pass does not prove the key is valid or funded) |
 | List providers | `anyscribe providers list` |
-| Set up offline transcription | `anyscribe local setup --model base --yes --json` (does not switch the provider; to make local the default, `anyscribe config set provider local`; ask first if the user already uses another provider) *(see rule below)* |
+| Set up offline transcription | `anyscribe local setup --model base --yes --json` prepares local transcription only. To make it the default, ask before changing an existing provider, then run `anyscribe config set diarize false` followed by `anyscribe config set provider local`. Confirm `resolved.provider` is `local` with `anyscribe config --json`. *(see rule below)* |
 | Check offline-transcription state | `anyscribe local status --json` |
 | Download another Whisper model | `anyscribe model pull <size> --json` |
 | List downloaded Whisper models | `anyscribe model list --json` |
@@ -131,7 +131,7 @@ anyscribe local setup --model base --yes --json
 
 `--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` and inspect `phase`: installation failures (`"phase": "install"`) carry `install.command` and `install.stderr`, the exact pip/pipx command that failed and its captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.); model-download failures (`"phase": "download"`) carry `error`, while `install` describes the preceding installation step.
 
-**Setup does not make local the provider.** It installs and downloads only. Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: if the user already uses another provider, ask first; if `diarize` is on in config it must be turned off or runs will still route to Deepgram, so run `anyscribe config set diarize false` and then `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free` (selects local only when diarize is off). Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+**Setup does not make local the provider.** It installs and downloads only. Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: (1) if the user already uses another provider, ask first; (2) if `diarize` is true in `anyscribe config --json`, run `anyscribe config set diarize false` (local has no speaker labels; otherwise runs still go to Deepgram when a key is set); (3) run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`. Confirm `resolved.provider` is `local`.
 
 **When to suggest local setup:**
 
@@ -182,6 +182,7 @@ If the user asks which browser to specify, ask which browser they use when logge
 
 - `quality` is a tier (`accuracy` / `balanced` / `cost` / `free`) → the tier picks the provider, `provider` is ignored.
 - `quality` is `custom` → `provider` is used as-is.
+- `diarize` is on (per run or saved) and a DEEPGRAM_API_KEY is set → Deepgram runs regardless of quality or provider, unless `-p` is passed.
 
 **Setting a provider anywhere writes `quality=custom` in the same save.** `anyscribe config set provider deepgram`, the Web UI Settings page, and the MCP `set_config` tool all do this. You never need to write `quality=custom` yourself, and you should not "helpfully" set it separately.
 

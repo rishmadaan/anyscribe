@@ -1,4 +1,5 @@
 """Static guards for install.sh — the bugs these catch shipped once already."""
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,3 +35,25 @@ def test_tray_extra_is_installed_on_pip_path():
 
 def test_homebrew_prompt_warns_about_password_and_time():
     assert "password" in SRC and "10-20 minutes" in SRC
+
+
+def test_skipped_pipx_launch_does_not_claim_ready(tmp_path):
+    # --ui with pipx but no anyscribe executable: must not print the "ready" banner.
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash not available")
+    assert SRC.rstrip().splitlines()[-1] == "main"
+    harness = (
+        'eval "$(sed \'$d\' "$SCRIPT")"\n'  # load everything except the final `main` call
+        "install_brew_if_needed(){ :; }; check_python(){ :; }; check_ytdlp(){ :; }\n"
+        "check_ffmpeg(){ :; }; install_anyscribe(){ USED_PIPX=true; }\n"
+        "command_exists(){ return 1; }; pipx(){ echo \"$BIN\"; }\n"
+        "RUN_UI=true\nmain\n"
+    )
+    out = subprocess.run(
+        [bash, "-c", harness],
+        env={**os.environ, "SCRIPT": str(SCRIPT), "BIN": str(tmp_path)},
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "Automatic launch skipped" in out
+    assert "anyscribe is ready!" not in out

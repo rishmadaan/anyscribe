@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────
-# scribe installer for Windows
+# anyscribe installer for Windows
 #
 # Usage (PowerShell):
 #   irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
@@ -9,8 +9,8 @@
 #   2. Checks for ffmpeg, offers to install via winget/choco
 #   3. Installs yt-dlp via pip
 #   4. Installs anyscribe (with menu-bar tray) via pip
-#   5. Fixes PATH so `scribe` works from any terminal
-#   6. Tells you to run `scribe ui`
+#   5. Fixes PATH so `anyscribe` works from any terminal
+#   6. Tells you to run `anyscribe ui`
 # ──────────────────────────────────────────────────────────────
 
 $ErrorActionPreference = 'Stop'
@@ -20,8 +20,8 @@ $ErrorActionPreference = 'Stop'
 function Write-Banner {
     Write-Host ""
     Write-Host "  +-------------------------------------+" -ForegroundColor White
-    Write-Host "  |       scribe installer               |" -ForegroundColor White
-    Write-Host "  |  Video -> Transcript -> Markdown      |" -ForegroundColor White
+    Write-Host "  |       anyscribe installer           |" -ForegroundColor White
+    Write-Host "  |  Video -> Transcript -> Markdown    |" -ForegroundColor White
     Write-Host "  +-------------------------------------+" -ForegroundColor White
     Write-Host ""
 }
@@ -151,18 +151,18 @@ function Test-YtDlp {
     Write-Ok "yt-dlp installed"
 }
 
-# ── Install scribe ────────────────────────────────────────────
+# ── Install anyscribe ─────────────────────────────────────────
 
-function Install-Scribe {
-    Write-Info "Installing scribe..."
+function Install-Anyscribe {
+    Write-Info "Installing anyscribe..."
     & $script:PythonCmd -m pip install --quiet "anyscribe[tray]"
 
     # Verify
     Refresh-Path
-    if (Test-CommandExists 'scribe') {
-        Write-Ok "scribe installed"
+    if (Test-CommandExists 'anyscribe') {
+        Write-Ok "anyscribe installed"
     } else {
-        Write-Ok "scribe package installed"
+        Write-Ok "anyscribe package installed"
         Fix-Path
     }
 }
@@ -205,22 +205,22 @@ try {
     Test-Ffmpeg
     Test-YtDlp
     Write-Host ""
-    Install-Scribe
+    Install-Anyscribe
 
     Write-Host ""
     Write-Host "  +-------------------------------------+" -ForegroundColor Green
-    Write-Host "  |  scribe is installed!                |" -ForegroundColor Green
-    Write-Host "  |                                      |" -ForegroundColor Green
-    Write-Host "  |  Next step:                          |" -ForegroundColor Green
-    Write-Host "  |    scribe ui                         |" -ForegroundColor Green
-    Write-Host "  |                                      |" -ForegroundColor Green
-    Write-Host "  |  Opens a dashboard in your browser   |" -ForegroundColor Green
-    Write-Host "  |  to set up and start transcribing.   |" -ForegroundColor Green
+    Write-Host "  |  anyscribe is installed!            |" -ForegroundColor Green
+    Write-Host "  |                                     |" -ForegroundColor Green
+    Write-Host "  |  Next step:                         |" -ForegroundColor Green
+    Write-Host "  |    anyscribe ui                     |" -ForegroundColor Green
+    Write-Host "  |                                     |" -ForegroundColor Green
+    Write-Host "  |  Opens a dashboard in your browser  |" -ForegroundColor Green
+    Write-Host "  |  to set up and start transcribing.  |" -ForegroundColor Green
     Write-Host "  +-------------------------------------+" -ForegroundColor Green
     Write-Host ""
 
-    if (-not (Test-CommandExists 'scribe')) {
-        Write-Warn "If 'scribe' is not recognized, use:"
+    if (-not (Test-CommandExists 'anyscribe')) {
+        Write-Warn "If 'anyscribe' is not recognized, use:"
         Write-Host "    $script:PythonCmd -m anyscribe ui" -ForegroundColor Cyan
         Write-Host ""
     }

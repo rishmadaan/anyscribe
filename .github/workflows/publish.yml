@@ -56,6 +56,15 @@ jobs:
       - name: Version + capability drift gates
         run: python scripts/check-docs.py
 
+      - name: Render docs
+        run: python scripts/build-docs.py
+
+      - name: Committed HTML matches sources
+        run: git diff --exit-code landing/docs
+
+      - name: Rehearse migration (fake HOME, throwaway venv)
+        run: bash scripts/rehearse-migration.sh
+
       - name: Build package
         run: python -m build
 

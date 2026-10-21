@@ -20,8 +20,8 @@ $ErrorActionPreference = 'Stop'
 function Write-Banner {
     Write-Host ""
     Write-Host "  +-------------------------------------+" -ForegroundColor White
-    Write-Host "  |       anyscribe installer            |" -ForegroundColor White
-    Write-Host "  |  Video -> Transcript -> Markdown      |" -ForegroundColor White
+    Write-Host "  |       anyscribe installer           |" -ForegroundColor White
+    Write-Host "  |  Video -> Transcript -> Markdown    |" -ForegroundColor White
     Write-Host "  +-------------------------------------+" -ForegroundColor White
     Write-Host ""
 }
@@ -209,13 +209,13 @@ try {
 
     Write-Host ""
     Write-Host "  +-------------------------------------+" -ForegroundColor Green
-    Write-Host "  |  anyscribe is installed!             |" -ForegroundColor Green
-    Write-Host "  |                                      |" -ForegroundColor Green
-    Write-Host "  |  Next step:                          |" -ForegroundColor Green
-    Write-Host "  |    anyscribe ui                      |" -ForegroundColor Green
-    Write-Host "  |                                      |" -ForegroundColor Green
-    Write-Host "  |  Opens a dashboard in your browser   |" -ForegroundColor Green
-    Write-Host "  |  to set up and start transcribing.   |" -ForegroundColor Green
+    Write-Host "  |  anyscribe is installed!            |" -ForegroundColor Green
+    Write-Host "  |                                     |" -ForegroundColor Green
+    Write-Host "  |  Next step:                         |" -ForegroundColor Green
+    Write-Host "  |    anyscribe ui                     |" -ForegroundColor Green
+    Write-Host "  |                                     |" -ForegroundColor Green
+    Write-Host "  |  Opens a dashboard in your browser  |" -ForegroundColor Green
+    Write-Host "  |  to set up and start transcribing.  |" -ForegroundColor Green
     Write-Host "  +-------------------------------------+" -ForegroundColor Green
     Write-Host ""
 

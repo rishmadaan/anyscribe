@@ -115,8 +115,8 @@ fi
 
 echo ""
 echo -e "${BOLD}  ┌─────────────────────────────────────┐${NC}"
-echo -e "${BOLD}  │       anyscribe installer            │${NC}"
-echo -e "${BOLD}  │  Video → Transcript → Markdown       │${NC}"
+echo -e "${BOLD}  │       anyscribe installer           │${NC}"
+echo -e "${BOLD}  │  Video → Transcript → Markdown      │${NC}"
 echo -e "${BOLD}  └─────────────────────────────────────┘${NC}"
 echo ""
 info "Detected OS: $OS${LINUX_PKG:+ ($LINUX_PKG)}"
@@ -268,6 +268,26 @@ check_ffmpeg() {
     fi
 }
 
+# ── Install anyscribe via pipx (installs pipx first if absent) ──
+install_with_pipx() {
+    if ! command_exists pipx; then
+        info "Installing pipx..."
+        if [[ "$OS" == "macos" ]]; then
+            brew install pipx
+        else
+            case "$LINUX_PKG" in
+                apt)    sudo apt install -y pipx ;;
+                dnf)    sudo dnf install -y pipx ;;
+                pacman) sudo pacman -S --noconfirm python-pipx ;;
+                *)      "$PY" -m pip install --user pipx ;;
+            esac
+        fi
+    fi
+    pipx install "$1"
+    pipx ensurepath 2>/dev/null || true
+    USED_PIPX=true
+}
+
 # ── Install anyscribe ────────────────────────────────────────
 install_anyscribe() {
     info "Installing anyscribe..."
@@ -283,28 +303,17 @@ install_anyscribe() {
     if [[ "$DRY_RUN" == true ]]; then
         echo "    [dry-run] $PY -m pip install $pip_cmd"
     else
-        # Try pip first; fall back to pipx if externally-managed-environment
+        # Try pip first; fall back to pipx if this Python has no pip or is
+        # externally managed.
         local pip_output
-        if pip_output=$("$PY" -m pip install "$pip_cmd" 2>&1); then
+        if ! "$PY" -m pip --version >/dev/null 2>&1; then
+            warn "$PY has no pip. Using pipx instead..."
+            install_with_pipx "$pip_cmd"
+        elif pip_output=$("$PY" -m pip install "$pip_cmd" 2>&1); then
             : # Success
         elif echo "$pip_output" | grep -qi "externally-managed"; then
             warn "System Python is externally managed. Using pipx instead..."
-            if ! command_exists pipx; then
-                info "Installing pipx..."
-                if [[ "$OS" == "macos" ]]; then
-                    brew install pipx
-                else
-                    case "$LINUX_PKG" in
-                        apt)    sudo apt install -y pipx ;;
-                        dnf)    sudo dnf install -y pipx ;;
-                        pacman) sudo pacman -S --noconfirm python-pipx ;;
-                        *)      "$PY" -m pip install --user pipx ;;
-                    esac
-                fi
-            fi
-            pipx install "$pip_cmd"
-            pipx ensurepath 2>/dev/null || true
-            USED_PIPX=true
+            install_with_pipx "$pip_cmd"
         else
             # Some other pip error
             echo "$pip_output" >&2
@@ -319,24 +328,43 @@ install_anyscribe() {
         warn "anyscribe installed via pipx. Restart your terminal or run: pipx ensurepath"
     else
         warn "anyscribe installed but not found in PATH."
-        echo "    Try adding this to your shell profile:"
-        echo ""
-        # Ask the interpreter we installed with: the user scripts dir varies by OS and Python version.
+        # Ask the interpreter we installed with which scripts dir (default or
+        # user scheme) actually holds the anyscribe command.
         local scripts_dir
-        scripts_dir="$("$PY" -c 'import sysconfig; print(sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))' 2>/dev/null || echo "\$HOME/.local/bin")"
-        echo "      export PATH=\"$scripts_dir:\$PATH\""
-        echo ""
-        echo "    Then restart your terminal and run: anyscribe --version"
+        scripts_dir="$("$PY" -c 'import os, sysconfig
+for d in (sysconfig.get_path("scripts"), sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user"))):
+    if os.access(os.path.join(d, "anyscribe"), os.X_OK):
+        print(d)
+        break' 2>/dev/null || true)"
+        if [[ -n "$scripts_dir" ]]; then
+            echo "    Try adding this to your shell profile:"
+            echo ""
+            echo "      export PATH=\"$scripts_dir:\$PATH\""
+            echo ""
+            echo "    Then restart your terminal and run: anyscribe --version"
+        else
+            echo "    Run it with: $PY -m anyscribe --version"
+        fi
     fi
 }
 
 # ── Run post-install action (opt-in) ─────────────────────────
 run_post_install() {
-    local cmd=""
+    [[ "$RUN_UI" == true || "$RUN_ONBOARD" == true ]] || return 0
+    local cmd
     if command_exists anyscribe; then
-        cmd="anyscribe"
+        cmd=(anyscribe)
+    elif [[ "$USED_PIPX" == true ]]; then
+        # pipx's bin dir is usually not on this shell's PATH yet (ensurepath
+        # only edits the profile), and $PY never received anyscribe.
+        cmd=("$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/anyscribe")
+        if [[ ! -x "${cmd[0]}" ]]; then
+            warn "Could not find the pipx-installed anyscribe at ${cmd[0]}."
+            echo "    Skipping the post-install step; open a new terminal and run anyscribe from there."
+            return 0
+        fi
     else
-        cmd="$PY -m anyscribe"
+        cmd=("$PY" -m anyscribe)
     fi
 
     if [[ "$RUN_UI" == true ]]; then
@@ -344,18 +372,18 @@ run_post_install() {
         info "Launching web UI..."
         echo ""
         if [[ "$DRY_RUN" == true ]]; then
-            echo "    [dry-run] $cmd ui"
+            echo "    [dry-run] ${cmd[*]} ui"
         else
-            $cmd ui
+            "${cmd[@]}" ui
         fi
     elif [[ "$RUN_ONBOARD" == true ]]; then
         echo ""
         info "Starting onboarding wizard..."
         echo ""
         if [[ "$DRY_RUN" == true ]]; then
-            echo "    [dry-run] $cmd onboard --skip-deps"
+            echo "    [dry-run] ${cmd[*]} onboard --skip-deps"
         else
-            $cmd onboard --skip-deps
+            "${cmd[@]}" onboard --skip-deps
         fi
     fi
 }

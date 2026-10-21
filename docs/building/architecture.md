@@ -125,7 +125,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - 7 providers implemented:
   - **OpenAI** (default): `gpt-transcribe`, or `whisper-1` when timestamps are needed, or `gpt-4o-transcribe-diarize` with `--diarize`. `MODEL` class attr so Groq can subclass it.
   - **Deepgram**: Nova-3 (nova-2 also pickable), native diarization, `hi-Latn` support
-  - **ElevenLabs**: Scribe v2, word-level timestamps, 90+ languages
+  - **ElevenLabs**: Scribe v2, 90+ languages; word timings grouped into ~30-word timestamped segments
   - **OpenRouter**: Audio-via-chat (`openai/gpt-audio-mini`), no timestamps, freeform model slugs
   - **Sargam/Sarvam**: Indic languages, `saaras:v3` only, auto-chunks to 28 s (sync REST limit is 30 s, exclusive)
   - **Groq**: `whisper-large-v3-turbo`, OpenAI-compatible — thin subclass of `OpenAIProvider`. Cheapest + fastest.

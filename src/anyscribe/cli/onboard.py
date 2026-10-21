@@ -387,7 +387,7 @@ def onboard(
         None,
         "--local-model",
         help="Whisper model size (required when --provider=local). "
-        "Choices: tiny, base, small, medium, large-v3.",
+        f"Choices: {', '.join(MODEL_SIZES)}.",
     ),
     quality: Optional[str] = typer.Option(
         None,

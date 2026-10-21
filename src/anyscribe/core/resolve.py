@@ -55,8 +55,8 @@ def resolve_run(
     if cli_provider:
         provider, via = cli_provider, "flag"
     elif diarize:
-        # Deepgram handles large files natively and labels speakers consistently
-        # without chunking, so it wins for diarization when a key exists.
+        # Deepgram has native diarization with no speaker-count setting (files
+        # over 25 MB / 30 min are chunked like any other), so it wins when a key exists.
         if provider != "deepgram" and os.environ.get("DEEPGRAM_API_KEY"):
             notes.append(f"switched from {provider} to deepgram for diarization")
             provider, via = "deepgram", "diarize"

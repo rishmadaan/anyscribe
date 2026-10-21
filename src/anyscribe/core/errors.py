@@ -74,6 +74,7 @@ _KEY_URLS: dict[str, str] = {
     "elevenlabs": "https://elevenlabs.io/app/settings/api-keys",
     "sargam": "https://dashboard.sarvam.ai",
     "openrouter": "https://openrouter.ai/keys",
+    "groq": "https://console.groq.com/keys",
 }
 
 

@@ -19,6 +19,7 @@ from rich.table import Table
 
 from anyscribe.config.settings import load_config
 from anyscribe.providers.local_models import (
+    MODEL_REPOS,
     MODEL_SIZES,
     MODEL_SPECS,
     delete_model,
@@ -330,7 +331,7 @@ def model_info(
         "size": size,
         "cached": cached,
         "bytes": bytes_on_disk,
-        "repo": f"Systran/faster-whisper-{size}",
+        "repo": MODEL_REPOS[size],
         "default": size == settings.local_model,
         "spec": MODEL_SPECS[size],
     }

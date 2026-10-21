@@ -330,7 +330,7 @@ def providers_list(
 def providers_test(
     name: Optional[str] = typer.Argument(None, help="Provider to test (default: active provider)."),
 ) -> None:
-    """[bold]Test[/bold] a provider's API key and connectivity."""
+    """[bold]Check[/bold] a provider's API key is set and its provider loads (no API call)."""
     load_env()
     settings = load_config()
     # Canonicalize BEFORE anything else reads it: get_provider() normalizes

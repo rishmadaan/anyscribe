@@ -2,19 +2,23 @@
 
 ## What This Is
 
-A Python CLI tool (`anyscribe`) that downloads video/audio from YouTube/Instagram, transcribes it via API, and outputs structured markdown into an Obsidian vault at `~/anyscribe/` (configurable via `workspace_path` in config). The PyPI package is `anyscribe`; the CLI command is `anyscribe`, with `scribe` and `ascli` kept as permanent aliases (never deprecated).
+A Python CLI tool (`anyscribe`) that transcribes YouTube/Instagram URLs or local audio/video files via a cloud API or offline Whisper, and outputs structured markdown into an Obsidian vault at `~/anyscribe/` (configurable via `workspace_path` in config). The PyPI package is `anyscribe`; the CLI command is `anyscribe`, with `scribe` and `ascli` kept as permanent aliases (never deprecated).
 
 ## Architecture
 
 ```
 src/anyscribe/
-├── cli/           # Typer commands (main.py, onboard.py, transcribe.py, download.py, batch.py, config_cmd.py, local_cmd.py, models_cmd.py, skill_cmd.py)
+├── __main__.py    # `python -m anyscribe`
+├── cli/           # Typer commands (main.py, onboard.py, transcribe.py, download.py, batch.py, rm.py, logs_cmd.py, migrate_cmd.py, config_cmd.py, local_cmd.py, models_cmd.py, skill_cmd.py, tray_cmd.py, service_cmd.py)
 ├── config/        # Paths + settings (paths.py, settings.py)
-├── downloaders/   # Platform downloaders (base.py, youtube.py, instagram.py, registry.py)
-├── providers/     # Transcription APIs (base.py, openai.py, openrouter.py, elevenlabs.py, sargam.py, deepgram.py, local.py, local_models.py, languages.py)
+├── downloaders/   # Input handlers (base.py, local_file.py, youtube.py, instagram.py, registry.py)
+├── providers/     # Transcription APIs (base.py, openai.py, groq.py, openrouter.py, elevenlabs.py, sargam.py, deepgram.py, local.py, local_models.py, languages.py)
 ├── vault/         # Obsidian vault management (scaffold.py, writer.py, index.py)
-├── core/          # Orchestration + audio + deps + updater + migrations + local setup + headless onboarding (orchestrator.py, audio.py, deps.py, updater.py, migrate.py, local_setup.py, onboard_headless.py)
-└── web/           # Web UI — FastAPI backend + built React SPA (app.py, jobs.py, routes/{config,health,history,local,models,onboarding,system,transcribe}.py, static/)
+├── core/          # Pipeline + routing + setup (orchestrator.py, resolve.py, quality.py, config_set.py, preflight.py, dedup.py, checkpoint.py, errors.py, fileutil.py, audio.py, deps.py, updater.py, migrate.py, local_setup.py, onboard_headless.py, tray.py, service.py)
+├── mcp/           # MCP server, stdio (server.py): 10 tools, 3 resources
+├── skill/         # Bundled Claude Code skill (SKILL.md, references/, LICENSE)
+├── assets/        # tray-icon.png
+└── web/           # Web UI — FastAPI backend + built React SPA (app.py, jobs.py, models.py, progress.py, routes/{config,health,history,local,models,onboarding,system,transcribe}.py, static/)
 
 ui/                # Frontend source (React + TypeScript + Vite + Tailwind) — builds to web/static/
 ```
@@ -38,8 +42,8 @@ The Claude Code skill (`src/anyscribe/skill/`) is the **primary way users intera
 ## Key Patterns
 
 - **Providers** implement `TranscriptionProvider` ABC from `providers/base.py` (7 active: openai, deepgram, elevenlabs, openrouter, sargam, groq, local). The `quality` preset (accuracy/balanced/cost/free) resolves to a provider via `core/quality.py`.
-- **Downloaders** implement `AbstractDownloader` ABC from `downloaders/base.py` (youtube, instagram)
-- **Config** at `~/.anyscribe/config.yaml` — secrets in `.env` (API keys, Instagram password)
+- **Downloaders** implement `AbstractDownloader` ABC from `downloaders/base.py` (local_file, youtube, instagram; first match wins, local files first)
+- **Config** at `~/.anyscribe/config.yaml` — secrets in `.env` (API keys only; Instagram uses browser cookies via `instagram.browser`)
 - **All paths** use `pathlib.Path` via `config/paths.py` — no hardcoded separators
 - **CLI output** human-readable by default, `--json` flag for machine/agent consumption
 - **Interactive prompts** use `beaupy` (arrow-key selectors) for onboarding, `typer.prompt` for text input
@@ -47,10 +51,10 @@ The Claude Code skill (`src/anyscribe/skill/`) is the **primary way users intera
 - **Workspace** at `~/anyscribe/` (configurable) — pure markdown Obsidian vault, resolved via `get_workspace_dir()` in `config/paths.py`
 - **Downloads outside vault** — audio in `~/.anyscribe/downloads/audio/`, video in `downloads/video/`
 - **Audio params** optimized for Whisper: 16kHz, mono, 64kbps mp3
-- **Chunking** — 18-min segments for Whisper (25MB limit), 30s segments for Sarvam (REST API limit)
+- **Chunking** — 18-min segments for Whisper (25MB limit), 28 s segments for Sarvam (its sync REST limit is 30 s, exclusive)
 - **Web UI** — `anyscribe ui` launches FastAPI + built React SPA at `127.0.0.1:8457`. REST API for config/history, WebSocket for real-time transcription progress. Frontend source in `ui/`, builds to `src/anyscribe/web/static/`. Server stashed on `app.state` for graceful `/shutdown`. Orchestrator accepts optional `on_progress` callback — web layer bridges sync→async via ThreadPoolExecutor + asyncio.Queue
 - **Three-surface onboarding parity** — `anyscribe onboard` (interactive TUI), `anyscribe onboard --yes --provider X ...` (headless for agents), and the Web UI first-run wizard all call `core/onboard_headless.py::run_headless_onboard()`. Each surface is a thin flow controller; the backend state transitions are identical. Rule documented in `docs/building/architecture.md` → "CLI ↔ Web UI: shared backend, asymmetric surfaces"
-- **Local transcription is opt-in** — setup installs `faster-whisper` via pip subprocess on demand (`core/local_setup.py`), then downloads a Whisper model via `huggingface_hub`. CLI: `anyscribe local setup --model <size>`. Web UI: "Set up local transcription" button on the Local provider card. `anyscribe model {list, pull, rm, reinstall, info}` for day-to-day cache management. The `--model` flag is **always required** on `anyscribe local setup` — no silent defaults, even in a TTY
+- **Local transcription is opt-in** — setup installs `faster-whisper` via pip subprocess on demand (`core/local_setup.py`), then downloads a Whisper model via `huggingface_hub`. CLI: `anyscribe local setup --model <size>`; it refuses a non-TTY run without `--yes` (exit 2), so agents and scripts pass it (`anyscribe local setup --model base --yes`). `pip install "anyscribe[local]"` installs the runtime only; fetch a model with `anyscribe model pull <size>`, otherwise faster-whisper downloads it on the first local run with no progress shown. Web UI: "Set up local transcription" button on the Local provider card. `anyscribe model {list, pull, rm, reinstall, info}` for day-to-day cache management. The `--model` flag is **always required** on `anyscribe local setup` — no silent defaults, even in a TTY
 
 ## Documentation Ethic
 
@@ -84,6 +88,10 @@ For end users — assume a **semi-technical audience who may be new to CLI tools
 - `commands.md` — complete command reference with examples
 - `configuration.md` — all settings explained with context
 - `providers.md` — provider comparison: features, pricing, languages, when to use each
+- `agents.md` — skill vs MCP guide for AI-agent users; every MCP tool must appear in it (enforced by `scripts/check-docs.py`)
+- `troubleshooting.md` — common errors and plain-English fixes
+
+**Render after editing:** `docs/user/*.md` is the source; run `python scripts/build-docs.py` and commit the regenerated `landing/docs/*.html` in the same commit. CI fails on stale HTML, on any version string that does not match `pyproject.toml` (unless marked `<!-- version-pin-ok -->`), and on an MCP tool missing from `agents.md`.
 
 **User doc standards:**
 - Every doc has YAML frontmatter: `summary`, `read_when` (list of when to read this), `title`
@@ -106,8 +114,8 @@ For end users — assume a **semi-technical audience who may be new to CLI tools
 ## Adding a New Provider
 
 1. Create `src/anyscribe/providers/<name>.py` implementing `TranscriptionProvider`
-2. Register it in `providers/__init__.py` PROVIDER_REGISTRY
-3. Add any new env vars to the onboarding wizard
+2. Register it in `providers/__init__.py`: `PROVIDER_REGISTRY`, `PROVIDER_KEY_ENV` (its API-key env var, or None), and `PROVIDER_MODELS` (first entry is the default)
+3. Add its card to `PROVIDER_INFO` in `cli/onboard.py`, and its language list to `PROVIDER_LANGUAGES` in `providers/languages.py`
 4. Update `docs/building/providers.md`
 5. Write a journal entry explaining the decision
 
@@ -115,7 +123,7 @@ For end users — assume a **semi-technical audience who may be new to CLI tools
 
 1. Create `src/anyscribe/downloaders/<name>.py` implementing `AbstractDownloader`
 2. Register it in `downloaders/registry.py` DOWNLOADERS list
-3. Update URL detection regex in `registry.py`
+3. Put URL detection in the downloader's own `can_handle()`; order in `DOWNLOADERS` matters (first match wins, `LocalFileDownloader` stays first)
 4. Update `docs/building/downloaders.md`
 
 ## Updating Provider Language Lists
@@ -137,8 +145,11 @@ drift slowly (months, not days) — when you do touch them, do it carefully:
    keep different code formats per provider (ISO 639-1, BCP-47, etc.) so we
    never need a mapping layer.
 5. For Deepgram entries that need the legacy Nova model (currently only
-   `hi-Latn`), set `"model": "nova"` on the entry. The router in
-   `deepgram.py:47` reads this. UI does not display the model.
+   `hi-Latn`), set `"model": "nova"` on the entry as documentation, **and**
+   add the lowercased code to the hardcoded checks in `providers/deepgram.py`
+   (`_build_params`) and `core/resolve.py` (the run-line note "hi-Latn is
+   transcribed by deepgram's nova model"); neither reads the list. UI does not
+   display the model.
 6. OpenRouter has no list (`PROVIDER_LANGUAGES["openrouter"] = None`). Don't
    add one — it accepts a prose instruction in the prompt, not a code.
 7. Write a short journal entry under `docs/building/journal/` noting what
@@ -191,7 +202,7 @@ Version lives in TWO places that must match: `src/anyscribe/__init__.py` and `py
 
 ```bash
 pytest                    # run all tests
-ruff check src/           # lint
+ruff check src tests scripts  # lint (matches CI)
 ruff format src/          # format
 ```
 

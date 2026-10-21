@@ -87,10 +87,16 @@ This is the only place the app checks for updates without the user explicitly ru
 
 **File:** `.github/workflows/publish.yml`
 
-When you push a tag matching `v*`, GitHub Actions automatically:
-1. Builds the package (`python -m build`)
-2. Verifies the tag matches `pyproject.toml` version (fails if mismatched)
-3. Publishes to PyPI via trusted publishing (no API token in secrets needed after setup)
+When you push a tag matching `v*`, GitHub Actions runs these steps in order. A failure in steps 1 to 7 stops the release before anything reaches PyPI; step 9 runs after the upload, so if it fails the package is live and only the GitHub Release is missing (see release-checklist step 6):
+1. Lints (`ruff check src tests scripts`) and runs `pytest`, with the `[dev,mcp]` extras installed
+2. Rebuilds the frontend (`npm ci`, `npm run lint`, `npm run build`) and checks the committed bundle in `src/anyscribe/web/static` is current
+3. Runs `scripts/check-docs.py` (version and capability drift gates)
+4. Renders the docs (`scripts/build-docs.py`) and checks `git diff --exit-code landing/docs`
+5. Rehearses the app-home migration (`scripts/rehearse-migration.sh`)
+6. Builds the package (`python -m build`)
+7. Verifies the tag matches `pyproject.toml` version (fails if mismatched)
+8. Publishes to PyPI via trusted publishing (no API token in secrets needed after setup)
+9. Creates the GitHub Release with generated notes (`gh release create --generate-notes`)
 
 **Setup (one-time):** Configure trusted publishing on [pypi.org](https://pypi.org/manage/project/anyscribe/settings/publishing/) — add GitHub as a trusted publisher with repository `rishmadaan/anyscribe`, workflow `publish.yml`.
 
@@ -100,8 +106,10 @@ When you push a tag matching `v*`, GitHub Actions automatically:
 
 One command to bump + commit + tag + push:
 ```bash
-./scripts/release.sh 0.5.0 "description of changes"
+./scripts/release.sh X.Y.Z "description of changes"
 ```
+
+Replace X.Y.Z with the next unused version under the versioning policy in CLAUDE.md.
 
 Includes safety checks: clean working tree, semver format, no duplicate tags, branch warning.
 
@@ -109,28 +117,23 @@ Includes safety checks: clean working tree, semver format, no duplicate tags, br
 
 ## Automated: CI Checks
 
-GitHub Actions runs lint, tests, and package build on pushes to `main` and pull requests. It also rebuilds the frontend and verifies the committed `src/anyscribe/web/static/` bundle is current.
+GitHub Actions runs lint, tests, and package build on pushes to `main` and pull requests. It also rebuilds the frontend and verifies the committed `src/anyscribe/web/static/` bundle is current. It also runs a fake-HOME migration rehearsal (`scripts/rehearse-migration.sh`) and a docs job (renders `docs/user` with `scripts/build-docs.py`, then `scripts/check-docs.py`).
+
+---
+
+## Automated: GitHub Releases
+
+**GitHub Releases:** the publish workflow creates a release with generated notes for every `v*` tag.
 
 ---
 
 ## NOT Automated (You Do These Manually)
 
-### GitHub Releases
-
-No automation. Optionally create with:
-```bash
-gh release create vX.Y.Z --title "..." --notes "..."
-```
-
 ### Documentation Updates
 
-All docs are manual. No auto-generation for:
-- User docs (`docs/user/`)
-- Building docs (`docs/building/`)
-- README
-- Changelog
+Doc *content* is manual. CI enforces: rendered `landing/docs` HTML matches `docs/user`, no stale version strings, every MCP tool in `agents.md`, and a `CHANGELOG.md` entry for the shipped version.
 
-The `COMMIT_CHECKLIST.md` exists as a reminder, but it's your discipline that enforces it.
+The `COMMIT_CHECKLIST.md` covers the rest; your discipline enforces it.
 
 ---
 
@@ -145,7 +148,7 @@ anyscribe update          # Install the update
 anyscribe --version       # Verify
 ```
 
-There are **no automatic updates**, **no background checks**, **no telemetry**, and **no phone-home behavior**. The user is always in control.
+anyscribe itself updates only when requested. Before YouTube or Instagram downloads it checks the installed yt-dlp release date and runs a pip upgrade if that release is more than 60 days old (core/deps.py). `anyscribe doctor` and `anyscribe update --check` also check the update source for a newer anyscribe. The bundled Claude Code skill refreshes itself when its installed version differs. There is no telemetry.
 
 ---
 
@@ -155,6 +158,6 @@ Things that could be automated but aren't yet:
 
 | What | How | Priority |
 |------|-----|----------|
-| Version sync check | Pre-commit hook comparing both files | Medium |
+| Version sync check | Pre-commit hook comparing `__init__.py` with `pyproject.toml` (publish already checks tag vs `pyproject.toml`; `check-docs.py` catches doc drift) | Medium |
 | Changelog generation | From git tags/commits | Low |
 | Startup update notification | Opt-in check on `anyscribe` launch with TTL | Low |

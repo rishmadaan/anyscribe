@@ -179,8 +179,8 @@ async def get_provider_languages(name: str) -> dict:
     langs = PROVIDER_LANGUAGES[name]
     if langs is None:
         return {"languages": [], "freeform": True}
-    # Strip internal-only keys (e.g. "model" for Deepgram routing) — UI only
-    # needs code + name.
+    # Strip internal-only keys (e.g. the documentation-only "model" on Deepgram entries);
+    # UI only needs code + name.
     return {
         "languages": [{"code": e["code"], "name": e["name"]} for e in langs],
         "freeform": False,

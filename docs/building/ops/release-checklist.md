@@ -54,7 +54,7 @@ SemVer rules for this project:
 | Change Type | Bump | Example |
 |-------------|------|---------|
 | Bug fix, typo, small tweak | PATCH | 0.3.0 → 0.3.1 |
-| New feature, new provider, new command (backwards compatible) | MINOR | 0.3.0 → 0.4.0 |
+| New feature (backwards compatible) | PATCH for a bounded addition, MINOR only for a milestone | 0.13.2 → 0.13.3 |
 | Breaking change (config format, removed commands, renamed flags) | MAJOR | 0.x → 1.0.0 |
 
 > While in `0.x` pre-stable, breaking changes are allowed between minor versions.
@@ -103,7 +103,7 @@ twine upload dist/*
 
 ## Post-Release
 
-### 9. Verify the Published Package
+### 5. Verify the Published Package
 
 ```bash
 # Install in a clean environment to verify
@@ -116,27 +116,11 @@ deactivate
 rm -rf /tmp/anyscribe-test
 ```
 
-### 10. Create a GitHub Release (Optional but Recommended)
+### 6. Check the GitHub Release
 
-```bash
-gh release create vX.Y.Z \
-  --title "vX.Y.Z — Short Description" \
-  --notes "## What's New
+After a successful publish workflow, verify the automatically created GitHub Release and edit its notes if needed. If the workflow failed after the PyPI upload (its Create GitHub Release step), or you published manually with twine, check whether the release exists; create it only when it is missing: `gh release create vX.Y.Z --title vX.Y.Z --generate-notes`.
 
-- Feature 1
-- Feature 2
-- Bug fix
-
-## Install / Update
-
-\`\`\`bash
-pip install --upgrade anyscribe
-\`\`\`"
-```
-
-This gives users a changelog on GitHub and shows download counts per release.
-
-### 11. Verify Update Path Works
+### 7. Verify Update Path Works
 
 ```bash
 # From an existing install, test that update works
@@ -145,7 +129,7 @@ anyscribe update            # Should install it
 anyscribe --version         # Should show new version
 ```
 
-### 12. Write a Building Doc Journal Entry
+### 8. Write a Building Doc Journal Entry
 
 For significant releases, create `docs/building/journal/YYYY-MM-DD-vXYZ-<slug>.md` describing what changed and why. Update `docs/building/_index.md`.
 
@@ -178,4 +162,4 @@ anyscribe --version
 | Upload fails with 403 | API token expired — regenerate at pypi.org, update ~/.pypirc |
 | Upload fails with 400 | Version already exists — you need a new version number |
 | `anyscribe` command not found after install | Check `[project.scripts]` in pyproject.toml, rebuild; on Windows try `python -m anyscribe --version` |
-| Tests pass locally but package broken | Test in a clean venv (step 9) before publishing |
+| Tests pass locally but package broken | Before tagging, build and install the wheel in a clean venv: `rm -rf dist && python -m build && pip install dist/*.whl`; step 5 checks the published copy |

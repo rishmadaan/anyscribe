@@ -36,6 +36,11 @@ User-facing = new command, new flag, changed output, changed config option, new 
   - Pricing, limits, and language counts are accurate
   - Setup instructions work
 
+- [ ] `src/anyscribe/skill/` (SKILL.md + references/) matches the change
+- [ ] `docs/user/agents.md` lists every MCP tool (CI-enforced)
+- [ ] `docs/user/troubleshooting.md` covers new errors
+- [ ] Ran `python scripts/build-docs.py` and committed `landing/docs/` (CI fails on stale HTML)
+
 ## After every commit that changes architecture or internals
 
 - [ ] **docs/building/architecture.md** — Does it reflect the current layer structure?
@@ -65,28 +70,32 @@ User-facing = new command, new flag, changed output, changed config option, new 
 - [ ] `src/anyscribe/__init__.py` — `__version__` updated
 - [ ] `pyproject.toml` — `version` field matches
 - [ ] All docs referencing version number updated (search for old version)
-- [ ] `landing/index.html` — version badge strings (2 places, grep the old version)
+  - `scripts/check-docs.py` scans only `docs/user`, `landing`, `README.md` and `src/anyscribe/skill`; grep `install.sh`, `install.ps1`, `CONTRIBUTING.md`, `AGENTS.md` and `docs/building/ops` by hand
+- [ ] Avoid hardcoded versions in `landing/`; `scripts/check-docs.py` rejects versions that differ from `pyproject.toml`, except lines marked `<!-- version-pin-ok -->`
 - [ ] `BACKLOG.md` — version section marked complete, new section added
 - [ ] `CHANGELOG.md` — user-facing entry for the new version. **CI enforces
       this** (`scripts/check-docs.py`), so a missing entry is a red build, not a
       thing you discover months later
-- [ ] Git tag created: `git tag vX.Y.Z`
+- [ ] Released with `./scripts/release.sh X.Y.Z "desc"` (bumps both files, tags, pushes)
 
 ## After adding a new provider
 
 1. [ ] `src/anyscribe/providers/<name>.py` — implements TranscriptionProvider
 2. [ ] `providers/__init__.py` — added to PROVIDER_REGISTRY
+   - [ ] `providers/__init__.py` — `PROVIDER_KEY_ENV` + `PROVIDER_MODELS`
+   - [ ] `providers/languages.py` — `PROVIDER_LANGUAGES`
 3. [ ] `cli/onboard.py` — added to PROVIDER_INFO dict
 4. [ ] `docs/building/providers.md` — added to table + provider-specific notes
 5. [ ] `docs/user/providers.md` — added to comparison table + setup section
 6. [ ] `docs/user/commands.md` — added to Available Providers table
 7. [ ] `docs/user/configuration.md` — added to provider table
 8. [ ] `README.md` — added to providers table
+9. [ ] `src/anyscribe/skill/references/providers.md`
 
 ## After adding a new downloader
 
 1. [ ] `src/anyscribe/downloaders/<name>.py` — implements AbstractDownloader
-2. [ ] `downloaders/registry.py` — added to `_load_downloaders()`
+2. [ ] `downloaders/registry.py` — added to the `DOWNLOADERS` list (order matters, first match wins)
 3. [ ] `docs/building/downloaders.md` — added to table + notes
 4. [ ] `docs/user/commands.md` — added to Supported Platforms table
 5. [ ] `README.md` — updated description if it mentions supported platforms

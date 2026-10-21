@@ -1,15 +1,20 @@
 # Downloaders
 
-**Last updated:** 2026-04-29 (v0.8.3 — Instagram migrates to yt-dlp)
+**Last updated:** 2026-10-21 (v0.16.5)
 
 ## Available Downloaders
 
 | Name | Tool | Auth Required | Status |
 |------|------|---------------|--------|
+| local_file | ffmpeg (subprocess) | No | Active |
 | youtube | yt-dlp (subprocess) | No | Active |
 | instagram | yt-dlp (subprocess) | Optional (browser cookies) | Active |
 
 ## Downloader-Specific Notes
+
+### Local file (`downloaders/local_file.py`)
+- `can_handle` matches an existing file with a supported extension (mp3, mp4, m4a, wav, opus, ogg, flac, webm, aac, wma), never http(s)
+- Converts to 16 kHz mono 64 kbps mp3 with ffmpeg
 
 ### YouTube (`downloaders/youtube.py`)
 - Uses yt-dlp via subprocess (stable CLI, Python API is undocumented)
@@ -44,11 +49,14 @@
 `registry.py` directly imports all downloaders:
 
 ```python
+from anyscribe.downloaders.local_file import LocalFileDownloader
 from anyscribe.downloaders.youtube import YouTubeDownloader
 from anyscribe.downloaders.instagram import InstagramDownloader
 
-DOWNLOADERS = [YouTubeDownloader(), InstagramDownloader()]
+DOWNLOADERS = [LocalFileDownloader(), YouTubeDownloader(), InstagramDownloader()]
 ```
+
+Order matters: first `can_handle()` match wins; local files are checked before URL patterns.
 
 For future optional downloaders, use lazy loading:
 ```python
@@ -65,7 +73,7 @@ except ImportError:
 2. Implement `AbstractDownloader` from `base.py`:
    - `can_handle(url)` returning bool
    - `download(url, output_dir)` returning `DownloadResult`
-3. Add import to `registry.py` (direct if main dep, lazy if optional)
+3. Import the class in `downloaders/registry.py` and add an instance to `DOWNLOADERS`. Keep `LocalFileDownloader()` first; the first `can_handle()` match wins.
 4. Update this doc and `docs/user/commands.md` (Supported Platforms table)
 
 ## Audio Optimization

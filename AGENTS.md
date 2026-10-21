@@ -71,9 +71,14 @@ Then prepend a row to `docs/building/_index.md`.
 - Dependency checker: `src/anyscribe/core/deps.py`
 - Update system: `src/anyscribe/core/updater.py`
 - Web UI backend: `src/anyscribe/web/app.py` (FastAPI factory + static serving)
-- Web UI routes: `src/anyscribe/web/routes/` (transcribe, history, config, health, system)
+- Web UI routes: `src/anyscribe/web/routes/` (transcribe, history, config, health, system, local, models, onboarding)
 - Web UI job manager: `src/anyscribe/web/jobs.py` (ThreadPoolExecutor + asyncio bridge)
 - Frontend source: `ui/` (React + TypeScript + Vite, builds to `web/static/`)
+- MCP server: `src/anyscribe/mcp/server.py` (10 tools, 3 resources)
+- Provider/model resolution: `src/anyscribe/core/resolve.py` (the only run ladder)
+- Settings writes: `src/anyscribe/core/config_set.py`
+- Headless onboarding (all surfaces): `src/anyscribe/core/onboard_headless.py`
+- Claude Code skill: `src/anyscribe/skill/`
 
 ## Key Dependencies
 
@@ -83,4 +88,4 @@ Then prepend a row to `docs/building/_index.md`.
 
 ## Cross-Platform
 
-All code must work on macOS and Linux. Use `pathlib.Path` everywhere. No platform-specific assumptions.
+All code must work on macOS, Linux and Windows. Use `pathlib.Path` everywhere. No platform-specific assumptions.

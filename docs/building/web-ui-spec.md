@@ -1,6 +1,6 @@
 # Scribe Web UI — Frontend Specification
 
-> **Status:** Proposed  
+> **Status:** Historical. The original April 2026 proposal, superseded by the v0.7.4 build. The shipped UI, routes and file layout differ; the current API is in `architecture.md` → Web UI Layer.  
 > **Date:** 2026-04-16  
 > **Author:** Rish Madaan  
 

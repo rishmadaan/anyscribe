@@ -6,9 +6,10 @@
 |------|------|---------|
 | Workspace | `~/anyscribe/` | Obsidian vault — configurable via `workspace_path` |
 | Config | `~/.anyscribe/config.yaml` | Settings (no secrets) |
-| Secrets | `~/.anyscribe/.env` | API keys, passwords — **never display** |
+| Secrets | `~/.anyscribe/.env` | API keys — **never display** |
 | Downloads | `~/.anyscribe/downloads/` | Downloaded audio/video files |
-| Logs | `~/.anyscribe/logs/` | Processing logs |
+| Logs | `~/.anyscribe/logs/` | Debug log (`scribe.log`, only with `--debug`); the activity log is `daily/` in the workspace |
+| Recovery | `~/.anyscribe/recovery/` | Audio kept from failed runs, listed by `anyscribe logs` |
 | Temp | `~/.anyscribe/tmp/` | Temporary downloads (auto-cleaned) |
 
 ## config.yaml Settings
@@ -66,7 +67,7 @@ extra_models:
 
 `extra_models.<any other provider>` is rejected: *custom models are only supported for openrouter (curated lists elsewhere)*. Those catalogs ship with anyscribe releases because each model needs response-parsing code — the fix for "my provider added a model" is `anyscribe update`.
 
-**local_model** — Which cached Whisper size the `local` provider loads: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Set by `anyscribe local setup --model <size>`; changing it with `anyscribe config set local_model <size>` requires the size to already be cached (`anyscribe model pull <size>` first).
+**local_model** — Which cached Whisper size the `local` provider loads: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Set by `anyscribe local setup --model <size>`, or with `anyscribe config set local_model <size>`. Not checked against the cache; an uncached size downloads on the first local run. Run `anyscribe model pull <size>` to download it up front.
 
 **quality** — Accuracy↔cost preset that picks a provider: `accuracy`→ElevenLabs scribe_v2, `balanced`→Deepgram nova-3, `cost`→Groq, `free`→local, or `custom`→whatever `provider` says. Default `balanced`. Override per-command with `--quality`; `--provider` wins over it for that run.
 
@@ -80,7 +81,7 @@ If the tier's provider has no key, anyscribe emits `WARNING: quality '<tier>' wa
 
 **output_format** — `clean` outputs paragraphs only. `timestamped` adds `[mm:ss]` markers per segment. `diarized` groups consecutive speaker turns into blocks with timestamps.
 
-**diarize** — When true, enables speaker diarization (identifying who said what). Supported by OpenAI, Deepgram, and Sarvam providers. Can also be enabled per-run with `--diarize` flag. When diarization is active and no provider is explicitly specified, anyscribe auto-switches to Deepgram if configured.
+**diarize** — When true, enables speaker diarization (identifying who said what). Supported by OpenAI (gpt-4o-transcribe-diarize, files up to 25 MB / 30 min) and Deepgram. Can also be enabled per-run with `--diarize` flag. With diarization on and a DEEPGRAM_API_KEY set, anyscribe switches to Deepgram unless `-p` is given; the quality tier is not applied to diarized runs.
 
 **prompt_download** — After each transcription: `never` (just transcribe), `ask` (prompt to download video/audio), `always` (auto-download video too).
 
@@ -110,10 +111,10 @@ anyscribe config set instagram.browser firefox
 ```bash
 OPENAI_API_KEY=sk-proj-...
 DEEPGRAM_API_KEY=...
-ELEVENLABS_API_KEY=xi-...
+ELEVENLABS_API_KEY=...
 OPENROUTER_API_KEY=sk-or-...
 SARGAM_API_KEY=...
-GROQ_API_KEY=gsk-...
+GROQ_API_KEY=...
 ASCLI_LOCAL_MODEL=base                   # Optional: tiny|base|small|medium|large-v3|large-v3-turbo|distil-large-v3.5
 ```
 

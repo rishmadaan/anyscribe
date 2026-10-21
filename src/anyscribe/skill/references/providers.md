@@ -85,21 +85,21 @@ does not. So don't pass `-m gpt-transcribe` for a user who wants timestamps.
 | | OpenAI Whisper | Deepgram Nova | ElevenLabs Scribe | Sarvam AI | Groq | OpenRouter | Local |
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization + Hinglish | Highest accuracy | Indian languages | Cheapest + fastest | Model variety | Offline / free |
-| **Languages** | 99 | 89 | 90+ | 23 Indian + English | 99 | Varies | 99 |
+| **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Varies | 99 |
 | **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Word-level | Word-level | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No | No (Sarvam Batch API only — not integrated) | No | No | No |
 | **Cost** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies | Free |
-| **File limit** | 25 MB | No hard limit | 25 MB | 30 sec | 25 MB | 25 MB | RAM only |
+| **File limit** | 25 MB | Auto-chunked over 25 MB / 30 min | 25 MB | 30 sec | 25 MB | 25 MB | RAM only |
 | **Offline** | No | No | No | No | No | No | Yes |
 | **API key env** | `OPENAI_API_KEY` | `DEEPGRAM_API_KEY` | `ELEVENLABS_API_KEY` | `SARGAM_API_KEY` | `GROQ_API_KEY` | `OPENROUTER_API_KEY` | None |
 | **Quality tier** | — | `balanced` | `accuracy` | — | `cost` | — | `free` |
 
 ## OpenAI Whisper (provider: `openai`)
 
-Default provider. Reliable, well-documented, good across most languages. Supports diarization. Four pickable models — this is the only provider where the model choice really matters.
+The `provider` setting's default value; the default `balanced` tier routes runs to Deepgram when a Deepgram key exists. Reliable, well-documented, good across most languages. Supports diarization. Four pickable models — this is the only provider where the model choice really matters.
 
 - **Default model:** `gpt-transcribe` (auto-swapped to `whisper-1` when the output format needs timestamps)
-- **Auto-chunking:** Files >25 MB split into 18-min segments (all models share the 25 MB limit). Diarize mode uses server-side chunking.
+- **Auto-chunking:** Files over 25 MB or 30 min split into 18-min segments. Diarize mode sends the whole file (`chunking_strategy=auto`) and refuses files over 25 MB / 30 min, suggesting Deepgram.
 - **Diarization:** Yes — `--diarize` routes to `gpt-4o-transcribe-diarize` automatically, whatever model is pinned. Not part of the picker.
 - **Get key:** https://platform.openai.com/api-keys
 
@@ -110,7 +110,7 @@ Default provider. Reliable, well-documented, good across most languages. Support
 | `gpt-4o-transcribe` | $0.006/min | No | Older 4o-family model; `gpt-transcribe` beats it at a lower price ($0.0045) |
 | `gpt-4o-mini-transcribe` | $0.003/min | No | Cheapest OpenAI option, lowest accuracy of the three |
 
-**When to recommend:** Default choice. Best cost/accuracy/language balance. Use `--diarize` for multi-speaker content.
+**When to recommend:** General purpose when it's the key the user has. Best cost/accuracy/language balance. Use `--diarize` for multi-speaker content.
 
 **Model advice:** leave it on `gpt-transcribe` — cheaper and more accurate, and the timestamp case handles itself. Only pin `whisper-1` if the user wants every run on Whisper regardless of format. Never pass `-m gpt-transcribe` to a user whose format is `timestamped`/`diarized`: an explicit `-m` suppresses the automatic swap and they'll get plain paragraphs.
 
@@ -125,7 +125,7 @@ Fast, accurate transcription with native speaker diarization and Hindi Latin scr
 - **Default model:** `nova-3` (auto-falls back to `nova` for hi-Latn, which isn't supported on nova-3 yet)
 - **Also available:** `nova-2`, the previous generation. Only pin it to match transcripts made before nova-3.
 - **Cost:** ~$0.005/min ($0.30/hr). $200 free credit on signup, no credit card needed.
-- **No file size limit** — processes files of any length in a single request
+- **Long files are auto-chunked into 18-min pieces** (over 25 MB or 30 min); speaker numbering may not stay consistent across chunks
 - **Diarization:** Native — automatically detects the number of speakers from audio. No need to specify a speaker count.
 - **Hindi Latin:** Use `--language hi-Latn` for romanized Hindi (Hinglish) output — this is the recommended default for any Hindi multi-speaker content
 - **Get key:** https://console.deepgram.com/
@@ -136,15 +136,14 @@ Fast, accurate transcription with native speaker diarization and Hindi Latin scr
 - Mostly Hindi / Hinglish → `--language hi-Latn` for romanized Latin script
 - Pure Hindi (Devanagari) → `--language hi`
 
-**When to recommend:** Best for multi-speaker transcripts (meetings, interviews, podcasts). Handles long recordings (3+ hours) without chunking. Ideal for Hinglish content with `--language hi-Latn`. This is the provider anyscribe auto-selects when `--diarize` is used.
+**When to recommend:** Best for multi-speaker transcripts (meetings, interviews, podcasts). Handles long recordings (auto-chunked). Ideal for Hinglish content with `--language hi-Latn`. This is the provider anyscribe auto-selects when `--diarize` is used.
 
 ## ElevenLabs Scribe (provider: `elevenlabs`)
 
-Premium accuracy with word-level timestamps and speaker diarization.
+Premium accuracy with word-level timestamps. anyscribe does not request speaker labels from ElevenLabs; use Deepgram or OpenAI for diarization.
 
 - **Model:** scribe_v2 (top-accuracy model; replaced scribe_v1 which ElevenLabs removed 2026-07-09)
 - **Cost:** ~$0.22–0.40/hr depending on plan
-- **Features:** Word-level timestamps, up to 32 speaker identification
 - **Get key:** https://elevenlabs.io/app/settings/api-keys
 
 **When to recommend:** User needs highest accuracy or precise word-level timestamps. This is what the `accuracy` quality tier selects (the default is `balanced` → Deepgram).
@@ -157,7 +156,7 @@ Specialized for Indian languages. Dramatically better than Whisper for Hindi, Ta
 - **Retired:** `saaras:v2.5` and its deprecated endpoint are gone. `anyscribe config set provider_models.sargam saaras:v2.5` is now rejected, and an existing pin is dropped automatically on the next run (`Sarvam saaras:v2.5 is retired — using saaras:v3`). If a user asks for it, explain it no longer exists upstream.
 - **Cost:** ~$0.35/hr; free tier ~$12 in credits
 - **Supported:** Hindi, Tamil, Telugu, Kannada, Malayalam, Bengali, Gujarati, Marathi, Punjabi, Odia, Assamese, Urdu, Sanskrit, and more
-- **Chunking:** sync API limited to 30 seconds — anyscribe auto-chunks into 30-sec segments (unchanged on v3)
+- **Chunking:** sync API limited to 30 seconds — anyscribe auto-chunks into 28-sec segments, just under the limit (unchanged on v3)
 - **Behavior:** translates to English (this is `mode=translate`, not a verbatim transcript)
 - **Get key:** https://dashboard.sarvam.ai
 - **Spelling:** the canonical provider name is `sargam`. `sarvam` (the vendor's real spelling) is accepted wherever a *provider* is named — `--provider`, `config set provider`, `providers test`, `onboard --provider`, the web routes — and canonicalized to `sargam`. Don't correct a user who types it, and don't expect it back in `config` output. **Exception: the key name is not aliased.** `config set sarvam_api_key` exits 1 with *Unknown key*; use `sargam_api_key` / `SARGAM_API_KEY`.
@@ -171,10 +170,10 @@ Cheapest and fastest cloud option. Runs Whisper `large-v3-turbo` on Groq acceler
 - **Default model:** `whisper-large-v3-turbo` — cheapest and fastest
 - **Also available:** `whisper-large-v3` — higher accuracy, and Groq allows a larger upstream file limit for it. Pin with `-m whisper-large-v3` when the turbo output is missing words.
 - **Cost:** ~$0.04/hr — the cheapest cloud provider
-- **Chunking:** 25 MB auto-chunked (same as OpenAI)
+- **Chunking:** over 25 MB or 30 min auto-chunked (same as OpenAI)
 - **Diarization:** No — use the `accuracy`/`balanced` tier or `--provider deepgram`
 - **Get key:** https://console.groq.com/keys
-- **Quick setup:** `anyscribe config set groq_api_key gsk-...`
+- **Quick setup:** `anyscribe config set groq_api_key ...`
 
 **When to recommend:** The `cost` quality tier maps here. Bulk/low-cost transcription where speaker labels aren't needed.
 
@@ -217,6 +216,7 @@ anyscribe local setup --model base --yes --json
 2. Installs `faster-whisper` into the same Python env as anyscribe.
 3. Downloads the chosen Whisper model from HuggingFace.
 4. Persists `local_model` in `config.yaml`.
+5. Does not change `provider` or `quality`; run `anyscribe config set provider local` to use it.
 
 Idempotent — re-running with an already-set-up model just updates the default.
 
@@ -242,7 +242,7 @@ Idempotent — re-running with an already-set-up model just updates the default.
 | Add another size | `anyscribe model pull <size> --json` |
 | Delete a cached size | `anyscribe model rm <size> --yes --json` |
 | Inspect a size | `anyscribe model info <size> --json` |
-| Switch default model | `anyscribe config set local_model <size>` (must already be cached) |
+| Switch default model | `anyscribe config set local_model <size>` (not checked against the cache; an uncached size downloads on the first local run, so `anyscribe model pull <size>` first to download it up front) |
 
 ### Teardown
 
@@ -250,7 +250,7 @@ Idempotent — re-running with an already-set-up model just updates the default.
 anyscribe local teardown --yes --json
 ```
 
-Uninstalls faster-whisper, deletes every cached model, resets `settings.provider` to `openai` if it was `local`.
+Uninstalls faster-whisper, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
 
 **When to recommend local:** offline workflows, privacy-sensitive content, bulk processing where API cost matters, or users without API keys. Don't push it for casual one-off transcriptions — the API providers are simpler and the model download is big.
 
@@ -281,4 +281,4 @@ anyscribe onboard --force                           # Interactive — re-enter k
 
 Or edit `~/.anyscribe/.env` directly (never display this file to the user).
 
-**Diarization auto-routing:** When `--diarize` is used without `-p`, anyscribe auto-switches to Deepgram if configured. Deepgram handles large files natively with consistent speaker labels.
+**Diarization auto-routing:** When `--diarize` is used without `-p`, anyscribe auto-switches to Deepgram if configured. Deepgram auto-chunks files over 25 MB or 30 min, so speaker numbering may not stay consistent across chunks.

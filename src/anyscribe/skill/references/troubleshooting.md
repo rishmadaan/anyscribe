@@ -70,7 +70,7 @@ anyscribe config set openai_api_key sk-proj-...    # Quick — set key directly
 anyscribe onboard --force                           # Or re-run setup wizard
 ```
 
-### "yt-dlp download failed: Video unavailable"
+### "yt-dlp metadata failed" or "yt-dlp download failed" (YouTube)
 
 The video is private, age-restricted, geo-blocked, or deleted.
 
@@ -79,7 +79,7 @@ The video is private, age-restricted, geo-blocked, or deleted.
 2. Update yt-dlp: `pip install --upgrade yt-dlp`
 3. If age-restricted: yt-dlp may need browser cookies (advanced)
 
-### Instagram: "rate-limit reached" or "login required"
+### "Instagram requires a login to fetch this reel"
 
 The reel is gated behind login. Configure cookies from a browser logged into
 Instagram:
@@ -94,16 +94,22 @@ Then retry. If you've already configured a browser and still see this:
 3. If it loads in the browser but not via anyscribe, your cookie store may be
    locked by the running browser — quit the browser and retry.
 
-### Instagram: "private account"
+### "This reel is from a private account"
 
 The reel is from a private account. Cookies from a browser logged into an
 account that follows the poster will work; cookies from a different account
 won't.
 
-### Instagram: "video unavailable" / "post not found"
+### "This reel is not available"
 
 The reel was deleted, made private, or is region-locked. There's no
 client-side fix.
+
+### "Instagram download failed: ..."
+
+The catch-all for any other yt-dlp error; the text after the colon is the start
+of yt-dlp's own output. Read it for the cause, then try updating yt-dlp
+(`pip install --upgrade yt-dlp`) or configuring `instagram.browser` as above.
 
 ### Transcription in wrong language
 
@@ -218,15 +224,61 @@ Two cases that look like bugs but aren't:
 ### "Provider error" or API failures
 
 **Fix:**
-1. Test the provider: `anyscribe providers test`
-2. Check API key is valid and has credits
+1. `anyscribe providers test <name>` confirms the key is set (it makes no API call).
+2. If the error says 'Invalid or missing API key', the key is wrong or unfunded: re-set it with `anyscribe config set <provider>_api_key`.
 3. Try a different provider: `anyscribe transcribe "url" --provider openai`
+
+### "Invalid or missing API key for <provider>."
+
+The provider rejected the key (HTTP 401/403). It is wrong, revoked, or the account has no credit.
+
+**Fix:** `anyscribe config set <provider>_api_key YOUR_KEY` (or `anyscribe onboard --force`). `anyscribe providers test` cannot catch this, since it makes no API call.
+
+### "Rate limited by <provider>."
+
+HTTP 429. Wait a moment and retry, or switch providers for this run with `-p <other>`.
+
+### "Transient <provider> server error"
+
+HTTP 5xx on the provider's side. It usually clears on its own; retry in a few seconds.
+
+### "<provider> rejected the request (4xx)"
+
+Any other client error. The text after the status code is the provider's own response; read it for the cause (bad language code, unsupported file, unknown model).
+
+### "ffmpeg not found" / "ffprobe not found"
+
+Pre-flight check: anyscribe needs ffmpeg (ffprobe ships with it) to convert audio.
+
+**Fix:**
+```bash
+brew install ffmpeg          # macOS
+sudo apt install ffmpeg      # Debian/Ubuntu
+```
+
+### "Low disk space: NMB free. Need at least 500MB"
+
+Pre-flight check. Free up disk space on the drive holding `~/.anyscribe/` and retry.
+
+### "Unsupported format: .x" / "File not found:"
+
+Pre-flight checks on a local file. The path must exist and end in one of `.mp3`, `.mp4`, `.m4a`, `.wav`, `.opus`, `.ogg`, `.flac`, `.webm`, `.aac`, `.wma`. Convert other formats with ffmpeg first.
+
+### "File is NMB — OpenAI's diarize endpoint has a 25MB limit"
+
+OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 30 min.
+
+**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`) and re-run with `--diarize`, which then routes to Deepgram; or drop `--diarize` and let OpenAI chunk the file.
+
+### "Groq has no diarization model"
+
+`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). Use `-p deepgram` or `-p openai` for speaker labels, or drop `--diarize`.
 
 ### Large video taking very long
 
-Videos >30 min are auto-chunked. Each chunk transcribes separately. This is normal.
+Audio over 25 MB or 30 min is split into 18-min chunks; Sarvam always uses 28-s chunks. Each chunk transcribes separately. This is normal.
 
-**Estimate:** Cloud APIs process roughly at real-time speed. Local (CPU) is 2-5x real-time.
+**Estimate:** Cloud APIs process roughly at real-time speed. Local (CPU) runs from about 7x real-time for `base` down to about 1x for `large-v3`.
 
 ### Config or workspace corruption
 
@@ -243,11 +295,11 @@ anyscribe onboard
 
 Back up `~/anyscribe/` first if transcripts matter (or check `anyscribe config show` for custom workspace path).
 
-### faster-whisper not found (local provider)
+### "faster-whisper is not installed" (local provider)
 
 **Fix:**
 ```bash
-pip install faster-whisper
+anyscribe local setup --model base --yes --json
 ```
 
 First run downloads the model from Hugging Face (~150 MB for base). Needs internet for that initial download.

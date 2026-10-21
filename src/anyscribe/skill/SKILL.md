@@ -6,7 +6,7 @@ description: >
   or local files into markdown. Activate when the user wants to transcribe a URL
   or file, download media, configure transcription providers, manage their anyscribe
   setup, batch-process multiple URLs, or troubleshoot anyscribe issues.
-allowed-tools: Bash(anyscribe *), Bash(scribe *), Read
+allowed-tools: Bash(anyscribe *), Bash(scribe *), Bash(ascli *), Bash(python -m anyscribe *), Read
 ---
 
 Copyright (c) 2026 Rishabh Madaan. This skill and its reference files are free
@@ -65,9 +65,9 @@ When the USER wants to run commands themselves, show them the human-readable for
 | See current config | `anyscribe config show` (raw settings) or `anyscribe config --json` (settings + what runs next) |
 | Switch provider | `anyscribe config set provider <name>` (also writes `quality=custom` so it sticks) |
 | Add an OpenRouter model to the pickers | `anyscribe config set extra_models.openrouter "<slug>,<slug>"` (openrouter only) |
-| Test a provider | `anyscribe providers test <name>` |
+| Check a provider's key is set | `anyscribe providers test <name>` (no API call: a pass does not prove the key is valid or funded) |
 | List providers | `anyscribe providers list` |
-| Set up offline transcription | `anyscribe local setup --model base --yes` *(see rule below)* |
+| Set up offline transcription | `anyscribe local setup --model base --yes --json`, then `anyscribe config set provider local` *(see rule below)* |
 | Check offline-transcription state | `anyscribe local status --json` |
 | Download another Whisper model | `anyscribe model pull <size> --json` |
 | List downloaded Whisper models | `anyscribe model list --json` |
@@ -78,9 +78,11 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Migrate from the old `anyscribecli` install | `anyscribe migrate` (`--dry-run` to preview, `--json` for machine output) |
 | Use the web UI | `anyscribe ui` (opens browser dashboard at 127.0.0.1:8457) |
 | Keep anyscribe available in the menu bar / always running | `anyscribe tray` (needs `pip install "anyscribe[tray]"` first) |
-| Auto-start the menu bar at login (macOS) | `anyscribe install-service` |
-| Remove menu-bar auto-start | `anyscribe uninstall-service` |
+| Auto-start the menu bar at login (macOS) | `anyscribe install-service --yes --json` |
+| Remove menu-bar auto-start | `anyscribe uninstall-service --yes --json` |
 | Diagnose problems | `anyscribe doctor` |
+| Reinstall or refresh this skill | `anyscribe install-skill --force` |
+| Full traceback plus log for a bug report | `anyscribe --debug transcribe "url"` (writes `~/.anyscribe/logs/scribe.log`; `--debug` must come before the subcommand) |
 | Update anyscribe | `anyscribe update` |
 | Check for updates | `anyscribe update --check` |
 
@@ -128,6 +130,8 @@ anyscribe local setup --model base --yes --json
 ```
 
 `--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` — the error payload carries the exact pip/pipx command that failed and the captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.).
+
+**Setup does not make local the provider.** It installs and downloads only; `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs to Deepgram. Afterwards run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 **When to suggest local setup:**
 
@@ -191,12 +195,12 @@ When the user asks which provider to use, or when you need to suggest one:
 
 | Scenario | Recommend | Why |
 |---|---|---|
-| General purpose, most languages | **openai** | Best balance of cost, accuracy, language coverage |
-| Multi-speaker (meetings, interviews) | `--diarize` (auto-routes to **deepgram**) | Native diarization, auto-detects speaker count, no file size limit |
+| General purpose | the default `balanced` tier (Deepgram); **openai** if that is the only key the user has | Strong accuracy and speaker labels; OpenAI covers the most languages |
+| Multi-speaker (meetings, interviews) | `--diarize` (auto-routes to **deepgram**) | Native diarization, auto-detects speaker count; files over 25 MB or 30 min are auto-chunked, so speaker numbering may not stay consistent across chunks |
 | Hindi with speakers (meetings, calls) | `--diarize --language hi-Latn` | **Default for any Hindi/Hinglish multi-speaker content.** Romanized Latin script output, speaker labels, auto-routes to Deepgram Nova |
 | Mostly English + some Hindi | `--diarize` (no language flag needed) | Auto-detect handles English well, Hindi words transcribed phonetically |
-| Indian languages (Hindi, Tamil, Telugu...) | **sargam** | Specialized for 22 Indian languages, much better than Whisper |
-| Highest accuracy, word timestamps | **elevenlabs** | Word-level timestamps, 99 languages |
+| Indian languages, English output wanted | **sargam** | 22 Indian languages; it translates to English (`mode=translate`), it does not return the original language. For an original-language transcript use Deepgram (`-p deepgram --language hi` or `hi-Latn`) |
+| Highest accuracy, word timestamps | **elevenlabs** | Word-level timestamps, 90+ languages |
 | Offline / no API key / free | **local** | Runs locally with faster-whisper, zero cost |
 | Specific model needed | **openrouter** | Access to various models, but slower and pricier |
 
@@ -279,12 +283,13 @@ anyscribe "url" --force --json --quiet
 When the user wants to remove or delete a transcript, use `anyscribe rm`:
 
 ```bash
-anyscribe rm "sources/youtube/my-video.md" --yes --json   # by path
+anyscribe rm "~/anyscribe/sources/youtube/my-video.md" --yes --json   # absolute path (use the "file" value from transcribe --json)
 anyscribe rm my-video --yes --json                          # by slug (filename, no .md)
 ```
 
 - Accepts a full path or a bare slug. If a slug matches more than one file, `rm` lists the
-  matches and exits — pass a full path to disambiguate.
+  matches and exits — pass a full path to disambiguate. Relative paths only work from
+  inside the workspace folder.
 - `--yes` / `-y` skips the confirmation prompt (required in agent contexts — the prompt
   needs a TTY).
 - The master `_index.md` row is removed automatically. Daily logs are left intact as history.
@@ -340,7 +345,7 @@ When something goes wrong:
 1. **Never read or display `~/.anyscribe/.env`** — it contains API keys and passwords
 2. **Use `anyscribe config show`** to display settings (it masks sensitive values)
 3. **Never hardcode API keys** in commands or output
-4. **Don't run `anyscribe onboard`** without telling the user first — it's interactive and takes control of the terminal
+4. **Never run `anyscribe onboard` without `--yes`** (interactive, takes over the terminal). Tell the user before running the headless form, since it writes config and keys
 5. **Warn before `anyscribe update`** — it modifies the installed package
 
 ## Configuration

@@ -8,7 +8,7 @@ Transcribe a URL or local audio/video file to markdown. A bare URL routes to tra
 anyscribe "<url>"                         # YouTube/Instagram URL (always quote)
 anyscribe /path/to/file.mp3              # Local audio/video file
 anyscribe transcribe                     # Interactive prompt (no quoting needed)
-anyscribe --clipboard                    # Read URL from clipboard
+anyscribe transcribe --clipboard         # Read URL from clipboard
 anyscribe transcribe "<url>"             # Explicit subcommand (also works)
 ```
 
@@ -16,7 +16,7 @@ anyscribe transcribe "<url>"             # Explicit subcommand (also works)
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--quality` | | Quality preset: accuracy \| balanced \| cost \| free (picks a provider) | From config (accuracy) |
+| `--quality` | | Quality preset: accuracy \| balanced \| cost \| free (picks a provider) | From config (`balanced` by default; `custom` after `onboard --yes` without `--quality`) |
 | `--provider` | `-p` | Override provider: openai, deepgram, elevenlabs, sargam, groq, openrouter, local (wins over `--quality`) | From config |
 | `--model` | `-m` | Pin the model for this run (see [providers.md](providers.md) for each provider's list) | Provider default, or `provider_models` in config |
 | `--language` | `-l` | Language code (en, es, fr, hi, hi-Latn, etc.) or "auto" | From config (auto) |
@@ -70,21 +70,24 @@ Before transcribing, anyscribe scans the vault for a transcript whose frontmatte
 ```json
 {
   "success": true,
-  "file": "/Users/you/anyscribe/sources/youtube/title.md",
-  "title": "Video Title",
-  "platform": "youtube",
-  "duration": "12:34",
-  "language": "en",
-  "word_count": 1500,
-  "provider": "openai",
-  "model": "gpt-transcribe",
-  "via": "config",
-  "notes": [],
-  "cached": false
+  "data": {
+    "file": "/Users/you/anyscribe/sources/youtube/title.md",
+    "title": "Video Title",
+    "platform": "youtube",
+    "duration": "12:34",
+    "language": "en",
+    "word_count": 1500,
+    "provider": "openai",
+    "model": "gpt-transcribe",
+    "via": "config",
+    "notes": [],
+    "cached": false
+  },
+  "error": null
 }
 ```
 
-`model` is the model that actually ran — read it rather than assuming the pin, since anyscribe may have switched it (timestamps) or the provider may have come from a tier. `via` says which rung picked the provider (`flag` | `diarize` | `quality: <tier>` | `config`), and `notes` carries every swap or warning in machine-readable form (keyless-tier fallback, whisper-1 timestamp switch, diarize routing) — surface any `WARNING:` note to the user even in `--quiet` runs. Batch `--json` carries the same two fields at the top level.
+`model` is the model that actually ran — read it rather than assuming the pin, since anyscribe may have switched it (timestamps) or the provider may have come from a tier. `via` says which rung picked the provider (`flag` | `diarize` | `quality: <tier>` | `config`), and `notes` carries every swap or warning in machine-readable form (keyless-tier fallback, whisper-1 timestamp switch, diarize routing) — surface any `WARNING:` note to the user even in `--quiet` runs. Batch `--json` carries `provider`, `model`, `via` and `notes` inside `data`.
 
 When the source was already in the vault, the same shape comes back with `"cached": true` and the existing file's path.
 
@@ -92,7 +95,8 @@ On error:
 ```json
 {
   "success": false,
-  "error": "yt-dlp download failed: Video unavailable"
+  "data": null,
+  "error": "yt-dlp metadata failed: ERROR: [youtube] abc123: Video unavailable"
 }
 ```
 
@@ -128,7 +132,7 @@ anyscribe "https://youtube.com/watch?v=abc123" --json --quiet
 anyscribe "https://youtube.com/watch?v=abc123" --force
 
 # From clipboard
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 ```
 
 ---
@@ -185,9 +189,12 @@ https://youtube.com/watch?v=def456
 |------|-------|-------------|---------|
 | `--provider` | `-p` | Override provider | From config |
 | `--model` | `-m` | Pin the model for every URL in the batch | Provider default, or `provider_models` in config |
-| `--language` | `-l` | Override language | auto |
+| `--quality` | | Quality preset for the batch | From config |
+| `--language` | `-l` | Override language | From config |
 | `--json` | `-j` | Output as JSON | Off |
 | `--keep-media` | | Keep audio files | From config |
+| `--diarize` | `-d` | Speaker diarization | Off |
+| `--resume` | | Skip URLs already completed, recorded in `<list>.state.json` next to the list; without `--resume` an existing state file is deleted | Off |
 | `--force` | `-f` | Re-transcribe sources already in the vault | Off |
 | `--quiet` | `-q` | Suppress progress | Off |
 | `--stop-on-error` | | Stop at first failure | Off (continues) |
@@ -199,15 +206,26 @@ Sources already in the vault are skipped (returned from cache) unless `--force` 
 
 ```json
 {
-  "total": 3,
-  "succeeded": 2,
-  "failed": 1,
-  "results": [
-    {"success": true, "url": "...", "file": "...", "title": "...", "cached": false, ...},
-    {"success": false, "url": "...", "error": "..."}
-  ]
+  "success": false,
+  "data": {
+    "total": 3,
+    "succeeded": 2,
+    "failed": 1,
+    "provider": "deepgram",
+    "model": "nova-3",
+    "via": "quality: balanced",
+    "notes": [],
+    "results": [
+      {"success": true, "url": "...", "cached": false, "file": "...", "title": "...",
+       "platform": "youtube", "duration": "12:34", "language": "en", "word_count": 1500},
+      {"success": false, "url": "...", "error": "..."}
+    ]
+  },
+  "error": null
 }
 ```
+
+Top-level `success` is `true` only when no URL failed. Exits 1 if any URL failed.
 
 ### Examples
 
@@ -226,12 +244,12 @@ anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe --json --quiet
 Delete a transcript from the workspace and resync the master `_index.md`.
 
 ```bash
-anyscribe rm "sources/youtube/my-video.md"    # by path
+anyscribe rm "~/anyscribe/sources/youtube/my-video.md"   # absolute path (use the "file" value from transcribe --json)
 anyscribe rm my-video                          # by slug (filename without .md)
 anyscribe rm my-video --yes --json             # skip prompt, machine output
 ```
 
-Accepts a full file path or a bare slug. If a slug matches more than one transcript, `rm` prints the matches and exits — pass a full path to disambiguate. Daily logs under `daily/` are left untouched as history; only the transcript file and its master-index row are removed.
+Accepts a full file path or a bare slug. If a slug matches more than one transcript, `rm` prints the matches and exits — pass a full path to disambiguate. Relative paths only work from inside the workspace folder. Daily logs under `daily/` are left untouched as history; only the transcript file and its master-index row are removed.
 
 ### Flags
 
@@ -243,8 +261,10 @@ Accepts a full file path or a bare slug. If a slug matches more than one transcr
 ### JSON output
 
 ```json
-{ "success": true, "data": { "deleted": "sources/youtube/my-video.md" }, "error": null }
+{ "success": true, "data": { "deleted": "/Users/you/anyscribe/sources/youtube/my-video.md" }, "error": null }
 ```
+
+`deleted` is the matched file path, absolute when found by slug.
 
 Exits 1 (with `error` set) when no transcript matches, the slug is ambiguous, or the file cannot be deleted.
 
@@ -427,7 +447,7 @@ Or pick a tier:  anyscribe config set quality accuracy|balanced|cost|free|custom
 | `quality` | accuracy, balanced, cost, free, custom | Tier that picks the provider, or `custom` to use `provider` |
 | `provider_models.<provider>` | a model id from that provider's list | Pin a model for one provider (see below) |
 | `extra_models.openrouter` | comma-separated slugs (empty clears) | Add your own OpenRouter models to the pickers. Openrouter only |
-| `local_model` | tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5 | Default offline Whisper size (must already be cached) |
+| `local_model` | tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5 | Default offline Whisper size. Not checked against the cache; an uncached size downloads on the first local run. Run `anyscribe model pull <size>` to download it up front |
 | `language` | auto, en, es, fr, hi, ar, zh, ja, ko, ... | Default language |
 | `keep_media` | true, false | Keep audio after transcription |
 | `output_format` | clean, timestamped, diarized | Transcript format |
@@ -470,7 +490,7 @@ anyscribe config set extra_models.openrouter "qwen/qwen3-omni-flash,openai/gpt-a
 anyscribe config set extra_models.openrouter ""     # empty value removes the entry
 ```
 
-Comma-separated or a JSON list (MCP/web). Added slugs merge into every picker and are marked `(custom)` in `providers list`. `extra_models.<anything else>` exits 1: *custom models are only supported for openrouter (curated lists elsewhere)*. Don't work around it — new models for the other providers arrive via `anyscribe update`.
+Comma-separated on the CLI and over MCP `set_config` (a JSON string there would be split on commas); the Web UI sends a list. Added slugs merge into every picker and are marked `(custom)` in `providers list`. `extra_models.<anything else>` exits 1: *custom models are only supported for openrouter (curated lists elsewhere)*. Don't work around it — new models for the other providers arrive via `anyscribe update`.
 
 See [config.md](config.md) for the resulting `config.yaml` shape and [providers.md](providers.md) for each provider's models.
 
@@ -529,9 +549,11 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 **Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `base` unless the user asks otherwise.
 
+**Setup does not switch the provider.** `provider` and `quality` are left alone, so the default `balanced` tier keeps routing to Deepgram. Afterwards run `anyscribe config set provider local` (also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+
 **Exit codes:**
 - `0` — set up (or already set up).
-- `1` — install/download failure. JSON stderr carries the exact command that failed and its stderr.
+- `1` — install/download failure. With `--json` the failure is an NDJSON line on stdout, `{"status": "failed", "phase", "install", ...}`, carrying the exact command that failed and its stderr.
 - `2` — usage error (missing `--model`, unknown size, non-TTY without `--yes`).
 
 ### anyscribe local status
@@ -540,7 +562,7 @@ Always exits 0. Reports `set_up`, `faster_whisper_installed`, `faster_whisper_ve
 
 ### anyscribe local teardown
 
-`--yes` is required. Uninstalls faster-whisper, deletes every cached model, resets `settings.provider` to `openai` if it was `local`.
+`--yes` is required. Uninstalls faster-whisper, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
 
 ---
 
@@ -560,7 +582,7 @@ anyscribe model reinstall <size> --yes --json    # Delete + re-download (corrupt
 anyscribe model info <size> --json               # Inspect a single size
 ```
 
-**Not set up?** `pull`/`rm` exit 2 with `{error: "local transcription not set up", hint: "run anyscribe local setup ..."}`. `list` still works (shows everything as `cached: false`).
+**Not set up?** `pull` and `reinstall` exit 2 with `{error: "local transcription not set up", hint: "run anyscribe local setup ..."}`; `list`, `info` and `rm` still work (`list` shows everything as `cached: false`).
 
 **Size-already-cached semantics:** `pull` returns `{status: "already_present"}` with exit 0. `rm` on a non-cached size returns `{status: "not_present"}` with exit 0.
 
@@ -591,7 +613,7 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json # set a ti
 | `--provider` / `-p` | yes | none | `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or env var) | none | Stored in `.env`. Prefer the env-var form. |
 | `--local-model` | yes when `--provider=local` | none | `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `base`. |
-| `--model` / `-m` | no | provider default | Pin `--provider`'s model (writes `provider_models.<provider>`). Exit 2 with the valid list if the provider doesn't offer it. Not for `local`. |
+| `--model` | no | provider default | Pin `--provider`'s model (writes `provider_models.<provider>`). Exit 2 with the valid list if the provider doesn't offer it. Not for `local`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, `custom`. **Omitting it writes `custom`**, so `--provider` is what runs. Only pass it if the user asked for a tier. |
 | `--workspace` | no | `~/anyscribe` | Obsidian vault path. |
 | `--language` | no | `auto` | Default language code. |
@@ -601,9 +623,9 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json # set a ti
 | `--force` / `-f` | no | off | Re-run over existing config. |
 | `--json` / `-j` | no | off | Emit the result as a single JSON object on stdout. |
 
-**Result JSON:** `{"status", "provider", "quality", "model", "workspace", "local_enabled", "api_keys_set", "skill_installed"}`. Read `model` back rather than assuming — it reports the effective model, pinned or default.
+**Result JSON:** `{"status", "provider", "quality", "model", "workspace", "local_enabled", "api_keys_set", "skill_installed", "local_setup", "config_file"}`. Read `model` back rather than assuming — it reports the effective model, pinned or default.
 
-**Exit codes:** 0 success · 1 setup failure (e.g., local install failed — stderr carries pip command + captured stderr) · 2 usage error (missing `--provider`, unknown provider, unknown `--model`/`--quality`, already configured without `--force`, etc.). Exit-2 stderr is structured JSON with `error` and `choices`.
+**Exit codes:** 0 success · 1 partial setup: config was written but local setup failed; with `--json` the result is printed on stdout with `"status": "partial"`, and `local_setup` carries the failed pip command and captured stderr · 2 usage error (missing `--provider`, unknown provider, unknown `--model`/`--quality`, missing API key, already configured without `--force`, etc.). With `--json`, exit-2 stderr is a JSON object with `error` plus `choices` for a bad value, `env_var` and `hint` for a missing key, or `hint` and `config_file` when already configured.
 
 ---
 

@@ -107,6 +107,21 @@
 <td><code>~/.anyscribe/tmp/</code></td>
 <td>Temporary downloads (auto-cleaned)</td>
 </tr>
+<tr>
+<td>Recovery</td>
+<td><code>~/.anyscribe/recovery/</code></td>
+<td>Audio kept from failed runs (listed by <code>anyscribe logs</code>)</td>
+</tr>
+<tr>
+<td>Checkpoints</td>
+<td><code>~/.anyscribe/checkpoints/</code></td>
+<td>Finished chunks of a long run, so a retry resumes instead of starting over</td>
+</tr>
+<tr>
+<td>Tray PID</td>
+<td><code>~/.anyscribe/tray.pid</code></td>
+<td>Process ID of the running tray companion</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -198,7 +213,7 @@ with no subcommand:</p>
 </tr>
 <tr>
 <td><code>sargam</code></td>
-<td>Sarvam AI (23 Indic languages + English)</td>
+<td>Sarvam AI (22 Indic languages + English)</td>
 <td><code>SARGAM_API_KEY</code></td>
 </tr>
 <tr>
@@ -217,7 +232,7 @@ with no subcommand:</p>
 <p><strong>Tip:</strong> If you don't have a strong opinion, leave <code>quality</code> on a tier (below)
 and don't touch <code>provider</code> at all — the tier chooses for you.</p>
 <p><strong>Why multiple providers?</strong> Different services handle different languages better. OpenAI Whisper is a good default, ElevenLabs has high accuracy across 90+ languages, Sarvam excels at Indian languages, and the local provider is free and works offline.</p>
-<p><strong>Local provider</strong> requires <code>pip install faster-whisper</code>. Models download automatically on first use. Works on CPU (slower) or GPU (fast with CUDA).</p>
+<p><strong>Local provider</strong> needs a one-time <code>anyscribe local setup --model base</code> (or the Web UI's "Set up local transcription" button), which installs faster-whisper and downloads the model. Runs on CPU, or on an NVIDIA GPU with CUDA.</p>
 </blockquote>
 <h4 id="provider_models">provider_models</h4>
 <p>Which <strong>model</strong> each provider should use. A provider is the service (OpenAI, Groq...); a model is the specific engine inside it. Every provider has a sensible default, so this setting starts empty and most people never touch it.</p>
@@ -370,9 +385,9 @@ the Web UI, and MCP results.</p>
 </blockquote>
 <h4 id="diarize">diarize</h4>
 <p>Whether to enable speaker diarization (identifying who said what) by default. Default: <code>false</code>.</p>
-<p>When enabled, providers that support diarization (OpenAI, Deepgram, Sarvam) will label each speaker in the transcript. You can also enable per-transcription with <code>--diarize</code> without changing this default.</p>
+<p>When enabled, providers that support diarization (OpenAI and Deepgram) will label each speaker in the transcript. You can also enable per-transcription with <code>--diarize</code> without changing this default.</p>
 <blockquote>
-<p><strong>Auto-routing:</strong> When <code>--diarize</code> is used (or this is set to <code>true</code>) without an explicit <code>--provider</code>, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram handles large files natively and produces the most consistent speaker labels. Override with <code>--provider openai</code> if needed.</p>
+<p><strong>Auto-routing:</strong> When <code>--diarize</code> is used (or this is set to <code>true</code>) without an explicit <code>--provider</code>, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram's diarization is native and produces the most consistent speaker labels (files over 25 MB or 30 minutes are still split into 18-minute pieces, and labels are not matched across pieces). Override with <code>--provider openai</code> if needed.</p>
 <p><strong>Automatic speaker detection:</strong> The number of speakers is detected automatically from the audio — you never need to specify how many speakers are in the recording. Deepgram analyzes voice characteristics (pitch, tone, cadence) to distinguish speakers.</p>
 <p><strong>Language tip:</strong> For mostly-English meetings, auto-detect works well. For Hindi or Hinglish (Hindi-English mix), add <code>--language hi-Latn</code> for romanized Latin script output. See <a href="/docs/providers">Providers</a> for the full language guide.</p>
 <p><strong>When to enable:</strong> If you primarily transcribe meetings, interviews, or podcasts with multiple speakers. Leave off for single-speaker content like YouTube videos.</p>
@@ -494,7 +509,7 @@ the Web UI, and MCP results.</p>
 <blockquote>
 <p><strong>Want better quality without the wait?</strong> <code>large-v3-turbo</code> is the sweet spot — close to <code>large-v3</code> accuracy at roughly six times the speed on a CPU, and half the download. Pick <code>distil-large-v3.5</code> only if everything you transcribe is in English.</p>
 </blockquote>
-<p>Change it with <code>anyscribe config set local_model small</code> or from the default-model dropdown inside the Local provider panel in the Web UI. You can only select a model that's been cached — pull others with <code>anyscribe model pull &lt;size&gt;</code>. A one-off override is available via <code>ASCLI_LOCAL_MODEL=medium anyscribe "&lt;url&gt;"</code> (<code>ASCLI_</code> is the legacy env prefix, still honored).</p>
+<p>Change it with <code>anyscribe config set local_model small</code> or from the default-model dropdown inside the Local provider panel in the Web UI. Pull it first with <code>anyscribe model pull &lt;size&gt;</code>; the Web UI only lists cached models, but <code>config set</code> does not check. A one-off override is available via <code>ASCLI_LOCAL_MODEL=medium anyscribe "&lt;url&gt;"</code> (<code>ASCLI_</code> is the legacy env prefix, still honored).</p>
 <blockquote>
 <p><strong>Not set until setup.</strong> This field has no effect until you run <code>anyscribe local setup --model &lt;size&gt;</code> (or the equivalent Web UI button). The field is still present in <code>config.yaml</code> with the default value of <code>base</code>.</p>
 </blockquote>
@@ -568,6 +583,9 @@ anyscribe config set groq_api_key gsk-...
 │   ├── audio/&lt;platform&gt;/                  # Audio files (if keep_media=true)
 │   └── video/&lt;platform&gt;/                  # Video files (anyscribe download)
 ├── sessions/                              # Cached sessions (legacy; no longer used for Instagram)
+├── recovery/                              # Audio kept from failed runs
+├── checkpoints/                           # Chunk progress, so retries resume
+├── tray.pid                               # Running tray companion's process ID
 └── logs/                                  # Processing logs
 </code></pre>
 <blockquote>

@@ -202,6 +202,7 @@ same save — that's what makes the choice stick:</p>
 <p>Hand-editing <code>config.yaml</code> is the usual cause: writing <code>provider:</code> without also
 writing <code>quality: custom</code> leaves the tier in charge.</p>
 <h3 id="unknown-model-whisper-2-for-openai"><code>Unknown model 'whisper-2' for openai.</code></h3>
+<p>(or, for a per-run <code>-m</code>, <code>Unknown model 'whisper-2' for provider 'openai'.</code>)</p>
 <p>That model isn't in the provider's list. anyscribe rejects it before downloading or
 spending anything, and the error names the valid options.</p>
 <pre><code class="language-bash">anyscribe config --json          # each provider's current model and alternatives
@@ -282,7 +283,8 @@ segments.</p>
 <p>Anything over ~30 minutes is split into chunks and transcribed piece by piece,
 then merged. That's normal, not a hang.</p>
 <p><strong>Rough guide:</strong> cloud providers run at roughly real-time speed. Local
-transcription on CPU is 2–5× real-time.</p>
+transcription on CPU ranges from about real time (<code>large-v3</code>) to about 10× faster
+than real time (<code>tiny</code>); the usual <code>base</code> runs about 7× faster.</p>
 <h3 id="audio-left-over-after-a-failed-run">Audio left over after a failed run</h3>
 <p>When a transcription fails <em>after</em> the audio downloaded, anyscribe keeps that audio
 rather than throwing it away, so a retry doesn't re-download it.</p>

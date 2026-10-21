@@ -18,7 +18,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
   - **Calling an API provider** (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — your audio goes to the provider you picked, and nothing else. Your data stays between you and them.
   - **Pulling a Whisper model** (one-time, only if you enable local transcription) — weights download from Hugging Face.
 - **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model base`) = zero network traffic. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
-- No analytics, no phone-home. `anyscribe update --check` reaches PyPI to compare versions, but only when you run it.
+- No analytics, no phone-home. `anyscribe update --check` and `anyscribe doctor` ask PyPI for the latest version, and a download upgrades yt-dlp from PyPI if your copy is over 60 days old. Nothing else reaches out.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL v3 or later](https://img.shields.io/badge/license-AGPL_v3_or_later-blue.svg)](https://github.com/rishmadaan/anyscribe/blob/main/LICENSE)

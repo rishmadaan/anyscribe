@@ -73,7 +73,7 @@ claude mcp add anyscribe -- anyscribe-mcp
 
 **Other hosts** (Cursor and friends) want the same two facts in whatever shape their config file takes: the command is `anyscribe-mcp`, and it needs no arguments.
 
-> **Configure anyscribe first.** The MCP server uses the same `~/.anyscribe/config.yaml` and API keys as the CLI. Run `anyscribe onboard` once before wiring up MCP, or the tools will start by telling your agent there's no provider configured.
+> **Configure anyscribe first.** The MCP server uses the same `~/.anyscribe/config.yaml` and API keys as the CLI. Run `anyscribe onboard` once before wiring up MCP, or the first transcription fails with a missing-API-key error (for example `OPENAI_API_KEY not set for provider 'openai'`).
 
 ## What your agent can reach (skill vs MCP)
 

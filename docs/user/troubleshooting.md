@@ -235,6 +235,8 @@ writing `quality: custom` leaves the tier in charge.
 
 ### `Unknown model 'whisper-2' for openai.`
 
+(or, for a per-run `-m`, `Unknown model 'whisper-2' for provider 'openai'.`)
+
 That model isn't in the provider's list. anyscribe rejects it before downloading or
 spending anything, and the error names the valid options.
 
@@ -346,7 +348,8 @@ Anything over ~30 minutes is split into chunks and transcribed piece by piece,
 then merged. That's normal, not a hang.
 
 **Rough guide:** cloud providers run at roughly real-time speed. Local
-transcription on CPU is 2–5× real-time.
+transcription on CPU ranges from about real time (`large-v3`) to about 10× faster
+than real time (`tiny`); the usual `base` runs about 7× faster.
 
 ### Audio left over after a failed run
 

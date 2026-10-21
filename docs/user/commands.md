@@ -90,13 +90,15 @@ anyscribe onboard
 2. Choose transcription provider (7 options, arrow keys)
 3. Choose that provider's model, if it has more than one (defaults to the first — press Enter to accept)
 4. Enter API key for your chosen provider
-5. Optionally add API keys for other providers
-6. Optionally configure Instagram browser (for cookie-based downloads)
-7. Choose default language (arrow-key selector with common options)
-8. Choose whether to keep audio files after transcription
-9. Choose post-transcription download behavior (never/ask/always)
-10. Choose workspace location (default: `~/anyscribe/`)
-11. Creates your Obsidian workspace
+5. Optionally enable offline/local transcription too
+6. Optionally add API keys for other providers
+7. Optionally configure Instagram browser (for cookie-based downloads)
+8. Choose default language (arrow-key selector with common options)
+9. Choose whether to keep audio files after transcription
+10. Choose what happens to original local files (skip/copy/move/ask)
+11. Choose post-transcription download behavior (never/ask/always)
+12. Choose workspace location (default: `~/anyscribe/`)
+13. Creates your Obsidian workspace
 
 > **Running this from an agent, a script, or CI?** `anyscribe onboard --yes` skips
 > the interactive flow entirely — the arrow-key TUI can't work without a
@@ -151,7 +153,7 @@ anyscribe ~/recordings/meeting.m4a
 anyscribe transcribe
 
 # 4. Copy a URL to your clipboard, then:
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 ```
 
 ### Flags
@@ -161,7 +163,7 @@ anyscribe --clipboard
 | `--quality` | | Quality preset: `accuracy` \| `balanced` \| `cost` \| `free` (picks a provider) | From config (balanced) |
 | `--provider` | `-p` | Explicit provider — overrides `--quality` | From config |
 | `--model` | `-m` | Specific model to use within that provider | The provider's default |
-| `--language` | `-l` | Language code for transcription | `auto` (auto-detect) |
+| `--language` | `-l` | Language code for transcription | From config (`auto`) |
 | `--json` | `-j` | Output result as JSON | Off |
 | `--keep-media` | | Keep the downloaded audio file | From config (false) |
 | `--diarize` | `-d` | Enable speaker diarization (auto-routes to Deepgram if configured) | Off |
@@ -176,8 +178,8 @@ A **provider** is the service that does the transcribing (OpenAI, Deepgram, Groq
 Use `--model` (short: `-m`) when you want a different one for a single run:
 
 ```bash
-# OpenAI's newer model — cheaper and more accurate than the default
-anyscribe "https://youtube.com/watch?v=abc123" -p openai -m gpt-transcribe
+# OpenAI's cheapest model
+anyscribe "https://youtube.com/watch?v=abc123" -p openai -m gpt-4o-mini-transcribe
 
 # Groq's more accurate (slightly slower) model
 anyscribe "https://youtube.com/watch?v=abc123" -p groq -m whisper-large-v3
@@ -242,7 +244,7 @@ anyscribe "https://youtube.com/watch?v=abc123" --quality accuracy  # highest acc
 anyscribe "https://youtube.com/watch?v=abc123" --quality cost      # cheapest (Groq)
 
 # From clipboard
-anyscribe --clipboard
+anyscribe transcribe --clipboard
 
 # Re-transcribe a source that's already in your vault (skip the "already transcribed" shortcut)
 anyscribe "https://youtube.com/watch?v=abc123" --force
@@ -274,32 +276,38 @@ When you use `--json`, anyscribe prints structured JSON to stdout (progress goes
 ```json
 {
   "success": true,
-  "file": "/Users/you/anyscribe/sources/youtube/video-title.md",
-  "title": "Video Title",
-  "platform": "youtube",
-  "duration": "12:34",
-  "language": "en",
-  "word_count": 1500,
-  "provider": "openai",
-  "model": "gpt-transcribe",
-  "cached": false
+  "data": {
+    "file": "/Users/you/anyscribe/sources/youtube/video-title.md",
+    "title": "Video Title",
+    "platform": "youtube",
+    "duration": "12:34",
+    "language": "en",
+    "word_count": 1500,
+    "provider": "openai",
+    "model": "gpt-transcribe",
+    "via": "config",
+    "notes": [],
+    "cached": false
+  },
+  "error": null
 }
 ```
 
-> **The `model` field** tells you which model actually ran — useful when anyscribe switched it for you (e.g. back to `whisper-1` for timestamps).
+> **`data.model`** tells you which model actually ran — useful when anyscribe switched it for you (e.g. back to `whisper-1` for timestamps).
 
-> **The `cached` field:** `false` means anyscribe transcribed the source just now. `true` means the source was already in your vault and anyscribe returned the existing file (`file` points at it) instead of re-transcribing. Add `--force` to make it transcribe fresh.
+> **`data.cached`:** `false` means anyscribe transcribed the source just now. `true` means the source was already in your vault and anyscribe returned the existing file (`data.file` points at it) instead of re-transcribing. Add `--force` to make it transcribe fresh.
 
 On error:
 
 ```json
 {
   "success": false,
+  "data": null,
   "error": "yt-dlp download failed: Video unavailable"
 }
 ```
 
-> **Scripting tip:** Use `--json --quiet` together to get clean JSON with no extra output. Pipe to `jq` for filtering: `anyscribe "url" --json -q | jq '.file'`
+> **Scripting tip:** Use `--json --quiet` together to get clean JSON with no extra output. Pipe to `jq` for filtering: `anyscribe "url" --json -q | jq '.data.file'`
 
 ### Speaker Diarization
 
@@ -308,8 +316,8 @@ The `--diarize` flag enables multi-speaker transcription — anyscribe identifie
 **How it works:**
 - **Automatic speaker detection** — the number of speakers is detected automatically from audio characteristics (pitch, tone, cadence). You never need to specify how many speakers are in the recording.
 - **Speaker labels** — each speaker gets a label (`Speaker 0`, `Speaker 1`, `Speaker 2`, etc.) assigned in the order they first appear.
-- **Auto-routing to Deepgram** — when `--diarize` is used without `-p`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram handles files of any size natively and produces consistent speaker labels. Override with `-p openai` if needed.
-- **No file size limit with Deepgram** — unlike OpenAI (25MB limit for diarization), Deepgram processes the full audio in one shot regardless of length.
+- **Auto-routing to Deepgram** — when `--diarize` is used without `-p`, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram's diarization is native and produces consistent speaker labels. Override with `-p openai` if needed.
+- **Long recordings are split** — files over 25 MB or 30 minutes are split into 18-minute pieces, with Deepgram as with every cloud provider. Each piece is labelled on its own, so on long recordings `Speaker 0` in one piece is not guaranteed to be the same person in the next.
 
 **Language and diarization:**
 - **Auto-detect (default)** — works well for English and English-with-some-Hindi conversations. Use this for most meetings.
@@ -361,13 +369,14 @@ anyscribe batch urls.txt
 | `--quality` | | Quality preset: `accuracy` \| `balanced` \| `cost` \| `free` | From config |
 | `--provider` | `-p` | Override provider (wins over `--quality`) | From config |
 | `--model` | `-m` | Specific model within that provider, applied to every URL in the batch | The provider's default |
-| `--language` | `-l` | Override language | `auto` |
+| `--language` | `-l` | Override language | From config (`auto`) |
 | `--json` | `-j` | Output results as JSON | Off |
 | `--keep-media` | | Keep audio files | From config |
 | `--diarize` | `-d` | Enable speaker diarization | Off |
 | `--force` | `-f` | Re-transcribe sources already in your vault | Off |
 | `--quiet` | `-q` | Suppress progress | Off |
 | `--stop-on-error` | | Stop at first failure | Off (continues) |
+| `--resume` | | Skip entries finished in the previous run of this file (tracked in `<file>.state.json`). Without it, that record is discarded and every entry is attempted again (already-transcribed ones still return `CACHED`) | Off |
 | `--timeout` | | Per-URL timeout in seconds. A URL that runs longer is marked failed (`"timed out after Ns"`) and the batch moves on to the next one | None (no timeout) |
 
 > **Duplicate detection applies here too.** Any source already in your vault is skipped and returned from the existing file — the summary table marks those rows `CACHED` and each such result carries `"cached": true`. This makes it safe to re-run a batch file: only the new entries are actually transcribed. Pass `--force` to re-transcribe everything.
@@ -594,7 +603,7 @@ How to read it:
 | **Default model** | What that provider would use: your pin if you set one, otherwise its first listed model |
 | **Alternatives** | The other models available (names when there are one or two, a count when there are more) |
 | **Key** | `✓` key present · `missing` key needed · `—` no key needed |
-| **Notes** | The quality tier that maps here, `pinned` if you set a model, `N custom` for added OpenRouter models, and the cached size for `local` |
+| **Notes** | The quality tier that maps here, `pinned` if you set a model, `N custom` for added OpenRouter models, and `local_model: <size>` for `local` |
 
 > **This is the command to run when you're not sure what anyscribe will do.** `anyscribe config show` dumps the raw settings file; `anyscribe config` answers "what happens if I hit enter".
 
@@ -657,7 +666,8 @@ The key is `provider_models.` followed by the provider name. Each provider gets 
 If you type a model that provider doesn't have, anyscribe refuses the change and prints the list of valid ones:
 
 ```
-Unknown model 'whisper-2' for openai. Available: gpt-transcribe, whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
+Unknown model 'whisper-2' for openai.
+Available: gpt-transcribe, whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
 ```
 
 > **OpenRouter is the exception.** It accepts any audio-capable model slug, so anyscribe doesn't check it — a typo won't be caught until the request reaches OpenRouter.
@@ -766,13 +776,13 @@ Reports faster-whisper version, ffmpeg presence, cached models, disk usage, and 
 anyscribe local teardown --yes
 ```
 
-Uninstalls faster-whisper via the same method it was installed with, deletes every cached Whisper model, and resets `settings.provider` to `openai` if it was currently `local`. `--yes` is required.
+Uninstalls faster-whisper via the same method it was installed with, deletes every cached Whisper model, resets `provider` to `openai` if it was `local`, and sets `quality` to `custom` if the provider was `local` or the tier was `free`, so runs stop routing to what you just removed. Asks before uninstalling; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 ---
 
 ## anyscribe model
 
-Day-to-day management of the Whisper cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `rm` error out with a hint pointing you at setup).
+Day-to-day management of the Whisper cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `reinstall` error out with a hint pointing you at setup).
 
 Valid sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [providers.md → Local](providers.md) for download sizes, RAM needs, and speed.
 
@@ -802,7 +812,7 @@ Downloads an additional model into the cache. Idempotent — re-running on a cac
 anyscribe model rm tiny --yes
 ```
 
-Deletes a cached model from disk. `--yes` required (destructive action).
+Deletes a cached model from disk. Asks before deleting; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 ### anyscribe model reinstall
 
@@ -810,7 +820,7 @@ Deletes a cached model from disk. `--yes` required (destructive action).
 anyscribe model reinstall base --yes --json
 ```
 
-Delete + re-download in one call. Use when cached weights look corrupted or when you want to force a fresh copy. If the model wasn't cached to begin with, this is equivalent to `anyscribe model pull`. `--yes` is required (destructive).
+Delete + re-download in one call. Use when cached weights look corrupted or when you want to force a fresh copy. If the model wasn't cached to begin with, this is equivalent to `anyscribe model pull`. Asks before deleting; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 Returns `{status: "reinstalled", bytes_freed, bytes_downloaded}` when weights were replaced, or `{status: "downloaded_only"}` when the model wasn't cached.
 
@@ -995,7 +1005,7 @@ Keep these with the skill if you share or modify it.
 
 ## anyscribe update
 
-Update anyscribe to the latest version by pulling from git and reinstalling.
+Update anyscribe to the latest version: `pip install --upgrade` for normal installs, or `git pull` plus reinstall for a cloned (editable) install.
 
 ```bash
 anyscribe update
@@ -1005,7 +1015,7 @@ anyscribe update
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--force` | `-f` | Update even if you have local changes (stashes them first) |
+| `--force` | `-f` | Git (editable) installs only: update even with local changes (stashes them first) |
 | `--check` | `-c` | Only check if an update is available, don't install |
 
 ### Examples
@@ -1017,7 +1027,7 @@ anyscribe update --check
 # Update to latest
 anyscribe update
 
-# Force update (stashes any local changes)
+# Force update (git installs: stashes any local changes)
 anyscribe update --force
 ```
 
@@ -1160,7 +1170,7 @@ Every consequential command follows the same five rules:
 `--json` and `--quiet` (`-q`) together give you nothing but the JSON object:
 
 ```bash
-anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.file'
+anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.data.file'
 ```
 
 The result shape for a transcription is documented under
@@ -1220,7 +1230,7 @@ anyscribe onboard \
 | `--provider` / `-p` | **yes** | none | One of `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or use env var) | none | Stored in `~/.anyscribe/.env`. Prefer setting the env var (e.g. `OPENAI_API_KEY`) to avoid leaking keys into shell history. |
 | `--local-model` | **yes when `--provider=local`** | none | Whisper size. Recommended: `base`. |
-| `--model` / `-m` | no | provider's default | Pin the model for `--provider` (written to `provider_models`). Rejected with the valid list if the provider doesn't offer it. Not for `local` — use `--local-model`. |
+| `--model` | no | provider's default | Pin the model for `--provider` (written to `provider_models`). Rejected with the valid list if the provider doesn't offer it. Not for `local` — use `--local-model`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, or `custom`. Omit it and onboarding writes `custom`, so the provider you just chose is the one that runs. |
 | `--workspace` | no | `~/anyscribe` | Absolute path to the Obsidian vault. |
 | `--language` | no | `auto` | Default language code. |

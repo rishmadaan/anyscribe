@@ -148,11 +148,11 @@ anyscribe providers list    # same model info, provider-focused
 | | OpenAI Whisper | Deepgram Nova | ElevenLabs Scribe | Sarvam AI | Groq | OpenRouter | Local |
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization (auto-selected) + Hinglish | Highest accuracy | Indian languages | Cheapest + fastest | Model flexibility | Offline / free |
-| **Languages** | 99 | 89 | 90+ | 23 Indian + English | 99 | Model-dependent | 99 |
+| **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Model-dependent | 99 |
 | **Timestamps** | Segment-level (`whisper-1`; auto-used when needed) | Word-level | Word-level | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No (via anyscribe) | No | No | No | No |
 | **Pricing** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies by model | Free |
-| **File limit** | 25 MB (auto-chunked) | No hard limit | 25 MB (auto-chunked) | 30s (auto-chunked) | 25 MB (auto-chunked) | 25 MB (auto-chunked) | RAM only |
+| **File limit** | 25 MB (auto-chunked) | 25 MB / 30 min (auto-chunked) | 25 MB (auto-chunked) | 30s (auto-chunked) | 25 MB (auto-chunked) | 25 MB (auto-chunked) | RAM only |
 | **Offline** | No | No | No | No | No | No | Yes |
 | **API key** | Required | Required | Required | Required | Required | Required | Not needed |
 | **Quality tier** | — | `balanced` | `accuracy` | — | `cost` | — | `free` |
@@ -217,7 +217,7 @@ anyscribe config set deepgram_api_key YOUR_KEY    # $200 free credit on signup
 - **Cost:** ~$0.30/hour
 - **Default model:** `nova-3` (auto-falls back to `nova` for `hi-Latn`, which isn't supported on nova-3 yet)
 - **Also available:** `nova-2` — the previous generation. Pin it only if you're comparing against older transcripts: `anyscribe config set provider_models.deepgram nova-2`
-- **No file size limit** — processes files of any length in a single request (unlike OpenAI's 25MB limit)
+- **File limit:** files over 25 MB or 30 minutes are split into 18-minute pieces, like the other cloud providers. Each piece is labelled on its own, so on long recordings `Speaker 0` in one piece is not guaranteed to be the same person in the next.
 - **Diarization:** Native — automatically detects the number of speakers from audio characteristics. No need to specify a speaker count.
 - **Hindi Latin:** Set `--language hi-Latn` for romanized Hindi / Hinglish output
 
@@ -229,11 +229,11 @@ anyscribe config set deepgram_api_key YOUR_KEY    # $200 free credit on signup
 | Mostly Hindi / Hinglish (Hindi-English mix) | `--language hi-Latn` | Outputs romanized Hindi in Latin script, better code-switching |
 | Pure Hindi (want Devanagari) | `--language hi` | Outputs in Devanagari script |
 
-> **When to use:** Best choice for multi-speaker transcripts (meetings, interviews, podcasts). Handles long recordings (3+ hours) without chunking. Excellent for Hinglish content with `--language hi-Latn`. This is the provider anyscribe auto-selects when you use `--diarize`, and what the **`balanced`** quality tier (the default) selects.
+> **When to use:** Best choice for multi-speaker transcripts (meetings, interviews, podcasts). Excellent for Hinglish content with `--language hi-Latn`. This is the provider anyscribe auto-selects when you use `--diarize`, and what the **`balanced`** quality tier (the default) selects.
 
 ### ElevenLabs Scribe
 
-High-accuracy transcription with word-level timestamps and optional speaker diarization (up to 32 speakers).
+High-accuracy transcription with word-level timestamps. anyscribe does not request ElevenLabs speaker labels; use Deepgram for diarization.
 
 ```bash
 anyscribe config set provider elevenlabs
@@ -245,7 +245,7 @@ anyscribe config set provider elevenlabs
 - **File limit:** The ElevenLabs API accepts up to 3 GB, but anyscribe chunks at 25 MB (same as OpenAI) for consistency
 - **Model:** `scribe_v2` (the most accurate model currently measured)
 
-> **When to use:** When you need the highest accuracy, word-level timestamps, or speaker identification. This is what the **`accuracy`** quality tier selects.
+> **When to use:** When you need the highest accuracy or word-level timestamps. This is what the **`accuracy`** quality tier selects.
 
 ### Sarvam AI
 
@@ -355,7 +355,7 @@ Setup installs `faster-whisper` into the same Python environment as anyscribe, d
 anyscribe config set local_model small
 ```
 
-or pick from the dropdown in the Web UI's Local provider panel. (The model has to be cached first — see next section.)
+or pick from the dropdown in the Web UI's Local provider panel. (Pull it first with `anyscribe model pull <size>`; the Web UI only lists cached models, but `config set` does not check.)
 
 **Managing downloaded models** (after setup):
 
@@ -363,7 +363,7 @@ or pick from the dropdown in the Web UI's Local provider panel. (The model has t
 |---------|--------------|
 | `anyscribe model list` | Show all 7 sizes with cache status and disk usage |
 | `anyscribe model pull small` | Download an additional model size |
-| `anyscribe model rm tiny --yes` | Delete a cached model (`--yes` required — destructive) |
+| `anyscribe model rm tiny --yes` | Delete a cached model (asks first; `--yes` skips the prompt) |
 | `anyscribe model info large-v3-turbo` | Inspect a single size |
 
 Or use the Models table inside **Settings → Providers → Local** in the Web UI.
@@ -480,7 +480,7 @@ page — it follows whichever provider you pick as default.
 
 ## Diarization Auto-Routing
 
-When you use `--diarize` without specifying a provider (`-p`), anyscribe automatically switches to **Deepgram** if a Deepgram API key is configured. This is because Deepgram handles large files natively (no chunking needed) and produces the most consistent speaker labels across long recordings.
+When you use `--diarize` without specifying a provider (`-p`), anyscribe automatically switches to **Deepgram** if a Deepgram API key is configured. This is because Deepgram's diarization is native and produces the most consistent speaker labels.
 
 To override and use a specific provider for diarization:
 

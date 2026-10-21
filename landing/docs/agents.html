@@ -105,7 +105,7 @@ pip install -U "anyscribe[mcp]"</code></p>
 </code></pre>
 <p><strong>Other hosts</strong> (Cursor and friends) want the same two facts in whatever shape their config file takes: the command is <code>anyscribe-mcp</code>, and it needs no arguments.</p>
 <blockquote>
-<p><strong>Configure anyscribe first.</strong> The MCP server uses the same <code>~/.anyscribe/config.yaml</code> and API keys as the CLI. Run <code>anyscribe onboard</code> once before wiring up MCP, or the tools will start by telling your agent there's no provider configured.</p>
+<p><strong>Configure anyscribe first.</strong> The MCP server uses the same <code>~/.anyscribe/config.yaml</code> and API keys as the CLI. Run <code>anyscribe onboard</code> once before wiring up MCP, or the first transcription fails with a missing-API-key error (for example <code>OPENAI_API_KEY not set for provider 'openai'</code>).</p>
 </blockquote>
 <h2 id="what-your-agent-can-reach-skill-vs-mcp">What your agent can reach (skill vs MCP)</h2>
 <p>Both paths hit the same engine — the difference is how much of it is exposed.</p>

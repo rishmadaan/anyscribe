@@ -86,7 +86,7 @@ does not. So don't pass `-m gpt-transcribe` for a user who wants timestamps.
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization + Hinglish | Highest accuracy | Indian languages → English | Cheapest + fastest | Model variety | Offline / free |
 | **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Varies | 99 |
-| **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Word-level | Word-level | No | Segment-level | No | Segment-level |
+| **Timestamps** | Segment-level (`whisper-1`; swapped in automatically) | Segment-level (~30-word groups; speaker turns with `--diarize` on Deepgram) | Segment-level (~30-word groups; speaker turns with `--diarize` on Deepgram) | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No | No (Sarvam Batch API only — not integrated) | No | No | No |
 | **Cost** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies | Free |
 | **File limit** | 25 MB | Auto-chunked over 25 MB / 30 min | 25 MB | 30 sec | 25 MB | 25 MB | RAM only |
@@ -140,13 +140,13 @@ Fast, accurate transcription with native speaker diarization and Hindi Latin scr
 
 ## ElevenLabs Scribe (provider: `elevenlabs`)
 
-Premium accuracy with word-level timestamps. anyscribe does not request speaker labels from ElevenLabs; use Deepgram or OpenAI for diarization.
+Premium accuracy. anyscribe groups ElevenLabs' word timings into ~30-word timestamped segments. anyscribe does not request speaker labels from ElevenLabs; use Deepgram or OpenAI for diarization.
 
 - **Model:** scribe_v2 (top-accuracy model; replaced scribe_v1 which ElevenLabs removed 2026-07-09)
 - **Cost:** ~$0.22–0.40/hr depending on plan
 - **Get key:** https://elevenlabs.io/app/settings/api-keys
 
-**When to recommend:** User needs highest accuracy or precise word-level timestamps. This is what the `accuracy` quality tier selects (the default is `balanced` → Deepgram).
+**When to recommend:** User needs the highest accuracy. This is what the `accuracy` quality tier selects (the default is `balanced` → Deepgram).
 
 ## Sarvam AI (provider: `sargam`)
 
@@ -196,7 +196,7 @@ Routes to various AI models via a unified API. Uses audio-capable chat models wi
 
 ## Local / faster-whisper (provider: `local`)
 
-Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached size can trigger a download on the next local run. **Opt-in**: faster-whisper is installed only by `anyscribe local setup`.
+Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached size can trigger a download on the next local run. Installation is **opt-in** through `anyscribe local setup`, onboarding with the local provider, or the Web UI's local setup flow.
 
 - **Engine:** faster-whisper (CTranslate2-based, up to 4x faster than original Whisper)
 - **Recommended model:** `base` (~145 MB, good quality for most use cases)
@@ -216,7 +216,7 @@ anyscribe local setup --model base --yes --json
 2. Installs `faster-whisper` into the same Python env as anyscribe.
 3. Downloads the chosen Whisper model from HuggingFace.
 4. Persists `local_model` in `config.yaml`.
-5. Does not change `provider` or `quality`; run `anyscribe config set provider local` to use it.
+5. Does not change `provider`, `quality` or `diarize`. For one local run pass `-p local` (local has no speaker labels). To make local the default: if the user already uses another provider, ask first; if `diarize` is on in config it must be turned off or runs will still route to Deepgram, so run `anyscribe config set diarize false` and then `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free` (selects local only when diarize is off). Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 Idempotent — re-running with an already-set-up model just updates the default.
 

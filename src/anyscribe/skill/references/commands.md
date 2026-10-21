@@ -551,7 +551,7 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 **Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `base` unless the user asks otherwise.
 
-**Setup does not switch the provider.** `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs away from local (to Deepgram, or to `provider` when no Deepgram key is set). Afterwards run `anyscribe config set provider local` (also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+**Setup does not switch the provider.** Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: if the user already uses another provider, ask first; if `diarize` is on in config it must be turned off or runs will still route to Deepgram, so run `anyscribe config set diarize false` and then `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free` (selects local only when diarize is off). Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 **Exit codes:**
 - `0` — set up (or already set up).

@@ -131,7 +131,7 @@ anyscribe local setup --model base --yes --json
 
 `--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` and inspect `phase`: installation failures (`"phase": "install"`) carry `install.command` and `install.stderr`, the exact pip/pipx command that failed and its captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.); model-download failures (`"phase": "download"`) carry `error`, while `install` describes the preceding installation step.
 
-**Setup does not make local the provider.** It installs and downloads only; `provider` and `quality` are left alone, so the default `balanced` tier keeps routing runs away from local (to Deepgram, or to `provider` when no Deepgram key is set). Afterwards run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
+**Setup does not make local the provider.** It installs and downloads only. Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: if the user already uses another provider, ask first; if `diarize` is on in config it must be turned off or runs will still route to Deepgram, so run `anyscribe config set diarize false` and then `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free` (selects local only when diarize is off). Confirm with `anyscribe config --json`: `resolved.provider` should be `local`.
 
 **When to suggest local setup:**
 
@@ -200,7 +200,7 @@ When the user asks which provider to use, or when you need to suggest one:
 | Hindi with speakers (meetings, calls) | `--diarize --language hi-Latn` | **Default for any Hindi/Hinglish multi-speaker content.** Romanized Latin script output, speaker labels, auto-routes to Deepgram Nova |
 | Mostly English + some Hindi | `--diarize` (no language flag needed) | Auto-detect handles English well, Hindi words transcribed phonetically |
 | Indian languages, English output wanted | **sargam** | 22 Indian languages; it translates to English (`mode=translate`), it does not return the original language. For an original-language transcript use Deepgram (`-p deepgram --language hi` or `hi-Latn`) |
-| Highest accuracy, word timestamps | **elevenlabs** | Word-level timestamps, 90+ languages |
+| High-accuracy transcription | **elevenlabs** | 90+ languages; timestamps come per ~30-word segment, not per word |
 | Offline / no API key / free | **local** | Runs locally with faster-whisper, zero cost |
 | Specific model needed | **openrouter** | Access to various models, but slower and pricier |
 
@@ -345,7 +345,7 @@ When something goes wrong:
 
 ## Safety Rules
 
-1. **Never read or display `~/.anyscribe/.env`** — it contains API keys
+1. **Never read or display `~/.anyscribe/.env`** — it contains API keys (and, on older installs, a leftover Instagram password)
 2. **Use `anyscribe config show`** to display settings (it masks sensitive values)
 3. **Never hardcode API keys** in commands or output
 4. **Never run `anyscribe onboard` without `--yes`** (interactive, takes over the terminal). Tell the user before running the headless form, since it writes config and keys

@@ -163,7 +163,7 @@ The model that ran doesn't return segment timestamps, so there's nothing to rend
 anyscribe config --json     # resolved.provider, resolved.model, resolved.notes
 ```
 
-Deepgram and ElevenLabs give word-level timestamps if the user wants finer granularity than Whisper's segments. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
+anyscribe writes Deepgram and ElevenLabs timestamps per ~30-word segment, so they are not finer than Whisper's segments. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
 
 ### "Next run" isn't the provider I set
 
@@ -272,7 +272,7 @@ OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 3
 
 ### "Groq has no diarization model"
 
-`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). Use `-p deepgram` or `-p openai` for speaker labels, or drop `--diarize`.
+`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). Use `-p deepgram` or `-p openai` for speaker labels, or drop `--diarize`. On a file over 25 MB or 30 min the error instead reads `File is NMB ... OpenAI's diarize endpoint has a 25MB limit` because Groq shares OpenAI's code path. The fix is the same: retry with `-p deepgram --diarize`.
 
 ### Large video taking very long
 

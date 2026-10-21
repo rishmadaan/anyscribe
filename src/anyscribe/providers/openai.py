@@ -112,9 +112,11 @@ class OpenAIProvider(TranscriptionProvider):
                     f"and doesn't support chunking.\n\n"
                     f"Use Deepgram instead (chunks long files and has native speaker detection):\n"
                     f"  anyscribe config set deepgram_api_key YOUR_KEY\n"
-                    f'  anyscribe "{audio_path.name}" -p deepgram --diarize\n\n'
-                    f"Or transcribe without diarization (will chunk automatically):\n"
-                    f'  anyscribe "{audio_path.name}" -p openai'
+                    "  then retry your original URL or file path with -p deepgram --diarize "
+                    "(replacing any existing provider flag)\n\n"
+                    "Or transcribe without speaker labels (long files chunk automatically): "
+                    "retry your original input with -p openai and without --diarize; "
+                    "if diarize is on in config, first run: anyscribe config set diarize false"
                 )
             result = self._parse_response(
                 self._transcribe_diarize(audio_path, language, api_key), diarize=True

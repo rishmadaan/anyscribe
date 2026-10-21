@@ -1,0 +1,7 @@
+# Implementer report, round 3 fix: audit/building-docs commits 4ff970e and 5ed32bdf266680e90d4270bf1a61ae47f12e60c1 (parent 198758d)
+
+4ff970e (7 files, 14+, 12-): 1 whats-automated publish intro reworded (step 9 after upload). 2 downloaders.md step 3 adds the instance to DOWNLOADERS, LocalFileDownloader first (registry.py:11-13, loops at :21, :31). 3 whats-automated "no automatic updates" paragraph replaced with the yt-dlp disclosure (deps.py:275 ensure_ytdlp_current, YTDLP_MAX_AGE_DAYS=60, called from youtube.py:32, instagram.py:70, cli/download.py:115; doctor main.py:365 and update --check main.py:287 call check_for_updates). 4 release example X.Y.Z plus the replace line. 5 providers.md:92 "over 25 MB or 30 minutes" (openai.py:108 needs_chunking; audio.py:26-37). 6 CLAUDE.md:57 and providers.md:140 model-download clause (local.py:88 no local_files_only). 7 release-checklist step 6 gains the gh release create line; troubleshooting row reworded (step 5 is post-publish). 8 architecture.md:173 Auto-migration bullet lists five (migrate.py). 9 journal "runs CI's gates (on Python 3.12)".
+
+5ed32bdf266680e90d4270bf1a61ae47f12e60c1 (lead): architecture.md:128 ElevenLabs "word-level timestamps" -> "word timings grouped into ~30-word timestamped segments" (same class as PR #18 round-2 S1; elevenlabs.py groups into 30-word segments).
+
+Checks: check-docs exit 0; git diff --check clean; tests/test_skill_license.py 2 passed. No src/tests/docs-user/README/landing/workflows/ui changes.

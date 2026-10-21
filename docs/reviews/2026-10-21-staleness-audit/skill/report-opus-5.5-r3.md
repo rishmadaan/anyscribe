@@ -1,0 +1,18 @@
+FIT REVIEW: PR #18 (audit/skill-cli-text), round 3, head 5298f43. Reviewer: Opus 5.5, effort high (Claude lane).
+
+VERDICT: CONDITIONAL on (a) CI on 5298f43, (b) one-line edit to SKILL.md:70 (S1). S2 cheap, same commit; text-only, lead can check by reading.
+
+ROUND 2: Astra S1/Opus S5 FIXED at SKILL.md:134, commands.md:554, providers.md:219; PARTLY overall (SKILL.md:70 still old recipe). Traced resolve.py:53-90: diarize saved true + Deepgram key + provider local alone -> deepgram via "diarize"; after config set diarize false then provider local -> local; quality free -> local (has_key local True since PROVIDER_KEY_ENV["local"] is None); -p local with diarize saved: flag wins, LocalProvider ignores diarize, writer falls back to timestamped layout. Astra S2/Opus S2 FIXED (raise expression evaluated via AST with size_mb=31.4; only size_mb referenced; no filename; deepgram_api_key valid in API_KEY_MAP). Astra S3/Opus S1 FIXED (grep finds only SKILL.md:203 "not per word" and the elevenlabs.py:84 raw-data comment). Astra S4/Opus S4 FIXED (run_setup callers: local_cmd.py:179, onboard.py interactive, onboard_headless.py:271, web/routes/local.py:147). Opus S3 FIXED (troubleshooting.md:275 matches openai.py:111). Opus S6 FIXED. groq.py reorder and React blurb DECLINED-OK; OnboardingWizard.tsx:39 still "99 languages, word-level timestamps" on every branch, needs a tracked follow-up.
+
+NEW
+S1. should-fix. CONFIRMED. SKILL.md:70 row still says "to make local the default, anyscribe config set provider local" without the diarize step. Fix cell: "anyscribe local setup --model base --yes --json (does not switch the provider; to make local the default follow the rule below: ask first if the user already uses another provider, and turn diarize off first if it is on in config) (see rule below)".
+S2. should-fix. CONFIRMED. providers.md:92 "File limit" row says 25 MB for OpenAI/ElevenLabs/Groq/OpenRouter, 30 sec for Sarvam, "Auto-chunked" only for Deepgram; every provider auto-chunks (openai.py:130-138 incl. Groq, elevenlabs.py:66-73, openrouter.py:108-135, Sarvam 28 s); contradicts lines 102 and 173. Replacement row supplied.
+S3. nit. CONFIRMED. providers.md:89 ElevenLabs Timestamps cell copied from Deepgram including "speaker turns with --diarize on Deepgram"; ElevenLabs ignores diarize. Fix: "Segment-level (~30-word groups)".
+S4. nit. CONFIRMED. Generic switch-provider guidance (SKILL.md:66, :183-184 One Knob bullets, providers.md:258) never says a saved diarize true plus a Deepgram key overrides both quality and provider. Add bullet after SKILL.md:184.
+S5. nit. Simplicity: the same 90-word recipe appears three times (SKILL.md:134, commands.md:554, providers.md:219); optional tighter three-step rewrite supplied.
+
+ANSWERS: right instrument; model info test checks repo id vs MODEL_REPOS (tests/test_local_cli.py:317-325), 7 sizes covered; test_skill_license satisfied; every round-3 command example parses.
+
+PENDING OWNER CHECKS: PR #18 description names the model info fix (done); docs/building/providers.md:54 on audit/building-docs said "word timestamps" (fixed in PR #19 round 4); React wizard blurb stale on every branch (follow-up).
+
+NOT RUN: gh pr checks, pytest, ruff, check-docs. INSPECTED: brief, impl r3, ledger, git diff 44fec4c 5298f43; core/resolve.py, quality.py, config_set.py; cli/config_cmd.py, transcribe.py:39-110, main.py:201-227; providers openai/groq/elevenlabs/deepgram/local/openrouter/local_models; cli/models_cmd.py and test; core/onboard_headless.py, local_setup.py and callers, orchestrator.py:120-145; vault/writer.py; skill files; sibling branches via git grep.

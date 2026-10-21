@@ -1,0 +1,74 @@
+# anyscribe skill audit (v0.16.5, HEAD b3cddc1)
+
+Read-only Opus audit. HIGH: Claude would hand the user a command that fails or misread the result. MED: wrong expectation. LOW: incomplete or cosmetic.
+
+Top four: #1 local setup never switches provider; #12/#13 JSON envelope missing; #2/#15 rm relative-path example fails; #14 `anyscribe --clipboard` fails.
+
+## src/anyscribe/skill/SKILL.md
+
+1. HIGH. SKILL.md:70 and 118-140. Local setup section never says setup leaves the provider alone. core/local_setup.py:252-253 "Does NOT change settings.provider". Default quality balanced (settings.py:41) keeps routing to Deepgram (quality.py:26-31, resolve.py:76-78). Add after line 130: "Setup does not make local the provider. Afterwards run `anyscribe config set provider local` (sticks, also writes quality=custom), or `anyscribe config set quality free`, or pass `-p local` / `--quality free` for one run. Confirm with `anyscribe config --json`: `resolved.provider` should be `local`." Table row 70: "`anyscribe local setup --model base --yes --json`, then `anyscribe config set provider local`".
+2. HIGH. SKILL.md:282. `anyscribe rm "sources/youtube/my-video.md" --yes --json   # by path` fails. vault/index.py:143-153 checks a relative path against cwd; otherwise treats arg as slug and searches sources/**/<target>.md (my-video.md.md). Replace with: `anyscribe rm "~/anyscribe/sources/youtube/my-video.md" --yes --json   # absolute path (use the "file" value from transcribe --json)` and "Relative paths only work from inside the workspace folder."
+3. MED. SKILL.md:198. Sarvam recommended for Indian languages but never says it outputs English. sargam.py:63-65 sends "mode": "translate". Replace: "| Indian languages, English output wanted | **sargam** | 22 Indian languages; it translates to English (`mode=translate`), it does not return the original language. For an original-language transcript use Deepgram (`-p deepgram --language hi` or `hi-Latn`) |"
+4. MED. SKILL.md:195 ("no file size limit") and 196 (Deepgram). Deepgram chunks anything over 25 MB or 30 min into 18-min pieces (deepgram.py:89-102, audio.py:9-37). Replace: "Native diarization, auto-detects speaker count; files over 25 MB or 30 min are auto-chunked, so speaker numbering may not stay consistent across chunks."
+5. MED. SKILL.md:68. "Test a provider | `anyscribe providers test <name>`" overstates. cli/config_cmd.py:329-363 only checks key var set and provider class loads; no API call. Replace: "| Check a provider's key is set | `anyscribe providers test <name>` (no API call: a pass does not prove the key is valid or funded) |"
+6. MED. SKILL.md:81-82. install-service / uninstall-service listed without --yes. cli/service_cmd.py:45-46 asks for confirmation unless --yes or --json. Replace with `anyscribe install-service --yes --json` and `anyscribe uninstall-service --yes --json`.
+7. MED. SKILL.md:9. `allowed-tools: Bash(anyscribe *), Bash(scribe *), Read` misses `python -m anyscribe` (line 32 tells Windows users to use it) and `ascli`. Replace: `allowed-tools: Bash(anyscribe *), Bash(scribe *), Bash(ascli *), Bash(python -m anyscribe *), Read`. (Pattern matching for `python -m` unverified.)
+8. LOW-MED. Missing entirely: `anyscribe install-skill [--force]` (cli/main.py:220, skill_cmd.py:50-69; doctor tells users to run it, main.py:343,355,360). Global `--debug` flag (main.py:166-188), only works before the subcommand: `anyscribe --debug transcribe "url"`; bare `anyscribe --debug "url"` fails (main.py:24-27). Add rows: "| Reinstall or refresh this skill | `anyscribe install-skill --force` |" and "| Full traceback plus log for a bug report | `anyscribe --debug transcribe "url"` (writes `~/.anyscribe/logs/scribe.log`) |"
+9. LOW. SKILL.md:194. "General purpose, most languages → openai" conflicts with default balanced→Deepgram and providers.md:18. Replace: "| General purpose | the default `balanced` tier (Deepgram); **openai** if that is the only key the user has |".
+10. LOW. SKILL.md:199. "99 languages" for ElevenLabs; ELEVENLABS_LANGUAGES has 92; providers.md says 90+. Replace: "90+ languages".
+11. LOW. SKILL.md:343. Safety rule 4 contradicts headless rule at 89-116. Replace: "Never run `anyscribe onboard` without `--yes` (interactive, takes over the terminal). Tell the user before running the headless form, since it writes config and keys."
+
+## src/anyscribe/skill/references/commands.md
+
+12. HIGH. commands.md:68-97. Transcribe JSON example is flat; real output is enveloped. cli/transcribe.py:130-151: `{"success": true, "data": {"file","title","platform","duration","language","word_count","provider","model","via","notes","cached"}, "error": null}`. On error (transcribe.py:119-121): `{"success": false, "data": null, "error": "..."}`. Replace both code blocks. Line 87: "Batch `--json` carries `provider`, `model`, `via` and `notes` inside `data`."
+13. HIGH. commands.md:198-210. Batch JSON example also lacks envelope. cli/batch.py:163-181: `{"success": <no failures>, "data": {"total","succeeded","failed","provider","model","via","notes","results":[...]}, "error": null}`. Each result: success, url, cached, file, title, platform, duration, language, word_count, or success, url, error on failure. Add: "Exits 1 if any URL failed" (batch.py:203-204).
+14. HIGH. commands.md:11 and 131. `anyscribe --clipboard` fails "No such option" (main.py:24-27; top-level accepts only --version and --debug, main.py:155-171). Replace: `anyscribe transcribe --clipboard`.
+15. HIGH. commands.md:229. `anyscribe rm "sources/youtube/my-video.md"` fails as #2. Same replacement. Line 246: "deleted" is the matched file path, absolute when found by slug (rm.py:53-56). Replace example with `{"deleted": "/Users/you/anyscribe/sources/youtube/my-video.md"}`.
+16. MED. commands.md:594. onboard flag "`--model` / `-m`"; no -m (cli/onboard.py:398-402). Replace: `--model`.
+17. MED. commands.md:19. `--quality` default "From config (accuracy)". Default is balanced (settings.py:41); headless onboarding writes custom (onboard_headless.py:202). Replace: "From config (`balanced` by default; `custom` after `onboard --yes` without `--quality`)".
+18. MED. commands.md:182-194. Batch flags table missing --quality, --diarize/-d, --resume (batch.py:24-32). Add rows: "`--quality` | | Quality preset for the batch | From config"; "`--diarize` | `-d` | Speaker diarization | Off"; "`--resume` | | Skip URLs already completed, recorded in `<list>.state.json` next to the list; without `--resume` an existing state file is deleted | Off". Language row default "auto" -> "From config".
+19. MED. commands.md:522-543. Local setup: provider not switched (same as #1, add note). Line 534 says "JSON stderr carries the exact command"; with --json the failure is an NDJSON line on stdout `{"status": "failed", ...}` (local_cmd.py:181-183); only exit-2 usage errors go to stderr. Line 543 (teardown) replace: "Uninstalls faster-whisper, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`" (local_setup.py:324-333).
+20. LOW-MED. commands.md:563. "`pull`/`rm` exit 2 ... not set up" wrong: rm does not check; pull and reinstall do (models_cmd.py:121-132, 231-243, 173-178). Replace: "`pull` and `reinstall` exit 2 with ...; `list`, `info` and `rm` still work."
+21. LOW-MED. commands.md:430 `local_model` "(must already be cached)"; same at config.md:69 and providers.md:245. Not enforced: config_set.py:32-39 only checks size against list; local provider loads by repo id (local.py:83-87); faster-whisper downloads on first use. Replace: "Not checked against the cache; an uncached size downloads on the first local run. Run `anyscribe model pull <size>` to download it up front."
+22. LOW. commands.md:473. "Comma-separated or a JSON list (MCP/web)" wrong for MCP: set_config takes value: str (mcp/server.py:405), split on commas (config_set.py:194). Replace: "Comma-separated on the CLI and over MCP `set_config` (a JSON string there would be split on commas)."
+23. LOW. commands.md:604-606. Onboard result/error shapes incomplete. Result JSON also has local_setup and config_file (onboard_headless.py:279-291). Failed local setup prints "status": "partial" on stdout, exits 1. Exit-2 stderr carries error plus choices, or env_var/hint for a missing key, or hint/config_file when already configured (onboard.py:89-103, onboard_headless.py:146-151). Reword.
+
+## src/anyscribe/skill/references/config.md
+
+24. MED. config.md:83. Diarize "Supported by OpenAI, Deepgram, and Sarvam". Sarvam sends no flag (sargam.py:69-70); ElevenLabs none (elevenlabs.py:42-46); Groq raises (groq.py:34-38); quality tier skipped on diarized runs (resolve.py:57-74). Replace: "Supported by OpenAI (gpt-4o-transcribe-diarize, files up to 25 MB / 30 min) and Deepgram. With diarization on and a DEEPGRAM_API_KEY set, anyscribe switches to Deepgram unless `-p` is given; the quality tier is not applied to diarized runs."
+25. LOW-MED. config.md:69. Same caching claim as #21.
+26. LOW. config.md:9-12. File locations table. Line 9 "API keys, passwords": passwords dropped (settings.py:29-30). Line 11 "Logs: Processing logs": only written with --debug (main.py:175-188); activity log is daily/ in vault. Replace with "Debug log (`scribe.log`, only with `--debug`)". Add row: `~/.anyscribe/recovery/`, "audio kept from failed runs, listed by `anyscribe logs`" (paths.py:15).
+27. LOW. config.md:115-116. Sample key prefixes `gsk-...` (Groq keys start gsk_) and `xi-...` (xi-api-key is the header name, elevenlabs.py:51). Replace both with `...`. Same at providers.md:177. (Unverified externally.)
+
+## src/anyscribe/skill/references/providers.md
+
+28. MED. providers.md:143 and 147. ElevenLabs "speaker diarization" / "up to 32 speaker identification" not implemented (elevenlabs.py:42-46; resolve.py:70-74 "elevenlabs can't diarize"; own table line 90 says No). Replace: "Premium accuracy with word-level timestamps. anyscribe does not request speaker labels from ElevenLabs; use Deepgram or OpenAI for diarization." Delete the 32-speaker line.
+29. MED. providers.md:92, 128, 139, 284. Deepgram "No hard limit", "single request", "without chunking", "handles large files natively". Same as #4. :92 "Auto-chunked over 25 MB / 30 min"; :128 "Long files are auto-chunked into 18-min pieces"; :139 "Handles long recordings (auto-chunked)".
+30. MED. providers.md:208-221 and 253. Local setup/teardown need same fixes as #1 and #19. Add step 5: "Does not change `provider` or `quality`; run `anyscribe config set provider local` to use it."
+31. LOW-MED. providers.md:102. OpenAI "Files >25 MB split... Diarize mode uses server-side chunking". Chunking triggers over 25 MB or 30 min (audio.py:26-37). In diarize mode, files over 25 MB or 30 min are refused with an error pointing to Deepgram (openai.py:105-116). Replace: "Files over 25 MB or 30 min split into 18-min segments. Diarize mode sends the whole file (`chunking_strategy=auto`) and refuses files over 25 MB / 30 min, suggesting Deepgram."
+32. LOW. providers.md:88. Sarvam "23 Indian + English" -> "22 Indian + English".
+33. LOW. providers.md:99. OpenAI "Default provider." Replace: "The `provider` setting's default value; the default `balanced` tier routes runs to Deepgram when a Deepgram key exists" (settings.py:38-41).
+
+## src/anyscribe/skill/references/troubleshooting.md
+
+34. MED. troubleshooting.md:246-253. Fix for "faster-whisper not found" is `pip install faster-whisper`, stale. Real error says run `anyscribe local setup --model base` (providers/local.py:61-64). Replace: heading `### "faster-whisper is not installed" (local provider)`, fix `anyscribe local setup --model base --yes --json`.
+35. MED. Errors the code raises that troubleshooting does not cover. Add a section for each: Pre-flight (core/preflight.py:37-90): "ffmpeg not found. Install it:" (brew install ffmpeg / sudo apt install ffmpeg), "ffprobe not found", "Low disk space: NMB free. Need at least 500MB", "Unsupported format: .x", "File not found:". API errors (core/errors.py:85-123): "Invalid or missing API key for <provider>." (fix: `anyscribe config set <provider>_api_key`), "Rate limited by <provider>.", "Transient <provider> server error", "<provider> rejected the request (4xx)". Provider-specific: OpenAI diarize "File is NMB, OpenAI's diarize endpoint has a 25MB limit" (openai.py:108-116); "Groq has no diarization model" (groq.py:34-38).
+36. MED. troubleshooting.md:218-223 ("Provider error"). Step 1 (providers test) cannot tell whether a key is valid. Replace: "1. `anyscribe providers test <name>` confirms the key is set (it makes no API call). 2. If the error says 'Invalid or missing API key', the key is wrong or unfunded: re-set it with `anyscribe config set <provider>_api_key`."
+37. LOW-MED. troubleshooting.md:73. Heading quotes "yt-dlp download failed: Video unavailable"; metadata is fetched first (youtube.py:42), so it usually fails as "yt-dlp metadata failed: ... Video unavailable". Replace: `### "yt-dlp metadata failed" or "yt-dlp download failed" (YouTube)`.
+38. LOW. troubleshooting.md:82, 97, 103. Instagram headings quote raw yt-dlp text; users see friendly messages from instagram.py:143-164. Rename to: "Instagram requires a login to fetch this reel", "This reel is from a private account", "This reel is not available"; add catch-all "Instagram download failed: ...".
+39. LOW. troubleshooting.md:227 and 229. :227 "Videos >30 min are auto-chunked" -> "Audio over 25 MB or 30 min is split into 18-min chunks; Sarvam always uses 28-s chunks" (audio.py:9-20, sargam.py:29). :229 local CPU speed "2-5x" -> MODEL_SPECS ~7x for base down to ~1x for large-v3.
+
+## Side findings in the code (same stale-text class; fix in the same PR)
+
+- cli/onboard.py:390: `--local-model` help lists only 5 sizes; missing large-v3-turbo and distil-large-v3.5.
+- cli/models_cmd.py:333: `model info` hard-codes repo as `Systran/faster-whisper-{size}`; wrong for turbo and distil (MODEL_REPOS, local_models.py:39-40).
+- cli/transcribe.py:66-68 and :222: tell users to "run `anyscribe` without a URL" to get a prompt; bare `anyscribe` prints help (main.py:40, no_args_is_help=True). Correct: `anyscribe transcribe`.
+- cli/config_cmd.py:333: `providers test` docstring claims "connectivity". It does not test it.
+- core/errors.py:71-77: _KEY_URLS has no entry for Groq.
+- core/resolve.py:58-59 comment repeats the "Deepgram never chunks" claim (from the user-docs audit).
+
+## Checked and current
+
+Skill installer and test; decision tree commands and flags; quality and provider resolution; model lists and defaults; local setup flags and NDJSON; onboarding headless flags (apart from -m); duplicates, rm, batch; sources, vault, secrets; MCP set_config/get_config.
+
+Not checked: provider prices, language counts other than Sarvam and ElevenLabs, Web UI parity claims (config.md:41). #27 unverified externally.

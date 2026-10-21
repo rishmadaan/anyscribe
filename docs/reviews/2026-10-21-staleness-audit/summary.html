@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anyscribe staleness audit, 21 to 22 October 2026</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: var(--font-sans, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif); color: var(--foreground, #1b1b1b); line-height: 1.5; font-size: 16px; }
+  main { max-width: 100%; padding: 0 0 32px 0; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px 0; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; margin: 28px 0 8px 0; }
+  h3 { font-size: 1rem; margin: 18px 0 6px 0; }
+  p { margin: 6px 0; max-width: 72ch; }
+  .lede { font-size: 1.05rem; max-width: 72ch; }
+  .muted { color: var(--muted-foreground, #666); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+  .tile { border: 1px solid var(--border, #d9d9d9); border-radius: var(--radius, 10px); padding: 12px 14px; }
+  .tile .n { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+  .tile .l { font-size: 0.85rem; color: var(--muted-foreground, #666); margin-top: 2px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 4px 0; font-size: 0.93rem; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-bottom: 1px solid var(--border, #e2e2e2); }
+  th { font-weight: 600; color: var(--muted-foreground, #555); font-size: 0.85rem; }
+  td.num { text-align: right; white-space: nowrap; }
+  .ok::before { content: "✔ "; }
+  .wait::before { content: "◔ "; }
+  .you::before { content: "➜ "; }
+  .box { border-left: 4px solid var(--accent, #b8860b); padding: 8px 14px; margin: 12px 0; background: var(--card, rgba(127,127,127,0.06)); border-radius: 0 var(--radius, 10px) var(--radius, 10px) 0; }
+  .box h3 { margin-top: 2px; }
+  ul { padding-left: 20px; max-width: 76ch; } li { margin: 4px 0; }
+  code { font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace); font-size: 0.9em; background: var(--code-background, rgba(127,127,127,0.12)); padding: 1px 5px; border-radius: 4px; }
+  details { margin: 8px 0; } summary { cursor: pointer; font-weight: 600; }
+  a { color: var(--accent, #0b6bcb); }
+  .small { font-size: 0.88rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>anyscribe staleness audit</h1>
+<p class="muted">21 to 22 October 2026. Repo <code>rishmadaan/anyscribe</code>, starting point v0.16.5 (commit b3cddc1).</p>
+
+<p class="lede"><strong>The answer:</strong> five pull requests were filed from a full audit, every one went through independent review (two reviewers per round, up to four rounds), and all five are merged on main with CI green on each final commit. Nothing reaches people who <code>pip install anyscribe</code> until a release is cut; that, and three dependency decisions, are the only things left for you.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="n">151</div><div class="l">stale statements found by the audit (plus 6 stale strings in code)</div></div>
+  <div class="tile"><div class="n">5</div><div class="l">pull requests filed, one per area</div></div>
+  <div class="tile"><div class="n">5</div><div class="l">merged after review</div></div>
+  <div class="tile"><div class="n">34</div><div class="l">review reports (17 rounds, 2 reviewers each)</div></div>
+  <div class="tile"><div class="n">~120</div><div class="l">further defects the reviewers caught and the builders fixed</div></div>
+</div>
+<p class="small muted">The tile numbers are counts from the audit reports and the review log in this folder. "~120" is my tally of numbered reviewer findings across all rounds; it is an estimate, not a tracked figure.</p>
+
+<h2>What was out of date, in plain words</h2>
+<p>The code moved fast through versions 0.13 to 0.16 (the rename to anyscribe, local files, Groq, the new MCP SDK, the docs pipeline, the login toggle). The words did not keep up. The automatic checks only catch version numbers, unrendered HTML, a missing MCP tool name and a missing changelog heading. None of them checks whether a documented command, flag or JSON shape matches the code. So the drift was invisible until someone compared every sentence with the code. The things that would have hurt a user:</p>
+<ul>
+  <li><strong>Commands that fail as documented.</strong> <code>anyscribe --clipboard</code> is rejected (it needs <code>transcribe</code> in front). Deleting a transcript by relative path only works from inside the vault. <code>config set workspace_path</code> was shown without a value.</li>
+  <li><strong>Scripts that break.</strong> The documented <code>--json</code> output shape was flat; the real one is wrapped in <code>success / data / error</code>, so <code>jq '.file'</code> returned nothing.</li>
+  <li><strong>The Claude Code skill</strong> (the main way people drive anyscribe) told Claude the wrong commands and the wrong result shapes in 39 places, and never said that setting up local transcription does not switch the provider.</li>
+  <li><strong>Wrong promises.</strong> "Deepgram never chunks" (it splits anything over 25 MB or 30 minutes); "word-level timestamps" from ElevenLabs (anyscribe writes one timestamp per ~30 words); Sarvam returns an English translation, not the original language; <code>--timeout</code> in batch cancels nothing.</li>
+  <li><strong>Installers</strong> still called the tool <code>scribe</code> and hard-coded a Python 3.12 path.</li>
+  <li><strong>Packaging.</strong> A breaking release of the menu library (beaupy 4, 15 Oct) was being pulled into every fresh install; the publish workflow skipped checks that normal CI runs; the GitHub Actions in use run on a deprecated Node; the shipped web UI bundled a router version with an open-redirect advisory.</li>
+  <li><strong>Developer instructions</strong> (CLAUDE.md, AGENTS.md) sent future agents to places that do not exist (a URL regex in the registry, env vars in the wizard) and the file tree was missing 25 files.</li>
+</ul>
+
+<h2>The five pull requests</h2>
+<table>
+  <thead><tr><th>PR</th><th>What it fixes</th><th>Rounds</th><th>Outcome</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://github.com/rishmadaan/anyscribe/pull/15">#15</a> UI dependencies</td><td>Lockfile refreshed inside existing ranges, UI rebuilt, 11 advisories to 0 (includes the bundled router fix).</td><td class="num">1</td><td class="ok">Merged (0bafa4d)</td></tr>
+    <tr><td><a href="https://github.com/rishmadaan/anyscribe/pull/16">#16</a> Installers, CI, pins</td><td>Installers say <code>anyscribe</code>, handle a Python without pip, launch the right executable after a pipx install, print a verified PATH hint. Publish workflow now runs every CI gate before upload. Actions bumped to v7. CI tests Python 3.14. beaupy capped below 4; python-multipart floor raised.</td><td class="num">3</td><td class="ok">Merged (0f3df6b)</td></tr>
+    <tr><td><a href="https://github.com/rishmadaan/anyscribe/pull/17">#17</a> User docs and landing</td><td>README, the six user guides, the landing page and the rendered HTML. About 60 corrections across four rounds: commands, JSON shapes, chunking per provider, language counts, timestamps, network disclosure, what "Test key" really checks, planned versus used model.</td><td class="num">4</td><td class="ok">Merged (4f12588)</td></tr>
+    <tr><td><a href="https://github.com/rishmadaan/anyscribe/pull/18">#18</a> Claude Code skill and CLI strings</td><td>All 39 skill findings plus the CLI's own stale help text and error hints; one real bug fixed with a test (<code>model info</code> reported the wrong download repo for two model sizes).</td><td class="num">4</td><td class="ok">Merged (e672b1e)</td></tr>
+    <tr><td><a href="https://github.com/rishmadaan/anyscribe/pull/19">#19</a> Developer docs and BACKLOG</td><td>CLAUDE.md, AGENTS.md, docs/building, BACKLOG; the publish and auto-update behaviour documented honestly; a journal entry for this audit.</td><td class="num">4</td><td class="ok">Merged (df26152)</td></tr>
+  </tbody>
+</table>
+<p class="small">Merge order mattered: #16 before #19, because #19 documents the publish workflow that #16 introduced. That order was kept.</p>
+
+<h2>How the review worked, and what it caught</h2>
+<p>Each round, two fresh reviewers read the same brief and never saw each other's report: a correctness reviewer (OpenAI's gpt-6-astra, through the Codex command line, read-only sandbox, run from a folder outside the repo) and a fit reviewer (Claude Opus 5.5, as a read-only subagent; it runs with this session's instruction files loaded, so "independent" is weaker on that side). I verified every material finding against the code before anyone built on it, then the builder fixed, then a fresh pair re-checked. Round one found 2 to 21 defects per PR on top of the audit; later rounds found the fixes' own gaps (for example a recipe that still routed runs to Deepgram when a saved <code>diarize: true</code> was set). Rounds stopped when both reviewers said good to go, or at the cap of four.</p>
+<div class="box">
+  <h3>Reviewed by nobody</h3>
+  <p>PR #18 hit the four-round cap with two remaining text findings from the correctness reviewer (two runtime error hints still told the user to keep a model flag the other provider rejects, and one troubleshooting section prescribed a provider reset that a saved diarize setting defeats). I applied those two fixes myself in commit 8859dd8. Tests, lint and the docs gate pass on it, but no reviewer has read those lines. Everything else that merged was re-checked after its last fix.</p>
+</div>
+<p>The full record (every brief, every report, the review log with models and verdicts per round) is committed in <code>docs/reviews/2026-10-21-staleness-audit/</code>. On GitHub: <a href="https://github.com/rishmadaan/anyscribe/tree/main/docs/reviews/2026-10-21-staleness-audit">docs/reviews/2026-10-21-staleness-audit</a>. The audit's own story is in <code>docs/building/journal/2026-10-21-staleness-audit.md</code>.</p>
+
+<h2>What needs you</h2>
+<p>Each of these is a product or dependency decision. I did not build any of them.</p>
+<ol>
+  <li class="you"><strong>Cut a release (recommend 0.16.6).</strong> None of this reaches <code>pip install</code> users, and the corrected skill does not refresh on anyone's machine, until a version bump. The CHANGELOG entry is written at release time by the repo's own rule; I can draft it. Cost: nothing new; the existing <code>scripts/release.sh</code> flow.</li>
+  <li class="you"><strong>yt-dlp now wants a JavaScript runtime for full YouTube support.</strong> Verified on this Mac: with Deno hidden from PATH, yt-dlp still downloads but warns "No supported JavaScript runtime could be found... some formats may be missing." That is degraded, not broken. Options: (a) leave it and document it; (b) depend on <code>yt-dlp[default]</code> (adds a small pure-Python helper package, no runtime) and make <code>anyscribe doctor</code> warn when Deno is missing; (c) also add Deno as a required install. I recommend (b): no new runtime forced on users, and the warning is visible. It adds one Python dependency you can drop again.</li>
+  <li class="you"><strong>Python 3.10 reached end of life this month.</strong> CI still tests it (3.10, 3.12, 3.14 now). Dropping it is a one-line change in two files and lets some dependencies move forward. I recommend dropping it at the next minor release, not in a patch.</li>
+  <li class="you"><strong>A direct <code>starlette&gt;=1.3.1</code> floor.</strong> The web server's HTTP library has known advisories below 1.3.1, and raising the FastAPI floor does not fix that (the reviewer checked). Adding the floor is one line in <code>pyproject.toml</code>; fresh installs already get a new Starlette, so this only protects old environments. Recommend adding it.</li>
+  <li class="you"><strong>Landing page prices.</strong> The Deepgram card says about $0.0043 per minute while the providers guide says about $0.30 per hour. Both predate this audit and I could not verify the real price from code. Someone should check the vendor's page before the next landing edit.</li>
+</ol>
+<p class="small muted">Not yours to act on: the follow-ups below are mine or any implementer's, and none blocks a release.</p>
+
+<h2>Follow-ups I recommend next (small code changes, not done here)</h2>
+<ul>
+  <li><strong>Batch <code>--timeout</code> does not cancel.</strong> The docs now say so honestly; the real fix is to shut the worker pool down without waiting. Then the docs flip back.</li>
+  <li><strong>Groq has no language list</strong> in the web picker. Adding <code>"groq": WHISPER_LANGUAGES</code> is one line; it is recorded in BACKLOG.</li>
+  <li><strong>The web wizard's ElevenLabs card</strong> still says "99 languages, word-level timestamps" (React source, needs a rebuild). The server-side copies were fixed in #18.</li>
+  <li><strong>Groq with <code>--diarize</code> on a long file</strong> shows OpenAI's 25 MB error instead of Groq's own; reorder two checks.</li>
+  <li><strong><code>anyscribe install-skill</code></strong> on a fresh machine prints "already installed" because the startup hook installs first; confusing, cosmetic.</li>
+  <li><strong>The web "Test key" button</strong> only checks that a key was typed for Groq, Sarvam and OpenRouter (OpenRouter's models endpoint answers without a key). Real validation calls would make the button honest.</li>
+  <li><strong>Installer nits</strong> declined at review: <code>apt update</code> failure handling and the wording of one failure message.</li>
+</ul>
+
+<details>
+<summary>Where every artifact lives</summary>
+<ul class="small">
+  <li>Audit reports (four areas): <code>docs/reviews/2026-10-21-staleness-audit/audit/</code></li>
+  <li>Review briefs and reports per PR: <code>docs/reviews/2026-10-21-staleness-audit/{ui-deps,infra,user-docs,skill,building-docs}/</code></li>
+  <li>Review log (round, role, model, target, verdict): <code>docs/reviews/2026-10-21-staleness-audit/review-log.md</code></li>
+  <li>Implementer reports: <code>docs/reviews/2026-10-21-staleness-audit/impl-*.md</code></li>
+  <li>This page: <code>docs/reviews/2026-10-21-staleness-audit/summary.html</code></li>
+  <li>Journal entry: <code>docs/building/journal/2026-10-21-staleness-audit.md</code></li>
+  <li>Scratch copies outside the repo: <code>~/.review-runs/2026-10-21-anyscribe-audit/</code></li>
+</ul>
+</details>
+
+<details>
+<summary>How to see the changes yourself</summary>
+<ul class="small">
+  <li>Open <a href="https://github.com/rishmadaan/anyscribe/pulls?q=is%3Apr+label%3A+audit">github.com/rishmadaan/anyscribe/pulls</a>, click "Closed", and open any of #15 to #19. The "Files changed" tab shows every line.</li>
+  <li>The skill as Claude will read it after the next release: <code>src/anyscribe/skill/SKILL.md</code> on main.</li>
+  <li>To load the corrected skill on this machine before a release: <code>anyscribe install-skill --force</code> from a checkout of main.</li>
+</ul>
+</details>
+
+</main>
+</body>
+</html>

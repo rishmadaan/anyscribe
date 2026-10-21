@@ -1533,7 +1533,7 @@
       </div>
       <div class="af">
         <span class="af-eyebrow">JSON for scripting</span>
-        <p>Transcription and many result-reporting commands accept <code>--json</code>. Check each command's flags. Some startup messages can still appear on stdout.</p>
+        <p>Transcription, batch, config, logs, and model commands take <code>--json</code> for structured results. The docs list every command that supports it.</p>
         <code class="af-cmd"><span class="p">$</span>anyscribe "url" --json</code>
       </div>
     </div>
@@ -1658,7 +1658,7 @@
         <span class="fn">01</span>
         <h3 class="ft">Your AI agent can <span class="it">drive it</span></h3>
         <p class="fd">
-          JSON output on supported commands, with documented limits. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install "anyscribe[mcp]"</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
+          <code>--json</code> on transcription, batch, config, and more. A Claude Code skill that installs itself when Claude is detected. An MCP server (<code>pip install "anyscribe[mcp]"</code>) with ten tools that plugs into Claude Desktop, Cursor, and anything else speaking MCP.
         </p>
       </div>
 
@@ -1836,7 +1836,7 @@
           <h3 class="name">Local <span class="it">whisper</span></h3>
           <span class="tag">free · offline</span>
         </div>
-        <p class="desc">faster-whisper on your own CPU or GPU. No API key, no network, no bills, no audio leaving the building. Perfect for sensitive recordings, or a flight. Set it up once with <code style="font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; color: var(--phosphor);">anyscribe local setup --model base</code>.</p>
+        <p class="desc">faster-whisper on your own CPU or GPU. No API key, no internet needed, no bills, no audio leaving the building. Perfect for sensitive recordings, or a flight. Set it up once with <code style="font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; color: var(--phosphor);">anyscribe local setup --model base</code>.</p>
         <div class="specs">
           <span><b>$0</b> · forever</span>
           <span>offline</span>

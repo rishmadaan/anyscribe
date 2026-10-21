@@ -732,9 +732,10 @@ anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe
 <hr />
 <h2 id="anyscribe-rm">anyscribe rm</h2>
 <p>Delete a transcript from your vault and remove its row from the master index (<code>_index.md</code>). Use this to clean up a transcript you no longer want — or to clear the way before re-transcribing a source from scratch.</p>
-<pre><code class="language-bash">anyscribe rm &quot;sources/youtube/my-video.md&quot;    # by file path
-anyscribe rm my-video                          # by slug
+<pre><code class="language-bash">anyscribe rm ~/anyscribe/sources/youtube/my-video.md    # by full path
+anyscribe rm my-video                                    # by slug
 </code></pre>
+<p>A path is read relative to the folder you're in, so use the full path or just the slug.</p>
 <blockquote>
 <p><strong>What's a "slug"?</strong> The slug is a transcript's filename without the <code>.md</code> extension — the short, dash-separated name anyscribe generates from the title. For a file at <code>sources/youtube/my-video.md</code>, the slug is <code>my-video</code>. You can pass either the full path or just the slug.</p>
 </blockquote>
@@ -768,8 +769,8 @@ anyscribe rm my-video                          # by slug
 </tbody>
 </table>
 <h3 id="examples_3">Examples</h3>
-<pre><code class="language-bash"># Delete by path (you'll be asked to confirm)
-anyscribe rm &quot;sources/youtube/my-video.md&quot;
+<pre><code class="language-bash"># Delete by full path (you'll be asked to confirm)
+anyscribe rm ~/anyscribe/sources/youtube/my-video.md
 
 # Delete by slug, no confirmation prompt
 anyscribe rm my-video --yes
@@ -778,7 +779,7 @@ anyscribe rm my-video --yes
 anyscribe rm my-video --yes --json
 </code></pre>
 <h3 id="json-output_1">JSON Output</h3>
-<pre><code class="language-json">{ &quot;success&quot;: true, &quot;data&quot;: { &quot;deleted&quot;: &quot;sources/youtube/my-video.md&quot; }, &quot;error&quot;: null }
+<pre><code class="language-json">{ &quot;success&quot;: true, &quot;data&quot;: { &quot;deleted&quot;: &quot;/Users/you/anyscribe/sources/youtube/my-video.md&quot; }, &quot;error&quot;: null }
 </code></pre>
 <p>If nothing matches, the slug is ambiguous, or the file can't be deleted, <code>success</code> is <code>false</code>, <code>error</code> explains why, and the command exits with code 1.</p>
 <hr />
@@ -1110,7 +1111,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 </tr>
 <tr>
 <td><strong>Model</strong></td>
-<td>The model that would actually be used right now — your pinned model if you set one, otherwise that provider's default</td>
+<td>Your configured pin for this provider, or its catalog default. A transcription can substitute another model (for example <code>whisper-1</code> for timestamps); check the run plan and its notes with <code>anyscribe config</code>.</td>
 </tr>
 <tr>
 <td><strong>Also available</strong></td>
@@ -1123,7 +1124,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 </tbody>
 </table>
 <blockquote>
-<p><strong><code>Active</code> is your setting, not necessarily what runs.</strong> A <code>quality</code> tier can override it. For what will actually run, use <code>anyscribe config</code>.</p>
+<p><strong>Active is your saved provider setting.</strong> A quality tier can override it. Use <code>anyscribe config</code> to inspect the plan selected from current defaults and any substitution notes.</p>
 </blockquote>
 <h3 id="available-providers">Available Providers</h3>
 <table>
@@ -1255,7 +1256,7 @@ anyscribe model pull large-v3-turbo --json
 </ul>
 <blockquote>
 <p><strong>Managing API keys in Settings → Providers:</strong> expand a provider to add or replace its key. Once a key is saved, a <strong>Remove key</strong> button appears — click it, then click <strong>Remove?</strong> to confirm, and the key is deleted from <code>~/.anyscribe/.env</code>. If a key comes from your shell environment instead (e.g. <code>export OPENAI_API_KEY=…</code> in your shell profile), the Remove button is hidden — anyscribe can't edit your shell, so unset it there instead.</p>
-<p><strong>Web UI label conventions:</strong> the <code>--diarize</code> CLI flag appears as a <code>Multi-speaker</code> toggle, and the <code>diarized</code> output format is labelled <code>with-speaker-labels</code>. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a <code>· needs key</code> suffix and a one-click link to Settings, and the language input is a per-provider dropdown of every supported code (clear the field on focus to see the full list).</p>
+<p><strong>Web UI label conventions:</strong> the <code>--diarize</code> CLI flag appears as a <code>Multi-speaker</code> toggle, and the <code>diarized</code> output format is labelled <code>with-speaker-labels</code>. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a <code>· needs key</code> suffix and a one-click link to Settings, and the language input shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.</p>
 </blockquote>
 <h3 id="flags_8">Flags</h3>
 <table>

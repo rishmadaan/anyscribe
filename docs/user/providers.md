@@ -89,8 +89,7 @@ falls back** to your configured provider rather than failing:
     WARNING: quality 'balanced' wants deepgram but no DEEPGRAM_API_KEY is set — using openai instead
 ```
 
-Run `anyscribe config` (no subcommand) any time to see which provider and model the
-next run will actually use.
+Run `anyscribe config` to see the provider and planned model selected from current defaults, including substitution notes. Per-run flags can change that plan.
 
 ## Choosing a model within a provider
 
@@ -159,7 +158,7 @@ anyscribe providers list    # same model info, provider-focused
 
 > The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.
 >
-> Groq currently has no registered language-picker list. Use `--language` to supply a language code.
+> Groq currently has no bundled language-picker list. Type the code yourself: `--language <code>` on the command line, or in the Web UI's language field.
 
 ## Provider Details
 
@@ -468,12 +467,11 @@ anyscribe providers test elevenlabs
 
 ## Picking a language (Web UI)
 
-The web UI (`anyscribe ui`) shows a per-provider language dropdown so you
-don't have to guess the right code. Open the **Options** accordion on the
-Transcribe page and the language input becomes a combobox listing every
-language that provider supports — `auto` at the top, then the full list.
-You can still type any code, including ones that aren't in the dropdown
-(useful if a provider added a language we haven't refreshed yet).
+Open Transcribe → Options to choose a language. The picker shows
+anyscribe's bundled suggestions where available; these are not an exhaustive
+list of current provider support. Groq currently has no bundled suggestions:
+type the code yourself (`--language en` on the command line, or in the Web
+UI's language field, which accepts typed codes).
 
 OpenRouter is the exception: it accepts a prose instruction in the prompt
 ("Spanish", "French"), not a code, so the input stays free-text for that

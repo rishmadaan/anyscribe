@@ -61,8 +61,8 @@ instagram:                 # Instagram settings
 > **Adding and removing keys:** Set a key with `anyscribe config set openai_api_key sk-…`, or in the Web UI under **Settings → Providers** (expand a provider to paste one). To **remove** a saved key, open that provider in the Web UI and click **Remove key → Remove?** — it's deleted from `.env`. You can also just delete the line from `~/.anyscribe/.env` by hand. A key you set through your shell environment (e.g. `export OPENAI_API_KEY=…` in your shell profile) isn't stored in `.env`, so the Web UI can't remove it — unset it in your shell.
 
 > **Everything here is also editable in the Web UI** (`anyscribe ui` → Settings) —
-> the page opens with a "Next run" banner showing exactly what your next
-> transcription will use and why, the provider and model controls are always
+> the page opens with a "Next run" banner showing the plan selected from
+> current defaults and any substitution notes, the provider and model controls are always
 > visible (a tier just pre-selects them), and a "Downloads & media" section
 > covers download prompting, local-file handling, kept media, and the
 > Instagram cookie browser. Nothing needs the terminal.
@@ -235,7 +235,7 @@ What language to expect in the audio. Default: `auto` (let the API auto-detect).
 
 Use standard language codes: `en` (English), `es` (Spanish), `fr` (French), `hi` (Hindi), `ar` (Arabic), `zh` (Chinese), `ja` (Japanese), `ko` (Korean), etc.
 
-Each provider expects codes in a slightly different format — Whisper-family providers (`openai`, `local`) use ISO 639-1 like `en`, Deepgram uses BCP-47 codes (a standard format for language tags, like `en-US` or `hi-Latn`), and Sarvam uses BCP-47 with `-IN` suffixes like `hi-IN`. If you're unsure, the web UI (`anyscribe ui`) shows a per-provider dropdown of every supported code on the Transcribe page Options panel.
+Each provider expects codes in a slightly different format — Whisper-family providers (`openai`, `local`) use ISO 639-1 like `en`, Deepgram uses BCP-47 codes (a standard format for language tags, like `en-US` or `hi-Latn`), and Sarvam uses BCP-47 with `-IN` suffixes like `hi-IN`. If you're unsure, the language input in the web UI (`anyscribe ui`, Transcribe page, Options panel) shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.
 
 > **When to set this explicitly:** Auto-detection works well for most videos, but if you're transcribing content in a specific language and getting wrong results, setting the language explicitly helps. You can also override per-video: `anyscribe transcribe <url> --language hi`
 

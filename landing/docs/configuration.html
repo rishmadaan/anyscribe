@@ -152,8 +152,8 @@ instagram:                 # Instagram settings
 <p><strong>Note:</strong> API keys are stored in <code>~/.anyscribe/.env</code>, not in config.yaml. Secrets never go in config.</p>
 <p><strong>Adding and removing keys:</strong> Set a key with <code>anyscribe config set openai_api_key sk-…</code>, or in the Web UI under <strong>Settings → Providers</strong> (expand a provider to paste one). To <strong>remove</strong> a saved key, open that provider in the Web UI and click <strong>Remove key → Remove?</strong> — it's deleted from <code>.env</code>. You can also just delete the line from <code>~/.anyscribe/.env</code> by hand. A key you set through your shell environment (e.g. <code>export OPENAI_API_KEY=…</code> in your shell profile) isn't stored in <code>.env</code>, so the Web UI can't remove it — unset it in your shell.</p>
 <p><strong>Everything here is also editable in the Web UI</strong> (<code>anyscribe ui</code> → Settings) —
-the page opens with a "Next run" banner showing exactly what your next
-transcription will use and why, the provider and model controls are always
+the page opens with a "Next run" banner showing the plan selected from
+current defaults and any substitution notes, the provider and model controls are always
 visible (a tier just pre-selects them), and a "Downloads &amp; media" section
 covers download prompting, local-file handling, kept media, and the
 Instagram cookie browser. Nothing needs the terminal.</p>
@@ -345,7 +345,7 @@ the Web UI, and MCP results.</p>
 <h4 id="language">language</h4>
 <p>What language to expect in the audio. Default: <code>auto</code> (let the API auto-detect).</p>
 <p>Use standard language codes: <code>en</code> (English), <code>es</code> (Spanish), <code>fr</code> (French), <code>hi</code> (Hindi), <code>ar</code> (Arabic), <code>zh</code> (Chinese), <code>ja</code> (Japanese), <code>ko</code> (Korean), etc.</p>
-<p>Each provider expects codes in a slightly different format — Whisper-family providers (<code>openai</code>, <code>local</code>) use ISO 639-1 like <code>en</code>, Deepgram uses BCP-47 codes (a standard format for language tags, like <code>en-US</code> or <code>hi-Latn</code>), and Sarvam uses BCP-47 with <code>-IN</code> suffixes like <code>hi-IN</code>. If you're unsure, the web UI (<code>anyscribe ui</code>) shows a per-provider dropdown of every supported code on the Transcribe page Options panel.</p>
+<p>Each provider expects codes in a slightly different format — Whisper-family providers (<code>openai</code>, <code>local</code>) use ISO 639-1 like <code>en</code>, Deepgram uses BCP-47 codes (a standard format for language tags, like <code>en-US</code> or <code>hi-Latn</code>), and Sarvam uses BCP-47 with <code>-IN</code> suffixes like <code>hi-IN</code>. If you're unsure, the language input in the web UI (<code>anyscribe ui</code>, Transcribe page, Options panel) shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.</p>
 <blockquote>
 <p><strong>When to set this explicitly:</strong> Auto-detection works well for most videos, but if you're transcribing content in a specific language and getting wrong results, setting the language explicitly helps. You can also override per-video: <code>anyscribe transcribe &lt;url&gt; --language hi</code></p>
 </blockquote>

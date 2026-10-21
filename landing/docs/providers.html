@@ -195,8 +195,7 @@ falls back</strong> to your configured provider rather than failing:</p>
 <pre><code>→ openai · gpt-transcribe (config)
     WARNING: quality 'balanced' wants deepgram but no DEEPGRAM_API_KEY is set — using openai instead
 </code></pre>
-<p>Run <code>anyscribe config</code> (no subcommand) any time to see which provider and model the
-next run will actually use.</p>
+<p>Run <code>anyscribe config</code> to see the provider and planned model selected from current defaults, including substitution notes. Per-run flags can change that plan.</p>
 <h2 id="choosing-a-model-within-a-provider">Choosing a model within a provider</h2>
 <p>A <strong>provider</strong> is the company doing the transcribing. A <strong>model</strong> is the specific engine inside it. Each provider ships with a default model, so you can skip this section entirely and everything works.</p>
 <p>Change it for one run:</p>
@@ -377,7 +376,7 @@ response format, so <strong>"how do I add a model to Deepgram?" is answered by
 </table>
 <blockquote>
 <p>The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.</p>
-<p>Groq currently has no registered language-picker list. Use <code>--language</code> to supply a language code.</p>
+<p>Groq currently has no bundled language-picker list. Type the code yourself: <code>--language &lt;code&gt;</code> on the command line, or in the Web UI's language field.</p>
 </blockquote>
 <h2 id="provider-details">Provider Details</h2>
 <h3 id="openai-whisper-default">OpenAI Whisper (default)</h3>
@@ -722,12 +721,11 @@ anyscribe config set groq_api_key gsk-...
 <pre><code class="language-bash">anyscribe providers test elevenlabs
 </code></pre>
 <h2 id="picking-a-language-web-ui">Picking a language (Web UI)</h2>
-<p>The web UI (<code>anyscribe ui</code>) shows a per-provider language dropdown so you
-don't have to guess the right code. Open the <strong>Options</strong> accordion on the
-Transcribe page and the language input becomes a combobox listing every
-language that provider supports — <code>auto</code> at the top, then the full list.
-You can still type any code, including ones that aren't in the dropdown
-(useful if a provider added a language we haven't refreshed yet).</p>
+<p>Open Transcribe → Options to choose a language. The picker shows
+anyscribe's bundled suggestions where available; these are not an exhaustive
+list of current provider support. Groq currently has no bundled suggestions:
+type the code yourself (<code>--language en</code> on the command line, or in the Web
+UI's language field, which accepts typed codes).</p>
 <p>OpenRouter is the exception: it accepts a prose instruction in the prompt
 ("Spanish", "French"), not a code, so the input stays free-text for that
 provider.</p>

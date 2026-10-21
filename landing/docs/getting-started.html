@@ -116,7 +116,7 @@
 <p>Opens a local dashboard at <code>http://127.0.0.1:8457</code>. A <strong>setup wizard pops up on first launch</strong>:</p>
 <ol>
 <li><strong>Pick a provider</strong> — cards for <code>openai</code> (general purpose, multilingual), <code>deepgram</code> (fast, native diarization), <code>groq</code> (cheapest and fastest cloud Whisper), <code>elevenlabs</code> (high accuracy, 90+ languages), <code>sargam</code> (Sarvam AI, Indic languages), <code>openrouter</code> (many models, one API), plus <code>local</code> for free offline transcription on your own machine.</li>
-<li><strong>Paste your API key.</strong> The <strong>Test key</strong> button performs a provider check where available; for Groq and Sarvam it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for <code>local</code>.</li>
+<li><strong>Paste your API key.</strong> The <strong>Test key</strong> button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for <code>local</code>.</li>
 <li><strong>Choose whether to also enable offline transcription</strong> — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (<code>-p local</code>).</li>
 <li><strong>Confirm your workspace</strong> — where your transcripts live, default <code>~/anyscribe/</code>.</li>
 </ol>

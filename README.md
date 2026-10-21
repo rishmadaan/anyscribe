@@ -4,7 +4,7 @@
 
 Built agent-first, with three ways to reach it, in priority order:
 
-- **With your AI agent** (primary) — anyscribe ships as a Claude Code skill that installs itself the first time you run a command like `anyscribe ui` (or run `anyscribe install-skill`), plus an MCP server (`pip install "anyscribe[mcp]"`, ten tools) for Claude Desktop, Cursor, and any MCP host. Most commands that report results also take `--json`, and the ones that would stop to ask take `--yes` — for agents, CI, and scripts.
+- **With your AI agent** (primary) — anyscribe ships as a Claude Code skill that installs itself the first time you run a command like `anyscribe ui` when Claude Code is set up on this machine (or run `anyscribe install-skill`), plus an MCP server (`pip install "anyscribe[mcp]"`, ten tools) for Claude Desktop, Cursor, and any MCP host. Most commands that report results also take `--json`, and the ones that would stop to ask take `--yes` — for agents, CI, and scripts.
 - **The web UI** (`anyscribe ui`) — a clean local dashboard at `127.0.0.1:8457` for when you want to see it: paste a URL, watch progress live, browse history, change settings, first-run wizard included.
 - **The CLI** (`anyscribe "<url>"`, `anyscribe onboard`) — one command with arrow-key prompts, for when you want your hands on it.
 

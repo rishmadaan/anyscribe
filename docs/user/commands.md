@@ -418,9 +418,11 @@ anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe
 Delete a transcript from your vault and remove its row from the master index (`_index.md`). Use this to clean up a transcript you no longer want — or to clear the way before re-transcribing a source from scratch.
 
 ```bash
-anyscribe rm "sources/youtube/my-video.md"    # by file path
-anyscribe rm my-video                          # by slug
+anyscribe rm ~/anyscribe/sources/youtube/my-video.md    # by full path
+anyscribe rm my-video                                    # by slug
 ```
+
+A path is read relative to the folder you're in, so use the full path or just the slug.
 
 > **What's a "slug"?** The slug is a transcript's filename without the `.md` extension — the short, dash-separated name anyscribe generates from the title. For a file at `sources/youtube/my-video.md`, the slug is `my-video`. You can pass either the full path or just the slug.
 
@@ -438,8 +440,8 @@ If a slug matches more than one transcript (same title from different platforms,
 ### Examples
 
 ```bash
-# Delete by path (you'll be asked to confirm)
-anyscribe rm "sources/youtube/my-video.md"
+# Delete by full path (you'll be asked to confirm)
+anyscribe rm ~/anyscribe/sources/youtube/my-video.md
 
 # Delete by slug, no confirmation prompt
 anyscribe rm my-video --yes
@@ -451,7 +453,7 @@ anyscribe rm my-video --yes --json
 ### JSON Output
 
 ```json
-{ "success": true, "data": { "deleted": "sources/youtube/my-video.md" }, "error": null }
+{ "success": true, "data": { "deleted": "/Users/you/anyscribe/sources/youtube/my-video.md" }, "error": null }
 ```
 
 If nothing matches, the slug is ambiguous, or the file can't be deleted, `success` is `false`, `error` explains why, and the command exits with code 1.
@@ -722,11 +724,11 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 | Column | Meaning |
 |--------|---------|
 | **Provider** | The service name you'd pass to `--provider` |
-| **Model** | The model that would actually be used right now — your pinned model if you set one, otherwise that provider's default |
+| **Model** | Your configured pin for this provider, or its catalog default. A transcription can substitute another model (for example `whisper-1` for timestamps); check the run plan and its notes with `anyscribe config`. |
 | **Also available** | The other models you could switch to with `-m` or `provider_models`. Models you added yourself are marked `(custom)` |
 | **Active** | Marks your `provider` setting |
 
-> **`Active` is your setting, not necessarily what runs.** A `quality` tier can override it. For what will actually run, use `anyscribe config`.
+> **Active is your saved provider setting.** A quality tier can override it. Use `anyscribe config` to inspect the plan selected from current defaults and any substitution notes.
 
 ### Available Providers
 
@@ -850,7 +852,7 @@ Opens your browser at `http://127.0.0.1:8457` with three views:
 
 > **Managing API keys in Settings → Providers:** expand a provider to add or replace its key. Once a key is saved, a **Remove key** button appears — click it, then click **Remove?** to confirm, and the key is deleted from `~/.anyscribe/.env`. If a key comes from your shell environment instead (e.g. `export OPENAI_API_KEY=…` in your shell profile), the Remove button is hidden — anyscribe can't edit your shell, so unset it there instead.
 
-> **Web UI label conventions:** the `--diarize` CLI flag appears as a `Multi-speaker` toggle, and the `diarized` output format is labelled `with-speaker-labels`. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a `· needs key` suffix and a one-click link to Settings, and the language input is a per-provider dropdown of every supported code (clear the field on focus to see the full list).
+> **Web UI label conventions:** the `--diarize` CLI flag appears as a `Multi-speaker` toggle, and the `diarized` output format is labelled `with-speaker-labels`. Wire values (what gets sent to the API and saved to config) are unchanged — only the display labels are friendlier. The provider dropdown also disables unconfigured providers with a `· needs key` suffix and a one-click link to Settings, and the language input shows bundled suggestions where available. Groq currently has no bundled suggestions; OpenRouter uses free text. See "Picking a language" in the Providers guide.
 
 ### Flags
 

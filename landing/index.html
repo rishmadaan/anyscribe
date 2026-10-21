@@ -1483,7 +1483,7 @@
         does the <span class="amber">scribing.</span>
       </h2>
       <p class="sec-sub">
-        anyscribe was built agent-first. It ships as a Claude Code skill that installs itself the first time you run any anyscribe command, plus an MCP server that plugs into Claude Desktop, Cursor, and any MCP host. You describe the outcome. The agent picks the flags, runs it, and hands back a markdown file you own.
+        anyscribe was built agent-first. It ships as a Claude Code skill that installs itself the first time you run a command like <code>anyscribe ui</code>, plus an MCP server that plugs into Claude Desktop, Cursor, and any MCP host. You describe the outcome. The agent picks the flags, runs it, and hands back a markdown file you own.
       </p>
     </div>
 
@@ -1523,8 +1523,8 @@
     <div class="agent-facts">
       <div class="af">
         <span class="af-eyebrow">Claude Code skill</span>
-        <p>Onboarding detects Claude Code and installs a skill that teaches it how to drive anyscribe: a decision tree, safety rules, and JSON patterns. No config to write.</p>
-        <code class="af-cmd"><span class="p">$</span>anyscribe install-skill <span class="d"># or automatic on first run</span></code>
+        <p>If Claude Code is installed, the first real anyscribe command you run (say, <code>anyscribe ui</code>; not <code>--version</code> or <code>--help</code>) installs a skill that teaches it how to drive anyscribe: a decision tree, safety rules, and JSON patterns. No config to write.</p>
+        <code class="af-cmd"><span class="p">$</span>anyscribe install-skill <span class="d"># or automatic on first real command</span></code>
       </div>
       <div class="af">
         <span class="af-eyebrow">MCP server</span>
@@ -1620,8 +1620,8 @@
         </div>
         <p class="dh">How to Pull the Perfect Espresso</p>
         <div class="dh-meta">transcribed · deepgram · 2 speakers</div>
-        <p class="line"><span class="ts">00:04</span><span class="spk">HOST</span>Today we're going to talk about the three variables that actually matter when you're pulling espresso: grind, dose, and yield.</p>
-        <p class="line"><span class="ts">00:19</span><span class="spk">GUEST</span>Right, and the trick is that none of them matter in isolation. It's the ratio between them that defines the shot.</p>
+        <p class="line"><span class="ts">00:04</span><span class="spk">SPEAKER 0</span>Today we're going to talk about the three variables that actually matter when you're pulling espresso: grind, dose, and yield.</p>
+        <p class="line"><span class="ts">00:19</span><span class="spk">SPEAKER 1</span>Right, and the trick is that none of them matter in isolation. It's the ratio between them that defines the shot.</p>
         <p class="more">… 1,798 more words, timestamped and speaker-labelled</p>
       </div>
     </div>
@@ -1758,10 +1758,10 @@
           <h3 class="name">OpenAI <span class="it">Whisper</span></h3>
           <span class="tag">general</span>
         </div>
-        <p class="desc">The reliable workhorse. General-purpose, multilingual. Defaults to gpt-transcribe and switches to whisper-1 automatically when you want timestamps. Files &gt;25 MB get auto-chunked.</p>
+        <p class="desc">The reliable workhorse. General-purpose, multilingual. Defaults to gpt-transcribe and switches to whisper-1 automatically when you want timestamps. Long files (over 25 MB or 30 min) are split automatically, except with speaker labels, where OpenAI refuses them.</p>
         <div class="specs">
           <span><b>~$0.0045</b> / min</span>
-          <span>99 languages</span>
+          <span>100 language codes</span>
           <span>segment ts</span>
         </div>
       </div>
@@ -1774,7 +1774,7 @@
         <p class="desc">Best-in-class speaker separation. Native diarization, Hinglish support, $200 free credit on signup.</p>
         <div class="specs">
           <span><b>~$0.0043</b> / min</span>
-          <span>89 languages</span>
+          <span>89 language codes</span>
           <span>native diarize</span>
         </div>
       </div>
@@ -1784,11 +1784,11 @@
           <h3 class="name">ElevenLabs <span class="it">Scribe</span></h3>
           <span class="tag">accuracy tier</span>
         </div>
-        <p class="desc">90+ languages, top-tier accuracy on Western European audio. Word-level timestamps.</p>
+        <p class="desc">92 language codes in its list, top-tier accuracy on Western European audio. Timestamps on every ~30-word segment.</p>
         <div class="specs">
           <span><b>~$0.005</b> / min</span>
-          <span>90+ languages</span>
-          <span>word-level ts</span>
+          <span>92 language codes</span>
+          <span>segment ts</span>
         </div>
       </div>
 
@@ -1813,7 +1813,7 @@
         <p class="desc">Purpose-built for Indic languages; renders Hindi, Tamil, Telugu, Bengali and more as an English translation.</p>
         <div class="specs">
           <span><b>rupee-priced</b></span>
-          <span>22 Indic langs</span>
+          <span>22 Indic + English</span>
           <span>made in India</span>
         </div>
       </div>
@@ -1869,7 +1869,7 @@
             <span class="num">i.</span>
             <div>
               <h4>Your vault, your files.</h4>
-              <p>Everything under <code>~/anyscribe/</code>. Change the path with <code>anyscribe config set workspace_path</code>. Point Obsidian at it and it just works.</p>
+              <p>Everything under <code>~/anyscribe/</code>. Change the path with <code>anyscribe config set workspace_path "$HOME/Documents/transcripts"</code>. Point Obsidian at it and it just works.</p>
             </div>
           </div>
           <div class="vault-point">
@@ -1986,7 +1986,7 @@
         <span class="n">ii.</span>
         <div>
           <h4>Ask Claude to transcribe it, or run it yourself</h4>
-          <p>The Claude Code skill installs itself the first time you run any anyscribe command, so you can just ask Claude to transcribe a talk and pull out the notes. Rather type it? Pass a YouTube URL, an Instagram reel, or a local file and the markdown lands in <code>~/anyscribe/</code>. Add <code>--diarize</code> for speaker labels. &nbsp;&nbsp;<code>anyscribe "https://youtube.com/watch?v=&hellip;"</code></p>
+          <p>The Claude Code skill installs itself the first time you run a command like <code>anyscribe ui</code>, so you can just ask Claude to transcribe a talk and pull out the notes. Rather type it? Pass a YouTube URL, an Instagram reel, or a local file and the markdown lands in <code>~/anyscribe/</code>. Add <code>--diarize</code> for speaker labels. &nbsp;&nbsp;<code>anyscribe "https://youtube.com/watch?v=&hellip;"</code></p>
         </div>
       </div>
       <div class="step">

@@ -183,12 +183,15 @@ quality tier prefers a provider whose key you don't have.</p>
 <p><strong>Or pick a tier you have a key for.</strong> <code>anyscribe config</code> shows which keys are
 present in its <code>Key</code> column.</p>
 <h3 id="provider-error-or-general-api-failures"><code>Provider error</code> or general API failures</h3>
-<pre><code class="language-bash">anyscribe providers test                          # is the key valid?
+<pre><code class="language-bash">anyscribe providers test                          # is the key set?
 anyscribe &quot;url&quot; --provider openai                 # does another provider work?
 </code></pre>
-<p>If the test fails, the key is wrong, expired, or the account is out of credit.
-If the test passes but transcription fails, try another provider to isolate
-whether it's the service or the file.</p>
+<p><code>anyscribe providers test</code> only checks that the provider loads and that its API
+key is set. It doesn't contact the provider, so it can't tell you whether the key
+is valid or the account has credit. If the test fails, the key is missing. If it
+passes but transcription fails, the key may be wrong or expired, or the account
+may be out of credit: check your provider's dashboard, and try another provider
+to see whether it's the service or the file.</p>
 <h3 id="next-run-isnt-the-provider-i-set">"Next run" isn't the provider I set</h3>
 <p><code>quality</code> outranks <code>provider</code>. If <code>quality</code> is a tier
 (<code>accuracy</code>/<code>balanced</code>/<code>cost</code>/<code>free</code>), that tier picks the provider and your
@@ -277,22 +280,28 @@ paragraphs, one of these is true:</p>
 </code></pre>
 <p>To force Whisper on every OpenAI run:
 <code>anyscribe config set provider_models.openai whisper-1</code>. Deepgram and ElevenLabs
-give word-level timestamps if you want finer granularity than Whisper's
-segments.</p>
+also give timestamps, in segments of about 30 words; anyscribe doesn't show a
+time for every word.</p>
 <h3 id="a-long-video-is-taking-forever">A long video is taking forever</h3>
-<p>Anything over ~30 minutes is split into chunks and transcribed piece by piece,
-then merged. That's normal, not a hang.</p>
+<p>Anything over 30 minutes (or 25 MB) is split into pieces and transcribed piece by
+piece, then merged. That's normal, not a hang. (Sarvam always works in 28-second
+pieces. OpenAI with <code>--diarize</code> doesn't split: it refuses files that long, so use
+Deepgram for long recordings with speakers.)</p>
 <p><strong>Rough guide:</strong> cloud providers run at roughly real-time speed. Local
 transcription on CPU ranges from about real time (<code>large-v3</code>) to about 10× faster
 than real time (<code>tiny</code>); the usual <code>base</code> runs about 7× faster.</p>
 <h3 id="audio-left-over-after-a-failed-run">Audio left over after a failed run</h3>
 <p>When a transcription fails <em>after</em> the audio downloaded, anyscribe keeps that audio
-rather than throwing it away, so a retry doesn't re-download it.</p>
+rather than throwing it away, so you can retry without downloading it again.</p>
 <pre><code class="language-bash">anyscribe logs
 </code></pre>
 <p>Recovery artifacts appear in their own section, separate from the activity log.
-Re-run <code>anyscribe "url"</code> to retry (add <code>--force</code> if it partly wrote a transcript),
-or just delete the file if you've moved on — nothing else references it.</p>
+To retry without downloading again, transcribe the saved file directly. It lives
+in <code>~/.anyscribe/recovery/</code>, under the name <code>anyscribe logs</code> shows:
+<code>anyscribe "$HOME/.anyscribe/recovery/&lt;name&gt;"</code>. The new transcript then lists the
+source as a local file rather than the original URL. Re-running <code>anyscribe "url"</code>
+also works, but downloads the source again (add <code>--force</code> if it partly wrote a
+transcript). Or just delete the file if you've moved on — nothing else references it.</p>
 <hr />
 <h2 id="local-offline-transcription">Local (offline) transcription</h2>
 <h3 id="faster-whisper-is-not-installed"><code>faster-whisper is not installed</code></h3>
@@ -384,8 +393,9 @@ so if an unrelated process holds the port, give the tray a different one:</p>
 <li>Remove the login auto-start (macOS): <code>anyscribe uninstall-service --yes</code></li>
 <li>Optionally drop the extra packages: <code>pip uninstall pystray Pillow</code></li>
 </ol>
-<p><code>uninstall-service</code> only removes the login item — it doesn't stop a running tray
-or uninstall anyscribe.</p>
+<p><code>uninstall-service</code> removes the login item. If the tray was started by that login
+item, this also stops it (and any server it started). A tray you started by hand
+keeps running until you quit it. anyscribe itself stays installed.</p>
 <hr />
 <h2 id="last-resort">Last resort</h2>
 <h3 id="config-or-workspace-looks-corrupted">Config or workspace looks corrupted</h3>

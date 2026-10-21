@@ -655,7 +655,7 @@ workspace location, the local model, and all your API keys.</p>
 </tr>
 <tr>
 <td>File-splitting limits</td>
-<td>Split if over 25 MB or 30 min, into 18-min pieces</td>
+<td>Most cloud providers split files over 25 MB or 30 min into pieces of about 18 min. Sarvam always uses 28-second pieces. OpenAI with <code>--diarize</code> refuses larger files instead of splitting them</td>
 <td>Driven by the transcription APIs' own upload and timeout limits, not your preference.</td>
 </tr>
 <tr>

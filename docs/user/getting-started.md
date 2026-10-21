@@ -26,7 +26,7 @@ By the end of this guide you will have:
 >
 > All three write the same config and land you in the same place. Transcriptions you start from one surface show up in all of them.
 
-> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up, no telemetry. The only time anyscribe touches the internet is when *you* ask it to: downloading a YouTube/Instagram source you pointed it at, calling whichever transcription API provider you set up, or pulling a Whisper model for offline transcription (once, the first time). Beyond that, `anyscribe update --check` and `anyscribe doctor` ask PyPI for the latest version, and a download upgrades yt-dlp from PyPI if your copy is over 60 days old. Point it at a local file with the local provider and the whole pipeline runs offline — your audio never leaves your machine.
+> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions (through pip's package index, or your git remote for a cloned install) and upgrades yt-dlp when your copy is over 60 days old. Point it at a local file with the local provider and the whole pipeline runs offline — your audio never leaves your machine.
 
 ## What you need
 
@@ -87,9 +87,9 @@ anyscribe ui
 
 Opens a local dashboard at `http://127.0.0.1:8457`. A **setup wizard pops up on first launch**:
 
-1. **Pick a provider** — cards for `openai` (general purpose, multilingual), `deepgram` (fast, native diarization), `groq` (cheapest and fastest cloud Whisper), `elevenlabs` (high accuracy, 99 languages), `sargam` (Sarvam AI, Indic languages), `openrouter` (many models, one API), plus `local` for free offline transcription on your own machine.
+1. **Pick a provider** — cards for `openai` (general purpose, multilingual), `deepgram` (fast, native diarization), `groq` (cheapest and fastest cloud Whisper), `elevenlabs` (high accuracy, 92 language codes in its list), `sargam` (Sarvam AI, Indic languages), `openrouter` (many models, one API), plus `local` for free offline transcription on your own machine.
 2. **Paste your API key** — with a **Test key** button so you know it works before you continue. (Skipped if you picked `local`.)
-3. **Choose whether to also enable offline transcription** — installs faster-whisper and a Whisper model so you have a free fallback.
+3. **Choose whether to also enable offline transcription** — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
 4. **Confirm your workspace** — where your transcripts live, default `~/anyscribe/`.
 
 Click around — no commands to memorize.
@@ -109,7 +109,7 @@ The wizard uses arrow-key selectors — navigate with **↑↓** and press **Ent
 2. **Choose your provider** — 7 options: OpenAI (default), OpenRouter, ElevenLabs, Sarvam AI, Deepgram, Groq, Local.
 3. **Choose that provider's model** — only if it offers more than one. The first is the recommended default; press Enter to take it.
 4. **Enter your API key** — stored locally at `~/.anyscribe/.env`. Never sent anywhere except your provider.
-5. **Also enable offline transcription?** (optional) — installs faster-whisper and a Whisper model as a free fallback.
+5. **Also enable offline transcription?** (optional) — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
 6. **Add more provider keys** (optional) — configure multiple providers now or later.
 7. **Configure Instagram** (optional) — choose which browser to read Instagram cookies from. Needed only for rate-limited or private reels.
 8. **Choose language** — auto-detect (default) or pick a specific language.
@@ -146,7 +146,7 @@ Replace `VIDEO_ID` with a real video ID. A short video (under 5 minutes) is good
 
 > **No subcommand needed.** Just `anyscribe "url"` — it knows you want to transcribe. You can also write `anyscribe transcribe "url"` explicitly, but it's not required.
 
-> **Always wrap URLs in quotes** (`"..."`). Shells like zsh break URLs with `?` in them. Or run `anyscribe` with no URL and paste it when prompted — no quoting needed.
+> **Always wrap URLs in quotes** (`"..."`). Shells like zsh break URLs with `?` in them. Or run `anyscribe transcribe` with no URL and paste it when prompted — no quoting needed.
 
 You'll see:
 

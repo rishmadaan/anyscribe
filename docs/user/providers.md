@@ -148,14 +148,16 @@ anyscribe providers list    # same model info, provider-focused
 | | OpenAI Whisper | Deepgram Nova | ElevenLabs Scribe | Sarvam AI | Groq | OpenRouter | Local |
 |---|---|---|---|---|---|---|---|
 | **Best for** | General purpose | Diarization (auto-selected) + Hinglish | Highest accuracy | Indian languages | Cheapest + fastest | Model flexibility | Offline / free |
-| **Languages** | 99 | 89 | 90+ | 22 Indian + English | 99 | Model-dependent | 99 |
-| **Timestamps** | Segment-level (`whisper-1`; auto-used when needed) | Word-level | Word-level | No | Segment-level | No | Segment-level |
+| **Bundled language list** | 100 codes | 89 codes (languages and modes) | 92 codes | 22 Indian + English | 100 codes (Whisper's list) | Model-dependent | 100 codes (Whisper's list) |
+| **Timestamps** | Segment-level (`whisper-1`; auto-used when needed) | Segments of ~30 words (speaker turns with `--diarize`) | Segments of ~30 words | No | Segment-level | No | Segment-level |
 | **Diarization** | Yes (`--diarize`) | Yes (`--diarize`) | No (via anyscribe) | No | No | No | No |
 | **Pricing** | ~$0.18–0.36/hr (by model) | ~$0.30/hr | ~$0.22–0.40/hr | ~$0.35/hr | ~$0.04/hr | Varies by model | Free |
-| **File limit** | 25 MB (auto-chunked) | 25 MB / 30 min (auto-chunked) | 25 MB (auto-chunked) | 30s (auto-chunked) | 25 MB (auto-chunked) | 25 MB (auto-chunked) | RAM only |
+| **Long files** | Split over 25 MB / 30 min (with `--diarize`: refused instead) | Split over 25 MB / 30 min | Split over 25 MB / 30 min | Always 28-second pieces | Split over 25 MB / 30 min | Split over 25 MB / 30 min | RAM only |
 | **Offline** | No | No | No | No | No | No | Yes |
 | **API key** | Required | Required | Required | Required | Required | Required | Not needed |
 | **Quality tier** | — | `balanced` | `accuracy` | — | `cost` | — | `free` |
+
+> The language numbers are the sizes of the language lists that ship with anyscribe (what the language picker offers). They are not a promise of what each provider supports today.
 
 ## Provider Details
 
@@ -170,7 +172,7 @@ anyscribe config set provider openai
 - **API key env var:** `OPENAI_API_KEY`
 - **Get a key:** [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - **Cost:** $0.003–$0.006 per minute depending on the model (see below)
-- **File limit:** 25 MB for every model — anyscribe automatically chunks larger files into 18-minute segments
+- **File limit:** files over 25 MB or 30 minutes are split automatically into pieces of about 18 minutes. With `--diarize` there is no splitting: OpenAI refuses files over either limit, so use Deepgram for long recordings with speakers
 - **Default model:** `gpt-transcribe`
 - **Diarization:** Yes — use `--diarize` flag to enable speaker-labeled transcripts
 
@@ -217,7 +219,7 @@ anyscribe config set deepgram_api_key YOUR_KEY    # $200 free credit on signup
 - **Cost:** ~$0.30/hour
 - **Default model:** `nova-3` (auto-falls back to `nova` for `hi-Latn`, which isn't supported on nova-3 yet)
 - **Also available:** `nova-2` — the previous generation. Pin it only if you're comparing against older transcripts: `anyscribe config set provider_models.deepgram nova-2`
-- **File limit:** files over 25 MB or 30 minutes are split into 18-minute pieces, like the other cloud providers. Each piece is labelled on its own, so on long recordings `Speaker 0` in one piece is not guaranteed to be the same person in the next.
+- **File limit:** files over 25 MB or 30 minutes are split into pieces of about 18 minutes. Each piece is labelled on its own, so on long recordings `Speaker 0` in one piece is not guaranteed to be the same person in the next.
 - **Diarization:** Native — automatically detects the number of speakers from audio characteristics. No need to specify a speaker count.
 - **Hindi Latin:** Set `--language hi-Latn` for romanized Hindi / Hinglish output
 
@@ -233,7 +235,7 @@ anyscribe config set deepgram_api_key YOUR_KEY    # $200 free credit on signup
 
 ### ElevenLabs Scribe
 
-High-accuracy transcription with word-level timestamps. anyscribe does not request ElevenLabs speaker labels; use Deepgram for diarization.
+High-accuracy transcription. Timestamps come in segments of about 30 words (anyscribe groups ElevenLabs' word timings; it doesn't show a time for every word). anyscribe does not request ElevenLabs speaker labels; use Deepgram for diarization.
 
 ```bash
 anyscribe config set provider elevenlabs
@@ -242,10 +244,10 @@ anyscribe config set provider elevenlabs
 - **API key env var:** `ELEVENLABS_API_KEY`
 - **Get a key:** [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)
 - **Cost:** ~$0.22–0.40/hour depending on plan
-- **File limit:** The ElevenLabs API accepts up to 3 GB, but anyscribe chunks at 25 MB (same as OpenAI) for consistency
+- **File limit:** The ElevenLabs API accepts up to 3 GB, but anyscribe splits files over 25 MB or 30 minutes into pieces of about 18 minutes, the same as OpenAI
 - **Model:** `scribe_v2` (the most accurate model currently measured)
 
-> **When to use:** When you need the highest accuracy or word-level timestamps. This is what the **`accuracy`** quality tier selects.
+> **When to use:** When you need the highest accuracy. This is what the **`accuracy`** quality tier selects.
 
 ### Sarvam AI
 
@@ -283,10 +285,10 @@ anyscribe config set groq_api_key gsk-...
 - **API key env var:** `GROQ_API_KEY`
 - **Get a key:** [console.groq.com/keys](https://console.groq.com/keys)
 - **Cost:** ~$0.04/hour — the cheapest cloud provider
-- **File limit:** 25 MB (auto-chunked, same as OpenAI)
+- **File limit:** files over 25 MB or 30 minutes are split into pieces of about 18 minutes, the same as OpenAI
 - **Default model:** `whisper-large-v3-turbo` — the fastest and cheapest
 - **Also available:** `whisper-large-v3` — more accurate, a bit slower, and Groq allows bigger uploads for it. Worth switching to if the turbo model is dropping words: `anyscribe config set provider_models.groq whisper-large-v3`
-- **Diarization:** No — use the `accuracy` or `balanced` tier (or `--provider deepgram`) for speaker labels
+- **Diarization:** No. For speaker labels, add a Deepgram key and run `anyscribe "<url>" --provider deepgram --diarize`
 
 > **When to use:** the **`cost`** quality tier maps here. Great for bulk, low-cost transcription where you don't need speaker labels. Fast enough that long files fly through.
 
@@ -301,7 +303,7 @@ anyscribe config set provider openrouter
 - **API key env var:** `OPENROUTER_API_KEY`
 - **Get a key:** [openrouter.ai/keys](https://openrouter.ai/keys)
 - **Cost:** Varies by model (per-token pricing, generally more expensive than dedicated STT)
-- **File limit:** 25 MB (auto-chunked, same as OpenAI)
+- **File limit:** files over 25 MB or 30 minutes are split into pieces of about 18 minutes, the same as OpenAI
 - **No timestamps** — returns plain text only
 - **Default model:** `openai/gpt-audio-mini`
 - **Also suggested:** `google/gemini-2.5-flash-lite`, `google/gemini-2.5-flash`, `google/gemini-3-flash-preview`, `mistralai/voxtral-small-24b-2507`, `openai/gpt-audio`

@@ -396,7 +396,7 @@ anyscribe transcribe --clipboard
 <td><code>--model</code></td>
 <td><code>-m</code></td>
 <td>Specific model to use within that provider</td>
-<td>The provider's default</td>
+<td>Your pinned model for that provider if set, else its default (may be switched automatically)</td>
 </tr>
 <tr>
 <td><code>--language</code></td>
@@ -420,7 +420,7 @@ anyscribe transcribe --clipboard
 <td><code>--diarize</code></td>
 <td><code>-d</code></td>
 <td>Enable speaker diarization (auto-routes to Deepgram if configured)</td>
-<td>Off</td>
+<td>From config (<code>false</code> unless you set <code>diarize: true</code>)</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
@@ -542,7 +542,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json
 }
 </code></pre>
 <blockquote>
-<p><strong><code>data.model</code></strong> tells you which model actually ran — useful when anyscribe switched it for you (e.g. back to <code>whisper-1</code> for timestamps).</p>
+<p><strong><code>data.model</code></strong> is the model anyscribe picked for the run, including its automatic switch to <code>whisper-1</code> for timestamps. The provider can still call a different model for some jobs: Deepgram uses <code>nova</code> for <code>hi-Latn</code>, and OpenAI uses <code>gpt-4o-transcribe-diarize</code> for <code>--diarize</code>. When that happens, <code>data.notes</code> says so. For a cached result, <code>data.model</code> reflects today's settings, not the model that made the original transcript. For local runs it is usually <code>null</code>.</p>
 <p><strong><code>data.cached</code>:</strong> <code>false</code> means anyscribe transcribed the source just now. <code>true</code> means the source was already in your vault and anyscribe returned the existing file (<code>data.file</code> points at it) instead of re-transcribing. Add <code>--force</code> to make it transcribe fresh.</p>
 </blockquote>
 <p>On error:</p>
@@ -553,7 +553,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json
 }
 </code></pre>
 <blockquote>
-<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to get clean JSON with no extra output. Pipe to <code>jq</code> for filtering: <code>anyscribe "url" --json -q | jq '.data.file'</code></p>
+<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to hide the usual progress output, then pipe to <code>jq</code>: <code>anyscribe "url" --json -q | jq '.data.file'</code>. One catch: a few startup messages can still land in that output. The common one is the automatic yt-dlp update, which runs when your yt-dlp is over 60 days old. When that happens, <code>jq</code> can't read that run's output.</p>
 </blockquote>
 <h3 id="speaker-diarization">Speaker Diarization</h3>
 <p>The <code>--diarize</code> flag enables multi-speaker transcription — anyscribe identifies who said what and labels each turn.</p>
@@ -561,7 +561,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json
 - <strong>Automatic speaker detection</strong> — the number of speakers is detected automatically from audio characteristics (pitch, tone, cadence). You never need to specify how many speakers are in the recording.
 - <strong>Speaker labels</strong> — each speaker gets a label (<code>Speaker 0</code>, <code>Speaker 1</code>, <code>Speaker 2</code>, etc.) assigned in the order they first appear.
 - <strong>Auto-routing to Deepgram</strong> — when <code>--diarize</code> is used without <code>-p</code>, anyscribe automatically switches to Deepgram if a Deepgram API key is configured. Deepgram's diarization is native and produces consistent speaker labels. Override with <code>-p openai</code> if needed.
-- <strong>Long recordings are split</strong> — files over 25 MB or 30 minutes are split into 18-minute pieces, with Deepgram as with every cloud provider. Each piece is labelled on its own, so on long recordings <code>Speaker 0</code> in one piece is not guaranteed to be the same person in the next.</p>
+- <strong>Long recordings</strong> — Deepgram splits files over 25 MB or 30 minutes into pieces of about 18 minutes. Each piece is labelled on its own, so on long recordings <code>Speaker 0</code> in one piece is not guaranteed to be the same person in the next. OpenAI's diarization can't split at all: it refuses files over 25 MB or 30 minutes, so use Deepgram for long recordings.</p>
 <p><strong>Language and diarization:</strong>
 - <strong>Auto-detect (default)</strong> — works well for English and English-with-some-Hindi conversations. Use this for most meetings.
 - <strong><code>--language hi-Latn</code></strong> — use when the conversation is predominantly Hindi or Hinglish. Outputs romanized Hindi in Latin script instead of Devanagari. Deepgram handles code-switching (Hindi-English mixing) well in this mode.
@@ -640,7 +640,7 @@ anyscribe &quot;url&quot; --diarize --language hi-Latn     # Hindi / Hinglish
 <td><code>--model</code></td>
 <td><code>-m</code></td>
 <td>Specific model within that provider, applied to every URL in the batch</td>
-<td>The provider's default</td>
+<td>Your pinned model for that provider if set, else its default (may be switched automatically)</td>
 </tr>
 <tr>
 <td><code>--language</code></td>
@@ -664,7 +664,7 @@ anyscribe &quot;url&quot; --diarize --language hi-Latn     # Hindi / Hinglish
 <td><code>--diarize</code></td>
 <td><code>-d</code></td>
 <td>Enable speaker diarization</td>
-<td>Off</td>
+<td>From config (<code>false</code> unless you set <code>diarize: true</code>)</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
@@ -693,7 +693,7 @@ anyscribe &quot;url&quot; --diarize --language hi-Latn     # Hindi / Hinglish
 <tr>
 <td><code>--timeout</code></td>
 <td></td>
-<td>Per-URL timeout in seconds. A URL that runs longer is marked failed (<code>"timed out after Ns"</code>) and the batch moves on to the next one</td>
+<td>Per-URL time limit in seconds. A URL that runs longer is reported as failed (<code>"timed out after Ns"</code>), but only after its work finishes: the batch waits for it first. See the note under Examples</td>
 <td>None (no timeout)</td>
 </tr>
 </tbody>
@@ -720,14 +720,14 @@ anyscribe batch urls.txt --stop-on-error
 # JSON output for scripting
 anyscribe batch urls.txt --json
 
-# Cap each URL at 5 minutes — slow ones fail and the batch keeps going
+# Report any URL that takes longer than 5 minutes as failed
 anyscribe batch urls.txt --timeout 300
 
 # Run the whole batch on a cheaper model
 anyscribe batch urls.txt -p openai -m gpt-4o-mini-transcribe
 </code></pre>
 <blockquote>
-<p><strong>A timed-out URL doesn't stop cleanly mid-download or mid-transcription</strong> — anyscribe can't kill that work outright, so it abandons it and moves on. This is fine for a normal batch run; just know the timed-out attempt may still be using network/API resources briefly in the background.</p>
+<p><strong><code>--timeout</code> doesn't cancel anything.</strong> anyscribe can't stop a download or transcription once it has started. When a URL goes past the limit, the batch still waits for that work to finish, then marks the URL as failed and moves on. So a stuck URL can still hold up the batch, and the "failed" attempt may still save a transcript and use API credit.</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-rm">anyscribe rm</h2>
@@ -1153,7 +1153,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 <tr>
 <td><code>elevenlabs</code></td>
 <td><code>ELEVENLABS_API_KEY</code></td>
-<td>High accuracy, 99 languages</td>
+<td>High accuracy, 92 language codes in its list</td>
 </tr>
 <tr>
 <td><code>sargam</code></td>
@@ -1391,7 +1391,7 @@ anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&
 </blockquote>
 <pre><code class="language-bash">anyscribe uninstall-service
 </code></pre>
-<p>Unloads and deletes the LaunchAgent plist. This only removes the auto-start — it doesn't uninstall anyscribe itself or stop a tray that's currently running.</p>
+<p>Unloads and deletes the LaunchAgent plist (the file that starts the tray at login). If that login item started the tray you're running now, this also stops that tray and any server it started. A tray you started yourself with <code>anyscribe tray</code> keeps running until you quit it. anyscribe itself stays installed.</p>
 <h3 id="flags_11">Flags</h3>
 <table>
 <thead>
@@ -1419,7 +1419,7 @@ anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&
 anyscribe uninstall-service --yes      # no prompt
 </code></pre>
 <blockquote>
-<p><strong>Fully removing the tray?</strong> <code>anyscribe uninstall-service</code> stops it from auto-starting at login. If a tray is currently running, quit it separately from its menu (or Ctrl+C the terminal it's running in).</p>
+<p><strong>Fully removing the tray?</strong> <code>anyscribe uninstall-service</code> stops it from starting at login, and stops a tray that was started that way. A tray you started yourself keeps running: quit it from its menu (or Ctrl+C the terminal it's running in).</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-install-skill">anyscribe install-skill</h2>
@@ -1578,30 +1578,40 @@ just by people. Everything an automated caller needs is collected here.</p>
 yourself, start at <a href="/docs/agents">Use anyscribe from your AI agent</a> — the skill and
 the MCP server already know all of this.</p>
 <h3 id="the-contract">The contract</h3>
-<p>Every consequential command follows the same five rules:</p>
+<p>Most commands follow these rules. The details differ from command to command,
+so check each command's flags table:</p>
 <ul>
-<li><strong><code>--json</code> on every command that reports a result.</strong> Machine-parseable output
-  on stdout; humans ignore it. Progress and status lines go to stderr, so
-  <code>--json</code> output is never polluted.</li>
-<li><strong><code>--yes</code> (<code>-y</code>) for non-interactive runs.</strong> Anything that would stop to ask
-  "are you sure?" refuses to run without <code>--yes</code> when there's no TTY — that is,
-  when an agent or script is calling it. This is deliberate: a hung prompt an
-  agent can't see is worse than a clean failure.</li>
+<li><strong><code>--json</code> where a command lists it.</strong> Many commands that report a result take
+  <code>--json</code> (the list is under "Quiet, parseable output" below). Some don't, such
+  as <code>anyscribe doctor</code> and <code>anyscribe providers test</code>. Progress lines are kept
+  out of the JSON where possible, but see the catch below.</li>
+<li><strong><code>--yes</code> (<code>-y</code>) for non-interactive runs.</strong> Commands that would stop to ask
+  "are you sure?" refuse to run without <code>--yes</code> when there's no terminal, which
+  is the case when an agent or script calls them. A hung prompt an agent can't
+  see is worse than a clean failure. One exception: <code>install-service</code> and
+  <code>uninstall-service</code> also skip the question when you pass <code>--json</code>.</li>
 <li><strong>No silent defaults for choices an agent should make explicitly.</strong> For
   example <code>anyscribe local setup</code> always requires <code>--model</code>; the CLI will never
   pick a model size on your behalf. Where there's a recommended value, it's
   documented so an agent knows what to pass.</li>
-<li><strong>Structured exit codes.</strong> <code>0</code> success · <code>1</code> operational failure · <code>2</code> usage
-  error. On exit <code>2</code>, stderr carries a JSON payload naming the missing or
-  invalid field.</li>
+<li><strong>Exit codes.</strong> <code>0</code> success · <code>1</code> operational failure · <code>2</code> usage error. Some
+  commands also print a JSON error on exit <code>2</code>, but not all, so don't count on
+  parsing it.</li>
 <li><strong>Prefer environment variables for secrets.</strong> Passing <code>--api-key</code> on the
   command line leaks it into shell history and process listings. Set
   <code>OPENAI_API_KEY</code>, <code>DEEPGRAM_API_KEY</code>, etc. in the environment instead.</li>
 </ul>
 <h3 id="quiet-parseable-output">Quiet, parseable output</h3>
-<p><code>--json</code> and <code>--quiet</code> (<code>-q</code>) together give you nothing but the JSON object:</p>
+<p><code>--json</code> and <code>--quiet</code> (<code>-q</code>) together hide the usual progress output, leaving
+the JSON object:</p>
 <pre><code class="language-bash">anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json --quiet | jq -r '.data.file'
 </code></pre>
+<blockquote>
+<p><strong>One catch:</strong> a few startup messages can still land in that output. The
+common one is the automatic yt-dlp update, which runs when your yt-dlp is over
+60 days old. When it happens, <code>jq</code> can't read that run's output. The example
+above assumes no such message appears.</p>
+</blockquote>
 <p>The result shape for a transcription is documented under
 <a href="#json-output">JSON Output</a>. Machine-readable output is also available from
 <code>anyscribe config --json</code>, <code>anyscribe providers list --json</code>, <code>anyscribe logs --json</code>,
@@ -1609,12 +1619,13 @@ the MCP server already know all of this.</p>
 <code>anyscribe local status --json</code>.</p>
 <p>Two fields matter most when scripting a transcription:</p>
 <ul>
-<li><strong><code>cached</code></strong> — <code>true</code> means the source was already in the vault and anyscribe
-  returned the existing file instead of spending API credits. Pass <code>--force</code> if
-  you want a fresh run regardless.</li>
-<li><strong><code>model</code></strong> — the model that <em>actually</em> ran, which isn't always the one you
-  asked for (anyscribe swaps in a timestamp-capable model when your output format
-  needs one).</li>
+<li><strong><code>data.cached</code></strong> — <code>true</code> means the source was already in the vault and
+  anyscribe returned the existing file instead of spending API credits. Pass
+  <code>--force</code> if you want a fresh run regardless.</li>
+<li><strong><code>data.model</code></strong> — the model anyscribe picked for the run, which isn't always
+  the one you asked for (it swaps in a timestamp-capable model when your output
+  format needs one). The provider may still call a different model for some jobs;
+  <code>data.notes</code> says when. Ignore it when <code>data.cached</code> is <code>true</code>.</li>
 </ul>
 <h3 id="headless-onboarding">Headless onboarding</h3>
 <p>Pass <code>--yes</code> with the settings you want and skip the interactive wizard
@@ -1779,7 +1790,8 @@ block (<code>provider</code>, <code>model</code>, <code>via</code>, <code>notes<
 why, and the <code>providers</code> array tells you which API keys are actually present.</p>
 <h3 id="batch-runs">Batch runs</h3>
 <p><code>anyscribe batch</code> is the built-in way to process a list without spawning a process
-per URL. <code>--timeout</code> caps each entry so one bad URL can't stall the whole job,
+per URL. <code>--timeout</code> marks slow entries as failed (it doesn't cancel them, so
+the batch still waits for each one; see <a href="#anyscribe-batch"><code>anyscribe batch</code></a>),
 and duplicate detection means re-running the same file only transcribes what's
 new:</p>
 <pre><code class="language-bash">anyscribe batch urls.txt --json --quiet --timeout 300

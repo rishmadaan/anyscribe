@@ -205,13 +205,16 @@ present in its `Key` column.
 ### `Provider error` or general API failures
 
 ```bash
-anyscribe providers test                          # is the key valid?
+anyscribe providers test                          # is the key set?
 anyscribe "url" --provider openai                 # does another provider work?
 ```
 
-If the test fails, the key is wrong, expired, or the account is out of credit.
-If the test passes but transcription fails, try another provider to isolate
-whether it's the service or the file.
+`anyscribe providers test` only checks that the provider loads and that its API
+key is set. It doesn't contact the provider, so it can't tell you whether the key
+is valid or the account has credit. If the test fails, the key is missing. If it
+passes but transcription fails, the key may be wrong or expired, or the account
+may be out of credit: check your provider's dashboard, and try another provider
+to see whether it's the service or the file.
 
 ### "Next run" isn't the provider I set
 
@@ -339,13 +342,15 @@ anyscribe config --json     # resolved.provider, resolved.model, resolved.notes
 
 To force Whisper on every OpenAI run:
 `anyscribe config set provider_models.openai whisper-1`. Deepgram and ElevenLabs
-give word-level timestamps if you want finer granularity than Whisper's
-segments.
+also give timestamps, in segments of about 30 words; anyscribe doesn't show a
+time for every word.
 
 ### A long video is taking forever
 
-Anything over ~30 minutes is split into chunks and transcribed piece by piece,
-then merged. That's normal, not a hang.
+Anything over 30 minutes (or 25 MB) is split into pieces and transcribed piece by
+piece, then merged. That's normal, not a hang. (Sarvam always works in 28-second
+pieces. OpenAI with `--diarize` doesn't split: it refuses files that long, so use
+Deepgram for long recordings with speakers.)
 
 **Rough guide:** cloud providers run at roughly real-time speed. Local
 transcription on CPU ranges from about real time (`large-v3`) to about 10× faster
@@ -354,15 +359,19 @@ than real time (`tiny`); the usual `base` runs about 7× faster.
 ### Audio left over after a failed run
 
 When a transcription fails *after* the audio downloaded, anyscribe keeps that audio
-rather than throwing it away, so a retry doesn't re-download it.
+rather than throwing it away, so you can retry without downloading it again.
 
 ```bash
 anyscribe logs
 ```
 
 Recovery artifacts appear in their own section, separate from the activity log.
-Re-run `anyscribe "url"` to retry (add `--force` if it partly wrote a transcript),
-or just delete the file if you've moved on — nothing else references it.
+To retry without downloading again, transcribe the saved file directly. It lives
+in `~/.anyscribe/recovery/`, under the name `anyscribe logs` shows:
+`anyscribe "$HOME/.anyscribe/recovery/<name>"`. The new transcript then lists the
+source as a local file rather than the original URL. Re-running `anyscribe "url"`
+also works, but downloads the source again (add `--force` if it partly wrote a
+transcript). Or just delete the file if you've moved on — nothing else references it.
 
 ---
 
@@ -492,8 +501,9 @@ anyscribe tray --port 9000
 2. Remove the login auto-start (macOS): `anyscribe uninstall-service --yes`
 3. Optionally drop the extra packages: `pip uninstall pystray Pillow`
 
-`uninstall-service` only removes the login item — it doesn't stop a running tray
-or uninstall anyscribe.
+`uninstall-service` removes the login item. If the tray was started by that login
+item, this also stops it (and any server it started). A tray you started by hand
+keeps running until you quit it. anyscribe itself stays installed.
 
 ---
 

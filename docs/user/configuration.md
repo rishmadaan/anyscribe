@@ -487,7 +487,7 @@ workspace location, the local model, and all your API keys.
 | What's fixed | Current value | Why it's not a setting |
 |--------------|---------------|------------------------|
 | Audio quality | 16 kHz, mono, 64 kbps mp3 | Tuned for the best transcription accuracy per megabyte. Higher quality wouldn't improve the text. |
-| File-splitting limits | Split if over 25 MB or 30 min, into 18-min pieces | Driven by the transcription APIs' own upload and timeout limits, not your preference. |
+| File-splitting limits | Most cloud providers split files over 25 MB or 30 min into pieces of about 18 min. Sarvam always uses 28-second pieces. OpenAI with `--diarize` refuses larger files instead of splitting them | Driven by the transcription APIs' own upload and timeout limits, not your preference. |
 | The list of models you can pick from | e.g. OpenAI offers `gpt-transcribe`, `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | Each provider's list is curated to models anyscribe knows how to read. You choose freely *within* the list via `provider_models` or `--model`; new entries arrive with anyscribe releases (`anyscribe update`). **OpenRouter is the exception** — it forwards any model name, so you can add your own with `extra_models.openrouter`. |
 | App folder location | `~/.anyscribe` | The fixed home for config, logs, and downloads. Your transcripts' location (`workspace_path`) *is* configurable. |
 | Web UI address | `127.0.0.1` (your machine only) | The Web UI has no password, so it only listens to your own computer. The port is changeable with `anyscribe ui --port 9000`. |

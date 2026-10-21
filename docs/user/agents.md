@@ -29,7 +29,7 @@ anyscribe install-skill
 
 That copies the skill into `~/.claude/skills/anyscribe/`. Claude Code picks it up on the next session — no restart dance beyond opening a new one.
 
-**You may already have it.** If Claude Code is installed on this machine, anyscribe installs the skill for you the first time you run *any* anyscribe command, and quietly refreshes it whenever the copy on disk falls behind the installed version. No prompt, nothing to opt into. Run `anyscribe install-skill` when you want to re-install or confirm it explicitly — say, after deleting the folder or debugging why Claude isn't picking it up.
+**You may already have it.** If Claude Code is installed on this machine (there's a `~/.claude` folder), anyscribe installs the skill for you the first time you run a normal anyscribe command, such as `anyscribe ui` or a transcription, and quietly refreshes it whenever the copy on disk falls behind the installed version. No prompt, nothing to opt into. `anyscribe --version` and `anyscribe --help` don't install it. Run `anyscribe install-skill` when you want to re-install or confirm it explicitly — say, after deleting the folder or debugging why Claude isn't picking it up.
 
 Then either type `/anyscribe` to invoke it explicitly, or just ask in plain English — the skill activates on its own when your request is about transcription:
 
@@ -89,7 +89,7 @@ Both paths hit the same engine — the difference is how much of it is exposed.
 | Read your settings | ✓ | ✓ `get_config` |
 | Change a setting | ✓ | ✓ `set_config` |
 | See available providers | ✓ | ✓ `list_providers` |
-| Check an API key works | ✓ | ✓ `test_provider` |
+| Check a provider loads and its API key is set | ✓ | ✓ `test_provider` |
 | Health check | ✓ | ✓ `doctor` |
 | Read run logs (`logs`) | ✓ | — |
 | Update anyscribe (`update`) | ✓ | — |

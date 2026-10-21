@@ -44,8 +44,8 @@ onboarding wizard expects `None`. CI tests Python 3.10, 3.12 and 3.14, and
 3.14 is now classified; 3.15 is held until ctranslate2 ships cp315 wheels.
 The python-multipart floor is 0.0.31. The fastapi floor bump was declined
 because no fastapi floor reaches a Starlette without known advisories; a
-direct starlette floor is the owner's call. The publish workflow now runs the
-same gates as CI before it uploads anything.
+direct starlette floor is the owner's call. The publish workflow now runs CI's
+gates (on Python 3.12) before it uploads anything.
 
 ## Gap found in the gates
 

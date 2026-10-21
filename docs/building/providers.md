@@ -89,7 +89,7 @@ tier would silently re-override the user's choice on the next run.
 - 25MB file limit — auto-chunked into 18-min segments (standard mode)
 - Diarize mode: `gpt-4o-transcribe-diarize` model, 25MB upload limit applies (same as standard)
 - Diarize response includes `speaker` field per segment
-- **Note (v0.7.2):** `--diarize` auto-routes to Deepgram when no explicit `-p` is given and a Deepgram key is configured (`core/resolve.py`). OpenAI's diarize model has a 25MB limit and anyscribe refuses larger diarized OpenAI runs; Deepgram chunks them into 18-min pieces instead, and speaker numbers are not matched across pieces.
+- **Note (v0.7.2):** `--diarize` auto-routes to Deepgram when no explicit `-p` is given and a Deepgram key is configured (`core/resolve.py`). OpenAI's diarize model has a 25MB limit and anyscribe refuses diarized OpenAI runs on files over 25 MB or 30 minutes; Deepgram chunks them into 18-min pieces instead, and speaker numbers are not matched across pieces.
 
 ### Deepgram (`providers/deepgram.py`)
 - Uses `nova-3` model with `smart_format=true` (auto-falls back to `nova` for `hi-Latn` — nova-3 doesn't support that language yet)
@@ -137,7 +137,7 @@ tier would silently re-override the user's choice on the next run.
 - Model: `settings.local_model` (default `base`, `Settings.local_model` in `config/settings.py`); `ASCLI_LOCAL_MODEL` env var overrides (`_resolve_model_size` in `providers/local.py`)
 - Sizes: `MODEL_SIZES` in local_models.py (tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5)
 - VAD filtering enabled for speed
-- Setup: `anyscribe local setup --model <size>` (installs faster-whisper + downloads the model). It refuses a non-TTY run without `--yes` (exit 2), so agents and scripts must pass it: `anyscribe local setup --model base --yes`. `pip install "anyscribe[local]"` installs the runtime only; the model download is a separate step
+- Setup: `anyscribe local setup --model <size>` (installs faster-whisper + downloads the model). It refuses a non-TTY run without `--yes` (exit 2), so agents and scripts must pass it: `anyscribe local setup --model base --yes`. `pip install "anyscribe[local]"` installs the runtime only; fetch a model with `anyscribe model pull <size>`, otherwise faster-whisper downloads it on the first local run with no progress shown
 
 ## Adding a Provider
 

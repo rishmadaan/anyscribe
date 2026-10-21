@@ -170,7 +170,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - **Lazy imports**: optional deps (faster-whisper for local provider) only imported when needed
 - **Three install paths**: install.sh (users), pip from PyPI (recommended), git clone (devs)
 - **SemVer**: 0.x for pre-stable, 1.0.0 when all platforms + providers stable
-- **Auto-migration**: Startup migrations handle legacy paths transparently (workspace rename, media→downloads, date folder flattening)
+- **Auto-migration**: Startup migrations handle legacy state transparently (app home `~/.anyscribecli` → `~/.anyscribe`, workspace rename, media → downloads, date-folder flattening, stale Sarvam model pin)
 - **CI + PyPI automation**: GitHub Actions runs lint, tests, package build, and frontend bundle freshness checks on pushes/PRs. Tag pushes publish to PyPI via trusted publishing; `scripts/release.sh` handles one-command releases. The same workflow also runs `gh release create --generate-notes` after publish, so every tag gets a GitHub Release automatically. CI also runs a fake-HOME migration rehearsal (`scripts/rehearse-migration.sh`) and a docs job (rendered-HTML freshness, version drift, MCP-tool and CHANGELOG gates).
 - **Tray as a supervisor, not a rewrite**: `anyscribe tray` spawns/attaches to the existing `anyscribe ui` server rather than embedding a webview or rewriting the UI as a native app — the browser stays the UI surface, the tray only adds discoverability and process supervision.
 - **AI-first skill management**: Claude Code skill auto-installs and auto-updates on every CLI invocation. `.version` marker pattern borrowed from gitstow — one file read + string compare, never blocks CLI

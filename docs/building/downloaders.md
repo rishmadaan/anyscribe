@@ -73,7 +73,7 @@ except ImportError:
 2. Implement `AbstractDownloader` from `base.py`:
    - `can_handle(url)` returning bool
    - `download(url, output_dir)` returning `DownloadResult`
-3. Add import to `registry.py` (direct if main dep, lazy if optional)
+3. Import the class in `downloaders/registry.py` and add an instance to `DOWNLOADERS`. Keep `LocalFileDownloader()` first; the first `can_handle()` match wins.
 4. Update this doc and `docs/user/commands.md` (Supported Platforms table)
 
 ## Audio Optimization

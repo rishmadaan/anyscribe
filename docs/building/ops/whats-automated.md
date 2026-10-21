@@ -87,7 +87,7 @@ This is the only place the app checks for updates without the user explicitly ru
 
 **File:** `.github/workflows/publish.yml`
 
-When you push a tag matching `v*`, GitHub Actions runs these steps in order; any failure stops the release before PyPI:
+When you push a tag matching `v*`, GitHub Actions runs these steps in order. A failure in steps 1 to 7 stops the release before anything reaches PyPI; step 9 runs after the upload, so if it fails the package is live and only the GitHub Release is missing (see release-checklist step 6):
 1. Lints (`ruff check src tests scripts`) and runs `pytest`, with the `[dev,mcp]` extras installed
 2. Rebuilds the frontend (`npm ci`, `npm run lint`, `npm run build`) and checks the committed bundle in `src/anyscribe/web/static` is current
 3. Runs `scripts/check-docs.py` (version and capability drift gates)
@@ -106,8 +106,10 @@ When you push a tag matching `v*`, GitHub Actions runs these steps in order; any
 
 One command to bump + commit + tag + push:
 ```bash
-./scripts/release.sh 0.5.0 "description of changes"
+./scripts/release.sh X.Y.Z "description of changes"
 ```
+
+Replace X.Y.Z with the next unused version under the versioning policy in CLAUDE.md.
 
 Includes safety checks: clean working tree, semver format, no duplicate tags, branch warning.
 
@@ -146,7 +148,7 @@ anyscribe update          # Install the update
 anyscribe --version       # Verify
 ```
 
-There are **no automatic updates**, **no background checks**, **no telemetry**, and **no phone-home behavior**. The user is always in control.
+anyscribe itself updates only when requested. Before YouTube or Instagram downloads it checks the installed yt-dlp release date and runs a pip upgrade if that release is more than 60 days old (core/deps.py). `anyscribe doctor` and `anyscribe update --check` also check the update source for a newer anyscribe. The bundled Claude Code skill refreshes itself when its installed version differs. There is no telemetry.
 
 ---
 

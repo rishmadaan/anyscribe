@@ -118,7 +118,7 @@ rm -rf /tmp/anyscribe-test
 
 ### 6. Check the GitHub Release
 
-After a successful publish workflow, verify the automatically created GitHub Release and edit its notes if needed. If the workflow failed or publishing was completed manually, check whether the release exists; create it manually only when it is missing. To create it: `gh release create vX.Y.Z --title vX.Y.Z --generate-notes`.
+After a successful publish workflow, verify the automatically created GitHub Release and edit its notes if needed. If the workflow failed after the PyPI upload (its Create GitHub Release step), or you published manually with twine, check whether the release exists; create it only when it is missing: `gh release create vX.Y.Z --title vX.Y.Z --generate-notes`.
 
 ### 7. Verify Update Path Works
 
@@ -162,4 +162,4 @@ anyscribe --version
 | Upload fails with 403 | API token expired — regenerate at pypi.org, update ~/.pypirc |
 | Upload fails with 400 | Version already exists — you need a new version number |
 | `anyscribe` command not found after install | Check `[project.scripts]` in pyproject.toml, rebuild; on Windows try `python -m anyscribe --version` |
-| Tests pass locally but package broken | Install the built wheel in a clean venv before tagging (`pip install dist/*.whl`); step 5 checks the published copy |
+| Tests pass locally but package broken | Before tagging, build and install the wheel in a clean venv: `rm -rf dist && python -m build && pip install dist/*.whl`; step 5 checks the published copy |

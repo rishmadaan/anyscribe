@@ -71,7 +71,7 @@ User-facing = new command, new flag, changed output, changed config option, new 
 - [ ] `pyproject.toml` — `version` field matches
 - [ ] All docs referencing version number updated (search for old version)
   - `scripts/check-docs.py` scans only `docs/user`, `landing`, `README.md` and `src/anyscribe/skill`; grep `install.sh`, `install.ps1`, `CONTRIBUTING.md`, `AGENTS.md` and `docs/building/ops` by hand
-- [ ] `landing/`: no hardcoded versions; `scripts/check-docs.py` enforces this
+- [ ] Avoid hardcoded versions in `landing/`; `scripts/check-docs.py` rejects versions that differ from `pyproject.toml`, except lines marked `<!-- version-pin-ok -->`
 - [ ] `BACKLOG.md` — version section marked complete, new section added
 - [ ] `CHANGELOG.md` — user-facing entry for the new version. **CI enforces
       this** (`scripts/check-docs.py`), so a missing entry is a red build, not a

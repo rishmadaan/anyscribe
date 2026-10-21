@@ -51,7 +51,7 @@ Language Lists".
 |------|-----|--------|----------|---------|-------------|
 | openai | Whisper / gpt-4o-transcribe-diarize | Active (default) | General purpose, multilingual | `OPENAI_API_KEY` | Yes |
 | deepgram | Deepgram Nova-3 | Active | Diarization, Hinglish, hi-Latn | `DEEPGRAM_API_KEY` | Yes |
-| elevenlabs | ElevenLabs Scribe v2 | Active | Highest accuracy, word timestamps, 90+ langs | `ELEVENLABS_API_KEY` | No |
+| elevenlabs | ElevenLabs Scribe v2 | Active | Highest accuracy, ~30-word timestamped segments, 90+ langs | `ELEVENLABS_API_KEY` | No |
 | openrouter | OpenRouter chat API | Active | Model flexibility (audio-via-chat) | `OPENROUTER_API_KEY` | No |
 | sargam | Sarvam AI REST API | Active | Indic languages (Hindi, Tamil, etc.) | `SARGAM_API_KEY` | No (Batch API only, not integrated) |
 | groq | Groq whisper-large-v3-turbo | Active | Cheapest + fastest cloud | `GROQ_API_KEY` | No |

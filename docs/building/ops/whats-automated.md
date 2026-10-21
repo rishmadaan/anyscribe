@@ -87,10 +87,16 @@ This is the only place the app checks for updates without the user explicitly ru
 
 **File:** `.github/workflows/publish.yml`
 
-When you push a tag matching `v*`, GitHub Actions automatically:
-1. Builds the package (`python -m build`)
-2. Verifies the tag matches `pyproject.toml` version (fails if mismatched)
-3. Publishes to PyPI via trusted publishing (no API token in secrets needed after setup)
+When you push a tag matching `v*`, GitHub Actions runs these steps in order; any failure stops the release before PyPI:
+1. Lints (`ruff check src tests scripts`) and runs `pytest`, with the `[dev,mcp]` extras installed
+2. Rebuilds the frontend (`npm ci`, `npm run lint`, `npm run build`) and checks the committed bundle in `src/anyscribe/web/static` is current
+3. Runs `scripts/check-docs.py` (version and capability drift gates)
+4. Renders the docs (`scripts/build-docs.py`) and checks `git diff --exit-code landing/docs`
+5. Rehearses the app-home migration (`scripts/rehearse-migration.sh`)
+6. Builds the package (`python -m build`)
+7. Verifies the tag matches `pyproject.toml` version (fails if mismatched)
+8. Publishes to PyPI via trusted publishing (no API token in secrets needed after setup)
+9. Creates the GitHub Release with generated notes (`gh release create --generate-notes`)
 
 **Setup (one-time):** Configure trusted publishing on [pypi.org](https://pypi.org/manage/project/anyscribe/settings/publishing/) — add GitHub as a trusted publisher with repository `rishmadaan/anyscribe`, workflow `publish.yml`.
 

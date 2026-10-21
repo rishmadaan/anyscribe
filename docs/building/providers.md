@@ -89,7 +89,7 @@ tier would silently re-override the user's choice on the next run.
 - 25MB file limit — auto-chunked into 18-min segments (standard mode)
 - Diarize mode: `gpt-4o-transcribe-diarize` model, 25MB upload limit applies (same as standard)
 - Diarize response includes `speaker` field per segment
-- **Note (v0.7.2):** `--diarize` auto-routes to Deepgram when no explicit `-p` is given and Deepgram key is configured. OpenAI diarize has a 25MB limit with no client-side chunking support for diarization — Deepgram handles large files natively.
+- **Note (v0.7.2):** `--diarize` auto-routes to Deepgram when no explicit `-p` is given and a Deepgram key is configured (`core/resolve.py`). OpenAI's diarize model has a 25MB limit and anyscribe refuses larger diarized OpenAI runs; Deepgram chunks them into 18-min pieces instead, and speaker numbers are not matched across pieces.
 
 ### Deepgram (`providers/deepgram.py`)
 - Uses `nova-3` model with `smart_format=true` (auto-falls back to `nova` for `hi-Latn` — nova-3 doesn't support that language yet)
@@ -99,6 +99,7 @@ tier would silently re-override the user's choice on the next run.
 - Supports `hi-Latn` language code for romanized Hindi
 - Response parsed from word-level: consecutive words by same speaker grouped into segments
 - Without diarize: words grouped into ~30-word segments for timestamps
+- Files over 25 MB or 30 min are chunked into 18-min pieces (`needs_chunking`/`chunk_audio`, shared `_transcribe_chunked`); speaker numbers restart per piece.
 
 ### ElevenLabs (`providers/elevenlabs.py`)
 - Uses `scribe_v2` model, `xi-api-key` auth header (migrated from `scribe_v1`, which ElevenLabs removed 2026-07-09; v2 is the current top-accuracy model)
@@ -119,7 +120,7 @@ tier would silently re-override the user's choice on the next run.
 - Auto-chunks audio into 28s segments (different from the standard 18-min Whisper chunks)
 - `api-subscription-key` auth header
 - Best for Indian languages; not suited for non-Indian languages
-- Diarization: not sent (Sarvam's sync endpoints don't support it; Batch API only). The response parser still reads `turns` if present (sargam.py:148)
+- Diarization: not sent (Sarvam's sync endpoints don't support it; Batch API only). The response parser (`SargamProvider._parse_response`) still reads `turns` if present
 - **Future:** adopt Sarvam's batch API (no 30s cap, native diarization, 2hr/file) to escape sync chunking — see the [landscape audit](journal/2026-06-27-transcription-landscape-and-config-audit.md).
 
 ### Groq (`providers/groq.py`)
@@ -128,15 +129,15 @@ tier would silently re-override the user's choice on the next run.
 - Chunking and `_parse_response` inherited unchanged
 - Diarize path overridden to raise — Groq has no diarization model
 - This is the provider the `cost` quality tier selects
-- No entry in `PROVIDER_LANGUAGES` (`providers/languages.py`), so the Web UI language picker shows no list for Groq
+- No entry in `PROVIDER_LANGUAGES` (`providers/languages.py`), so the Web UI language picker shows no list for Groq (a gap, not a design choice: Groq runs Whisper; tracked in BACKLOG)
 
 ### Local (`providers/local.py`)
 - Uses `faster-whisper` (CTranslate2-based, up to 4x faster than original Whisper)
 - Auto-detects GPU (CUDA) or falls back to CPU with int8
-- Model: `settings.local_model` (default `base`, settings.py:49); `ASCLI_LOCAL_MODEL` env var overrides (local.py:30)
+- Model: `settings.local_model` (default `base`, `Settings.local_model` in `config/settings.py`); `ASCLI_LOCAL_MODEL` env var overrides (`_resolve_model_size` in `providers/local.py`)
 - Sizes: `MODEL_SIZES` in local_models.py (tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5)
 - VAD filtering enabled for speed
-- Setup: `anyscribe local setup --model <size>` (installs faster-whisper + downloads the model) or `pip install "anyscribe[local]"`
+- Setup: `anyscribe local setup --model <size>` (installs faster-whisper + downloads the model). It refuses a non-TTY run without `--yes` (exit 2), so agents and scripts must pass it: `anyscribe local setup --model base --yes`. `pip install "anyscribe[local]"` installs the runtime only; the model download is a separate step
 
 ## Adding a Provider
 

@@ -118,7 +118,7 @@ rm -rf /tmp/anyscribe-test
 
 ### 6. Check the GitHub Release
 
-The publish workflow creates it automatically (`gh release create --generate-notes`); edit the notes on GitHub if needed. Do not run `gh release create` by hand: the release already exists, so it fails.
+After a successful publish workflow, verify the automatically created GitHub Release and edit its notes if needed. If the workflow failed or publishing was completed manually, check whether the release exists; create it manually only when it is missing.
 
 ### 7. Verify Update Path Works
 

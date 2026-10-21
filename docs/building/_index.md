@@ -2,7 +2,7 @@
 
 | Date | Type | Entry | TL;DR |
 |------|------|-------|-------|
-| 2026-10-21 | audit | [[journal/2026-10-21-staleness-audit.md\|Staleness audit: docs, skill, building docs, infra]] | Read-only four-area audit at v0.16.5 found ~150 stale or false statements, fixed in five PRs. Two owner decisions left open: a JavaScript runtime (Deno) for full yt-dlp YouTube support, and whether to drop end-of-life Python 3.10. |
+| 2026-10-21 | audit | [[journal/2026-10-21-staleness-audit.md\|Staleness audit: docs, skill, building docs, infra]] | Read-only four-area audit at v0.16.5 found ~150 stale or false statements, filed as five PRs for review (#15 to #19). Two owner decisions left open: a JavaScript runtime (Deno) for full yt-dlp YouTube support, and whether to drop end-of-life Python 3.10. |
 | 2026-09-13 | decision | [[journal/2026-09-13-v0165-agpl-release.md\|v0.16.5 AGPL release]] | First AGPLv3-or-later release after PR #14 review and merge; version and public wording updated, with matching source and notices. |
 | 2026-09-13 | troubleshooting | [[journal/2026-09-13-agpl-pr-audit.md\|AGPL PR read-only audit]] | Claude audited PR #14; fixed heading encoding, dashboard copyright, release-boundary copy, and standalone skill licensing with installer tests. |
 | 2026-09-13 | decision | [[journal/2026-09-13-agpl-license-adoption.md\|AGPLv3 adoption]] | First-party AGPL-3.0-or-later, preserved bundled MIT/ISC notices, editable UI in source archives, and CLI/UI license/source links. Applied locally; no release published. |

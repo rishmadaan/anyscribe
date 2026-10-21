@@ -82,8 +82,8 @@ User-facing = new command, new flag, changed output, changed config option, new 
 
 1. [ ] `src/anyscribe/providers/<name>.py` — implements TranscriptionProvider
 2. [ ] `providers/__init__.py` — added to PROVIDER_REGISTRY
-2b. [ ] `providers/__init__.py` — `PROVIDER_KEY_ENV` + `PROVIDER_MODELS`
-2c. [ ] `providers/languages.py` — `PROVIDER_LANGUAGES`
+   - [ ] `providers/__init__.py` — `PROVIDER_KEY_ENV` + `PROVIDER_MODELS`
+   - [ ] `providers/languages.py` — `PROVIDER_LANGUAGES`
 3. [ ] `cli/onboard.py` — added to PROVIDER_INFO dict
 4. [ ] `docs/building/providers.md` — added to table + provider-specific notes
 5. [ ] `docs/user/providers.md` — added to comparison table + setup section

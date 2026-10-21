@@ -207,7 +207,7 @@ Hard-coded constants and where they live:
 | Whisper size trigger | 25 MB (`WHISPER_MAX_BYTES`) | `core/audio.py:9` | OpenAI upload cap |
 | Whisper duration trigger | 30 min (`WHISPER_MAX_DURATION_SECONDS`) | `core/audio.py:16` | HTTP timeout ceiling |
 | Chunk length / overlap | 18 min / 5 s | `core/audio.py:20,23` | Stays under 25 MB at 64 kbps |
-| Sarvam chunk | 28 s (`SARVAM_MAX_DURATION`) | `providers/sargam.py:29` | Sarvam sync REST cap is 30 s, exclusive |
+| Sarvam chunk | 28 s (`SARVAM_MAX_DURATION`) | `providers/sargam.py` (`SARVAM_MAX_DURATION`) | Sarvam sync REST cap is 30 s, exclusive |
 | Provider model catalogs | `PROVIDER_MODELS` in `providers/__init__.py` (defaults: `gpt-transcribe`, `nova-3`/`nova`, `scribe_v2`, `saaras:v3`, `openai/gpt-audio-mini`, `whisper-large-v3-turbo`); diarize pins `gpt-4o-transcribe-diarize` | `providers/__init__.py` + each `providers/*.py` | Pickable since 0.14.0 via `settings.provider_models` / `--model`; the `quality` tier still picks the provider, the pin rides on top. **Closed catalogs are release-managed** — each entry needs response-parsing code, so users can't extend them. `settings.extra_models` is the one escape hatch and is openrouter-only (0.15.0), because an open-model provider forwards any slug. Read catalogs via `get_models(name, extra_models)`, never `PROVIDER_MODELS` directly |
 | App home | `~/.anyscribe` | `config/paths.py:6` | Fixed root for config + state |
 | Web bind host | `127.0.0.1` (port is configurable via `--port`) | `web/app.py:63` | Localhost-only by design; server has no auth |
@@ -263,7 +263,7 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 | Claude Code skill install | ✓ (`anyscribe install-skill`) | — | CLI-only; runs automatically anyway |
 | Menu-bar tray | ✓ (`anyscribe tray`) | — | CLI-only by nature — a tray icon isn't a Web UI concept; the tray supervises the Web UI server, it doesn't compete with it |
 | Login auto-start | ✓ (`install-service`/`uninstall-service`) | ✓ (Settings open-at-login toggle, macOS, needs `[tray]` extra) | Same `core/service.py` (`GET/PUT /api/autostart`) |
-| Legacy config migration | ✓ (`anyscribe migrate`, `--dry-run`) | — | CLI-only; the app-home move also runs automatically on every config/app-home read (`core/migrate.py::migrate_app_home_once`) |
+| Legacy config migration | ✓ (`anyscribe migrate`, `--dry-run`) | — | CLI-only. Automatic app-home migration is guarded once per process and invoked by load_config(), load_env() and ensure_app_dirs(); direct path reads do not trigger it. |
 | Drag-and-drop upload | — | ✓ | UI-only |
 | API key management | ✓ (`anyscribe config set <prov>_api_key`) | ✓ (inline per-provider with Test) | UI has richer UX |
 

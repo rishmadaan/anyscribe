@@ -440,7 +440,10 @@ independently: PyPI distribution, Python import package (`src/anyscribecli/` →
       skill refresh, MCP re-key, command verification; `--dry-run` writes nothing
 - [x] Skill + docs + landing lead with `anyscribe`
 - [x] Final `anyscribecli` shim release re-declaring `scribe`/`ascli`/`scribe-mcp`
-      (`anyscribecli` 0.15.2 on PyPI, 2026-07-31, requires `anyscribe>=0.16.0`)
+      (`anyscribecli` 0.15.2 on PyPI, 2026-07-31, requires `anyscribe>=0.16.0`;
+      the 0.15.2 wheel downloaded from PyPI on 2026-10-21 has an `entry_points.txt`
+      declaring exactly `ascli = anyscribe.cli.main:app`, `scribe = anyscribe.cli.main:app`,
+      `scribe-mcp = anyscribe.mcp.server:main`)
       (pip uninstalls the old package *after* installing the new one, which would
       otherwise delete the shared console scripts — proven with a repro)
 
@@ -683,6 +686,8 @@ Full plan, research citations, architecture, schema, and phases:
 - **Alias-aware provider maps** (debt parked 2026-08-09): `normalize_provider_name()` maps the `sarvam` spelling onto the canonical `sargam`, but it is applied *per call site* — every place that takes a provider name from a human has to remember to call it. `get_provider()` normalizes internally while its sibling maps (`PROVIDER_KEY_ENV`, `PROVIDER_MODELS`, `PROVIDER_LANGUAGES`, `ALL_PROVIDERS`) are canonical-only, so a raw alias handed to one of those returns `None` and reads as "this provider needs no key" — a silent false pass, not an error. Two review rounds found nine leaked sites this way; `core/preflight.py` was the ninth, where a hand-edited `provider: sarvam` passed the pre-flight key check and only died on a 401 after the download and conversion had already run. Ten call sites are now correct, but nothing structural prevents an eleventh. **Fix:** make the sibling maps themselves alias-aware (one small `dict` subclass normalizing in `__contains__`/`__getitem__`/`.get`, shared by all of them) so a raw alias can never silently miss, and delete the scattered call-site normalization. Wants its own red/green round. Same change would let `config set sarvam_api_key` work, which is currently rejected and documented as an exception.
 
 - **Deepgram diarizer v2**: our diarize requests send the legacy `diarize=true` param, which Deepgram routes to their older v1 diarizer; their docs now recommend the newer diarizer selection param for better speaker separation. Verify the exact param against current docs and switch (found by the 0.15.0 audit; pre-existing, no request fails today).
+
+- Groq language picker: add `"groq": WHISPER_LANGUAGES` to `PROVIDER_LANGUAGES` (found by the 2026-10-21 audit).
 
 - **Windows zero-config PATH**: Current v0.5.4 workaround is `python -m anyscribe` as one-time bootstrap (prints PowerShell PATH fix on first run). Acceptable but not great — user has to know the `python -m` incantation. Explore: custom Windows installer (`.msi` or `winget` package), or a shim that pip can place in a well-known location. The goal: `pip install anyscribe` → `anyscribe` just works, no extra steps.
 - TUI via Textual (the web UI shipped in 0.7.4)

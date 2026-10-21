@@ -54,7 +54,7 @@ The Claude Code skill (`src/anyscribe/skill/`) is the **primary way users intera
 - **Chunking** — 18-min segments for Whisper (25MB limit), 28 s segments for Sarvam (its sync REST limit is 30 s, exclusive)
 - **Web UI** — `anyscribe ui` launches FastAPI + built React SPA at `127.0.0.1:8457`. REST API for config/history, WebSocket for real-time transcription progress. Frontend source in `ui/`, builds to `src/anyscribe/web/static/`. Server stashed on `app.state` for graceful `/shutdown`. Orchestrator accepts optional `on_progress` callback — web layer bridges sync→async via ThreadPoolExecutor + asyncio.Queue
 - **Three-surface onboarding parity** — `anyscribe onboard` (interactive TUI), `anyscribe onboard --yes --provider X ...` (headless for agents), and the Web UI first-run wizard all call `core/onboard_headless.py::run_headless_onboard()`. Each surface is a thin flow controller; the backend state transitions are identical. Rule documented in `docs/building/architecture.md` → "CLI ↔ Web UI: shared backend, asymmetric surfaces"
-- **Local transcription is opt-in** — setup installs `faster-whisper` via pip subprocess on demand (`core/local_setup.py`), then downloads a Whisper model via `huggingface_hub`. CLI: `anyscribe local setup --model <size>`. Web UI: "Set up local transcription" button on the Local provider card. `anyscribe model {list, pull, rm, reinstall, info}` for day-to-day cache management. The `--model` flag is **always required** on `anyscribe local setup` — no silent defaults, even in a TTY
+- **Local transcription is opt-in** — setup installs `faster-whisper` via pip subprocess on demand (`core/local_setup.py`), then downloads a Whisper model via `huggingface_hub`. CLI: `anyscribe local setup --model <size>`; it refuses a non-TTY run without `--yes` (exit 2), so agents and scripts pass it (`anyscribe local setup --model base --yes`). `pip install "anyscribe[local]"` installs the runtime only; the model download is separate. Web UI: "Set up local transcription" button on the Local provider card. `anyscribe model {list, pull, rm, reinstall, info}` for day-to-day cache management. The `--model` flag is **always required** on `anyscribe local setup` — no silent defaults, even in a TTY
 
 ## Documentation Ethic
 
@@ -146,8 +146,10 @@ drift slowly (months, not days) — when you do touch them, do it carefully:
    never need a mapping layer.
 5. For Deepgram entries that need the legacy Nova model (currently only
    `hi-Latn`), set `"model": "nova"` on the entry as documentation, **and**
-   add the lowercased code to the hardcoded set in `deepgram.py:47`; the
-   router does not read the list. UI does not display the model.
+   add the lowercased code to the hardcoded checks in `providers/deepgram.py`
+   (`_build_params`) and `core/resolve.py` (the run-line note "hi-Latn is
+   transcribed by deepgram's nova model"); neither reads the list. UI does not
+   display the model.
 6. OpenRouter has no list (`PROVIDER_LANGUAGES["openrouter"] = None`). Don't
    add one — it accepts a prose instruction in the prompt, not a code.
 7. Write a short journal entry under `docs/building/journal/` noting what

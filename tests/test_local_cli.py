@@ -309,3 +309,17 @@ def test_model_reinstall_pull_failure_reports_bytes_freed():
     err = json.loads(result.stderr.strip().splitlines()[-1])
     assert "network down" in err["error"]
     assert err["bytes_freed"] == 150
+
+
+# ── scribe model info ─────────────────────────────────
+
+
+def test_model_info_repo_matches_model_repos():
+    """Non-Systran sizes must report the repo the local provider actually loads."""
+    from anyscribe.providers.local_models import MODEL_REPOS
+
+    with patch("anyscribe.cli.models_cmd.is_cached", return_value=False):
+        with patch("anyscribe.cli.models_cmd.list_cached_models", return_value=[]):
+            result = runner.invoke(models_app, ["info", "large-v3-turbo", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["repo"] == MODEL_REPOS["large-v3-turbo"]

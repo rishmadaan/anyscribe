@@ -457,7 +457,7 @@ def list_providers() -> str:
 
 @mcp.tool()
 def test_provider(name: Optional[str] = None) -> str:
-    """Test a provider's API key and connectivity.
+    """Check a provider's API key is set and the provider loads (no API call).
 
     Args:
         name: Provider to test. Defaults to the active provider.

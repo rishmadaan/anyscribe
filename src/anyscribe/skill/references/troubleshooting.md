@@ -70,7 +70,7 @@ anyscribe config set openai_api_key sk-proj-...    # Quick — set key directly
 anyscribe onboard --force                           # Or re-run setup wizard
 ```
 
-### "yt-dlp download failed: Video unavailable"
+### "yt-dlp metadata failed" or "yt-dlp download failed" (YouTube)
 
 The video is private, age-restricted, geo-blocked, or deleted.
 
@@ -79,7 +79,7 @@ The video is private, age-restricted, geo-blocked, or deleted.
 2. Update yt-dlp: `pip install --upgrade yt-dlp`
 3. If age-restricted: yt-dlp may need browser cookies (advanced)
 
-### Instagram: "rate-limit reached" or "login required"
+### "Instagram requires a login to fetch this reel"
 
 The reel is gated behind login. Configure cookies from a browser logged into
 Instagram:
@@ -94,16 +94,22 @@ Then retry. If you've already configured a browser and still see this:
 3. If it loads in the browser but not via anyscribe, your cookie store may be
    locked by the running browser — quit the browser and retry.
 
-### Instagram: "private account"
+### "This reel is from a private account"
 
 The reel is from a private account. Cookies from a browser logged into an
 account that follows the poster will work; cookies from a different account
 won't.
 
-### Instagram: "video unavailable" / "post not found"
+### "This reel is not available"
 
 The reel was deleted, made private, or is region-locked. There's no
 client-side fix.
+
+### "Instagram download failed: ..."
+
+The catch-all for any other yt-dlp error; the text after the colon is the start
+of yt-dlp's own output. Read it for the cause, then try updating yt-dlp
+(`pip install --upgrade yt-dlp`) or configuring `instagram.browser` as above.
 
 ### Transcription in wrong language
 
@@ -157,22 +163,24 @@ The model that ran doesn't return segment timestamps, so there's nothing to rend
 anyscribe config --json     # resolved.provider, resolved.model, resolved.notes
 ```
 
-Deepgram and ElevenLabs give word-level timestamps if the user wants finer granularity than Whisper's segments. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
+Without diarization, anyscribe groups Deepgram and ElevenLabs timing entries into approximately 30-word segments. With diarization, Deepgram segments follow speaker turns. These outputs expose segment timestamps rather than individual word timestamps. To force Whisper on every OpenAI run: `anyscribe config set provider_models.openai whisper-1`.
 
 ### "Next run" isn't the provider I set
 
-`quality` outranks `provider`. If `quality` is a tier (`accuracy`/`balanced`/`cost`/`free`), the tier picks the provider and the `provider` line is ignored.
+Run `anyscribe config --json` and read `resolved.notes`. Three things can override the saved `provider`:
+
+- a quality tier (`accuracy`/`balanced`/`cost`/`free`) picks the provider; setting the provider again writes `quality: custom`, which is what makes it stick;
+- saved or per-run `diarize` plus a `DEEPGRAM_API_KEY` selects Deepgram regardless of quality or provider, unless `-p` is passed;
+- a `-p` flag on the run wins over everything.
+
+**Fix:** if speaker labels are no longer wanted, run `anyscribe config set diarize false`, then set the provider you want:
 
 ```bash
-anyscribe config              # look at the (…) after the model — `quality: balanced` means the tier won
+anyscribe config set provider elevenlabs   # also writes quality: custom
+anyscribe config --json                    # confirm resolved.provider
 ```
 
-**Fix:** re-set the provider — that writes `quality: custom` in the same save, which is what makes it stick:
-```bash
-anyscribe config set provider elevenlabs
-```
-
-A config hand-edited in an editor is the usual cause: writing `provider:` without also writing `quality: custom` leaves the tier in charge.
+If speaker labels are wanted, use Deepgram or OpenAI (`-p deepgram --diarize`).
 
 ### "WARNING: quality 'X' wants Y but no Y_API_KEY is set"
 
@@ -218,15 +226,61 @@ Two cases that look like bugs but aren't:
 ### "Provider error" or API failures
 
 **Fix:**
-1. Test the provider: `anyscribe providers test`
-2. Check API key is valid and has credits
+1. `anyscribe providers test <name>` confirms the key is set (it makes no API call).
+2. If the error says 'Invalid or missing API key', the key is wrong or unfunded: re-set it with `anyscribe config set <provider>_api_key YOUR_KEY`.
 3. Try a different provider: `anyscribe transcribe "url" --provider openai`
+
+### "Invalid or missing API key for <provider>."
+
+The provider rejected the key (HTTP 401/403). It is wrong, revoked, or the account has no credit.
+
+**Fix:** `anyscribe config set <provider>_api_key YOUR_KEY` (or `anyscribe onboard --force`). `anyscribe providers test` cannot catch this, since it makes no API call.
+
+### "Rate limited by <provider>."
+
+HTTP 429. Wait a moment and retry, or switch providers for this run with `-p <other>`.
+
+### "Transient <provider> server error"
+
+HTTP 5xx on the provider's side. It usually clears on its own; retry in a few seconds.
+
+### "<provider> rejected the request (4xx)"
+
+Any other client error. The text after the status code is the provider's own response; read it for the cause (bad language code, unsupported file, unknown model).
+
+### "ffmpeg not found" / "ffprobe not found"
+
+Pre-flight check: anyscribe needs ffmpeg (ffprobe ships with it) to convert audio.
+
+**Fix:**
+```bash
+brew install ffmpeg          # macOS
+sudo apt install ffmpeg      # Debian/Ubuntu
+```
+
+### "Low disk space: NMB free. Need at least 500MB"
+
+Pre-flight check. Free up disk space on the drive holding `~/.anyscribe/` and retry.
+
+### "Unsupported format: .x" / "File not found:"
+
+Pre-flight checks on a local file. The path must exist and end in one of `.mp3`, `.mp4`, `.m4a`, `.wav`, `.opus`, `.ogg`, `.flac`, `.webm`, `.aac`, `.wma`. Convert other formats with ffmpeg first.
+
+### "File is NMB — OpenAI's diarize endpoint has a 25MB limit"
+
+OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 30 min.
+
+**Fix:** set a Deepgram key (`anyscribe config set deepgram_api_key YOUR_KEY`). After setting a Deepgram key, retry your original URL or file path with `-p deepgram --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag. To use OpenAI without speaker labels, omit `--diarize`; if `diarize` is enabled in config, first run `anyscribe config set diarize false`.
+
+### "Groq has no diarization model"
+
+`--diarize` was combined with Groq (`-p groq`, or `provider: groq` with no Deepgram key; the `cost` tier itself is skipped on diarized runs). For speaker labels, retry with `-p deepgram --diarize` or `-p openai --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag. To keep using Groq without speaker labels, omit `--diarize`; if diarization is enabled in config, first run `anyscribe config set diarize false`. On a file over 25 MB or 30 min the error instead reads `File is NMB ... OpenAI's diarize endpoint has a 25MB limit` because Groq shares OpenAI's code path. The fix is the same: retry with `-p deepgram --diarize`, replacing any existing provider flag and removing any per-run `-m` or `--model` flag.
 
 ### Large video taking very long
 
-Videos >30 min are auto-chunked. Each chunk transcribes separately. This is normal.
+Audio over 25 MB or 30 min is split into 18-min chunks; Sarvam always uses 28-s chunks. Each chunk transcribes separately. This is normal.
 
-**Estimate:** Cloud APIs process roughly at real-time speed. Local (CPU) is 2-5x real-time.
+**Estimate:** Cloud APIs process roughly at real-time speed. Local (CPU) runs from about 7x real-time for `base` down to about 1x for `large-v3`.
 
 ### Config or workspace corruption
 
@@ -243,11 +297,11 @@ anyscribe onboard
 
 Back up `~/anyscribe/` first if transcripts matter (or check `anyscribe config show` for custom workspace path).
 
-### faster-whisper not found (local provider)
+### "faster-whisper is not installed" (local provider)
 
 **Fix:**
 ```bash
-pip install faster-whisper
+anyscribe local setup --model base --yes --json
 ```
 
 First run downloads the model from Hugging Face (~150 MB for base). Needs internet for that initial download.
@@ -288,7 +342,7 @@ anyscribe tray --port 9000
 2. Remove login auto-start (macOS): `anyscribe uninstall-service --yes`
 3. Optionally uninstall the extra: `pip uninstall pystray Pillow`
 
-`uninstall-service` only removes the login LaunchAgent — it doesn't stop an already-running tray or uninstall anyscribe itself.
+`uninstall-service` unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither service command uninstalls anyscribe.
 
 ### Permission denied errors
 

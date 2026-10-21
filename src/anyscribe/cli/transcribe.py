@@ -64,7 +64,7 @@ def transcribe(
     [dim]Supported file formats: mp3, mp4, m4a, wav, opus, ogg, flac, webm, aac, wma[/dim]
 
     [dim]Tip: If the URL contains special characters (like ?), either
-    wrap it in quotes or just run `anyscribe` without a URL
+    wrap it in quotes or just run `anyscribe transcribe` without a URL
     and you'll be prompted to paste it.[/dim]
     """
     from anyscribe.core.orchestrator import process
@@ -219,7 +219,7 @@ def _validate_input(url: str) -> str:
             "  This usually happens because your shell (zsh) interprets `?` as a\n"
             "  special character. Wrap the URL in quotes:\n\n"
             '  [bold cyan]anyscribe "https://www.youtube.com/watch?v=VIDEO_ID"[/bold cyan]\n\n'
-            "  Or run [bold]anyscribe[/bold] without a URL to paste it interactively."
+            "  Or run [bold]anyscribe transcribe[/bold] without a URL to paste it interactively."
         )
         raise typer.Exit(code=2)
 

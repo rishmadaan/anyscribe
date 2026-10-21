@@ -42,7 +42,7 @@ router = APIRouter(prefix="/api", tags=["config"])
 PROVIDER_INFO: dict[str, str] = {
     "openai": "General purpose, multilingual, segment timestamps",
     "deepgram": "Fast, accurate, native diarization + Hindi Latin support",
-    "elevenlabs": "High accuracy, 99 languages, word-level timestamps",
+    "elevenlabs": "High accuracy, 90+ languages, segment timestamps",
     "sargam": "Optimized for Indic languages (Hindi, Tamil, Telugu, etc.)",
     "openrouter": "Access various models via unified API",
     "groq": "Cheapest + fastest cloud Whisper (large-v3-turbo)",

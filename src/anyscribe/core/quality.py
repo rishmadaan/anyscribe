@@ -20,7 +20,7 @@ from anyscribe.providers import PROVIDER_KEY_ENV
 
 # tier -> provider. The provider's own default model is correct for the tier:
 #   accuracy → elevenlabs scribe_v2 (top WER, best for primarily-English)
-#   balanced → deepgram nova-3 (native diarization, no chunking, hi-Latn path)
+#   balanced → deepgram nova-3 (native diarization, chunks like the others, hi-Latn path)
 #   cost     → groq whisper-large-v3-turbo (cheapest + fastest cloud)
 #   free     → local faster-whisper (offline, $0)
 QUALITY_TIERS: dict[str, str] = {

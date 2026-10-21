@@ -264,7 +264,7 @@ def local_teardown(
         False,
         "--yes",
         "-y",
-        help="Skip confirmation. Required — teardown is destructive.",
+        help="Skip the confirmation prompt (required when there is no terminal).",
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:

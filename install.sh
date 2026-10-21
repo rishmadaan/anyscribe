@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# scribe installer
+# anyscribe installer
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash
@@ -13,7 +13,7 @@
 #   2. Checks for Python 3.10+, installs if missing
 #   3. Checks for yt-dlp and ffmpeg, installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
-#   5. Tells you to run `scribe ui`
+#   5. Tells you to run `anyscribe ui`
 # ──────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
         --verbose)      VERBOSE=true; shift ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --help|-h)
-            echo "scribe installer"
+            echo "anyscribe installer"
             echo ""
             echo "Usage: curl -fsSL <url>/install.sh | bash -s -- [OPTIONS]"
             echo ""
@@ -96,7 +96,7 @@ detect_os() {
     case "$os" in
         Darwin) echo "macos" ;;
         Linux)  echo "linux" ;;
-        *)      die "Unsupported operating system: $os. scribe supports macOS and Linux." ;;
+        *)      die "Unsupported operating system: $os. anyscribe supports macOS and Linux." ;;
     esac
 }
 
@@ -115,7 +115,7 @@ fi
 
 echo ""
 echo -e "${BOLD}  ┌─────────────────────────────────────┐${NC}"
-echo -e "${BOLD}  │       scribe installer               │${NC}"
+echo -e "${BOLD}  │       anyscribe installer            │${NC}"
 echo -e "${BOLD}  │  Video → Transcript → Markdown       │${NC}"
 echo -e "${BOLD}  └─────────────────────────────────────┘${NC}"
 echo ""
@@ -268,9 +268,9 @@ check_ffmpeg() {
     fi
 }
 
-# ── Install scribe ───────────────────────────────────────────
-install_scribe() {
-    info "Installing scribe..."
+# ── Install anyscribe ────────────────────────────────────────
+install_anyscribe() {
+    info "Installing anyscribe..."
 
     local pip_cmd="anyscribe[tray]"
     if [[ "$INSTALL_METHOD" == "git" ]]; then
@@ -313,31 +313,30 @@ install_scribe() {
     fi
 
     # Verify
-    if command_exists scribe; then
-        ok "scribe $(scribe --version 2>/dev/null | awk '{print $2}' || echo 'installed')"
+    if command_exists anyscribe; then
+        ok "anyscribe $(anyscribe --version 2>/dev/null | awk '{print $2}' || echo 'installed')"
     elif [[ "$USED_PIPX" == true ]]; then
-        warn "scribe installed via pipx. Restart your terminal or run: pipx ensurepath"
+        warn "anyscribe installed via pipx. Restart your terminal or run: pipx ensurepath"
     else
-        warn "scribe installed but not found in PATH."
+        warn "anyscribe installed but not found in PATH."
         echo "    Try adding this to your shell profile:"
         echo ""
-        if [[ "$OS" == "macos" ]]; then
-            echo "      export PATH=\"\$HOME/Library/Python/3.12/bin:\$PATH\""
-        else
-            echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
-        fi
+        # Ask the interpreter we installed with: the user scripts dir varies by OS and Python version.
+        local scripts_dir
+        scripts_dir="$("$PY" -c 'import sysconfig; print(sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))' 2>/dev/null || echo "\$HOME/.local/bin")"
+        echo "      export PATH=\"$scripts_dir:\$PATH\""
         echo ""
-        echo "    Then restart your terminal and run: scribe --version"
+        echo "    Then restart your terminal and run: anyscribe --version"
     fi
 }
 
 # ── Run post-install action (opt-in) ─────────────────────────
 run_post_install() {
     local cmd=""
-    if command_exists scribe; then
-        cmd="scribe"
+    if command_exists anyscribe; then
+        cmd="anyscribe"
     else
-        cmd="python3 -m anyscribe"
+        cmd="$PY -m anyscribe"
     fi
 
     if [[ "$RUN_UI" == true ]]; then
@@ -373,31 +372,31 @@ main() {
     check_ffmpeg
 
     echo ""
-    install_scribe
+    install_anyscribe
 
     run_post_install
 
     echo ""
     if [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; then
         echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  scribe is ready!                   │${NC}"
+        echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  scribe ui          web dashboard   │${NC}"
-        echo -e "${GREEN}${BOLD}  │  scribe \"<url>\"     transcribe now  │${NC}"
+        echo -e "${GREEN}${BOLD}  │  anyscribe ui       web dashboard   │${NC}"
+        echo -e "${GREEN}${BOLD}  │  anyscribe \"<url>\"  transcribe now  │${NC}"
         echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
     else
         echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  scribe is installed!               │${NC}"
+        echo -e "${GREEN}${BOLD}  │  anyscribe is installed!            │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
         echo -e "${GREEN}${BOLD}  │  Next step:                         │${NC}"
-        echo -e "${GREEN}${BOLD}  │    scribe ui                        │${NC}"
+        echo -e "${GREEN}${BOLD}  │    anyscribe ui                     │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
         echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
         echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
         echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
         if [[ "$USED_PIPX" == true ]]; then
             echo ""
-            warn "Installed via pipx — if 'scribe' is not found, restart your terminal"
+            warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
             echo "    or run: pipx ensurepath"
         fi
     fi

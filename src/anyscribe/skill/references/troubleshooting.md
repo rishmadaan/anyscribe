@@ -167,18 +167,20 @@ Without diarization, anyscribe groups Deepgram and ElevenLabs timing entries int
 
 ### "Next run" isn't the provider I set
 
-`quality` outranks `provider`. If `quality` is a tier (`accuracy`/`balanced`/`cost`/`free`), the tier picks the provider and the `provider` line is ignored.
+Run `anyscribe config --json` and read `resolved.notes`. Three things can override the saved `provider`:
+
+- a quality tier (`accuracy`/`balanced`/`cost`/`free`) picks the provider; setting the provider again writes `quality: custom`, which is what makes it stick;
+- saved or per-run `diarize` plus a `DEEPGRAM_API_KEY` selects Deepgram regardless of quality or provider, unless `-p` is passed;
+- a `-p` flag on the run wins over everything.
+
+**Fix:** if speaker labels are no longer wanted, run `anyscribe config set diarize false`, then set the provider you want:
 
 ```bash
-anyscribe config              # look at the (…) after the model — `quality: balanced` means the tier won
+anyscribe config set provider elevenlabs   # also writes quality: custom
+anyscribe config --json                    # confirm resolved.provider
 ```
 
-**Fix:** re-set the provider — that writes `quality: custom` in the same save, which is what makes it stick:
-```bash
-anyscribe config set provider elevenlabs
-```
-
-A config hand-edited in an editor is the usual cause: writing `provider:` without also writing `quality: custom` leaves the tier in charge.
+If speaker labels are wanted, use Deepgram or OpenAI (`-p deepgram --diarize`).
 
 ### "WARNING: quality 'X' wants Y but no Y_API_KEY is set"
 

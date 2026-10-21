@@ -116,7 +116,8 @@ class OpenAIProvider(TranscriptionProvider):
                     "replacing any existing provider flag and removing any per-run "
                     "-m or --model flag\n\n"
                     "Or transcribe without speaker labels (long files chunk automatically): "
-                    "retry your original input with -p openai and without --diarize; "
+                    "retry your original input with -p openai, replacing any existing provider "
+                    "flag and removing any per-run -m, --model, -d or --diarize flag; "
                     "if diarize is on in config, first run: anyscribe config set diarize false"
                 )
             result = self._parse_response(

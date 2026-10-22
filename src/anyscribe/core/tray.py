@@ -27,8 +27,28 @@ def port_responding(port: int, host: str = "127.0.0.1", timeout: float = 0.5) ->
         return s.connect_ex((host, port)) == 0
 
 
+def _windows_pid_alive(pid: int) -> bool:
+    """Windows existence probe: open the process and check it has not exited."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == 259  # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_alive(pid: int) -> bool:
     """True if a process with this pid exists (signal 0 = existence probe)."""
+    if os.name == "nt":
+        # os.kill(pid, 0) on Windows sends CTRL_C_EVENT, not a probe.
+        return _windows_pid_alive(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

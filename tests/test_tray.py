@@ -45,6 +45,22 @@ def test_pidfile_garbage_is_absent(monkeypatch, tmp_path):
     assert tray.read_pidfile() is None
 
 
+def test_pid_alive_never_calls_os_kill_on_windows(monkeypatch):
+    monkeypatch.setattr(tray.os, "name", "nt")
+    monkeypatch.setattr(tray.os, "kill", lambda *a: pytest.fail("os.kill used as a probe on nt"))
+    monkeypatch.setattr(tray, "_windows_pid_alive", lambda pid: True)
+    assert tray._pid_alive(123) is True
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="real Windows process probe")
+def test_pid_alive_real_windows():
+    assert tray._pid_alive(os.getpid()) is True
+    # Popen, not run: run() does not expose the child's pid.
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    child.wait()
+    assert tray._pid_alive(child.pid) is False
+
+
 # ---- port probe ----------------------------------------------------------
 
 

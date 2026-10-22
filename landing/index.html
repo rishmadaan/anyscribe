@@ -1942,7 +1942,7 @@
         the wizard. <span class="amber">Go.</span>
       </h2>
       <p class="sec-sub">
-        One command installs everything. Then <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">anyscribe ui</code> opens a wizard in your browser that walks you through picking an engine — the install command itself already brought in <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">yt-dlp</code> and <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">ffmpeg</code>. From nothing to your first transcript in about five minutes.
+        One command installs everything, adds an anyscribe app that starts at login, and opens a wizard in your browser that walks you through picking an engine — the install command itself already brought in <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">yt-dlp</code> and <code class="mono" style="background: var(--bg-3); border: 1px solid var(--rule); padding: 2px 7px; border-radius: 3px; font-size: 13px;">ffmpeg</code>. From nothing to your first transcript in about five minutes.
       </p>
     </div>
 
@@ -1957,21 +1957,21 @@
         <span class="p">$</span><span id="mac-cmd">curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash</span>
         <button class="copy-btn" data-copy="mac-cmd">copy</button>
       </div>
-      <p class="big-cmd-note">Installs Python (if missing), ffmpeg, yt-dlp, and the anyscribe CLI. Works on macOS (Homebrew) and Linux (apt, dnf, pacman).</p>
+      <p class="big-cmd-note">Installs Python (if missing), ffmpeg, yt-dlp, and anyscribe, then adds an anyscribe app (Applications on macOS, your app menu on Linux) that runs in the menu bar or system tray from login. Works on macOS (Homebrew) and Linux (apt, dnf, pacman). CLI only? End it with <code>| bash -s -- --no-desktop</code>.</p>
     </div>
     <div class="tab-panel" data-panel="win">
       <div class="big-cmd">
         <span class="p">&gt;</span><span id="win-cmd">irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex</span>
         <button class="copy-btn" data-copy="win-cmd">copy</button>
       </div>
-      <p class="big-cmd-note">PowerShell on native Windows. If you're on WSL2, use the macOS / Linux command above.</p>
+      <p class="big-cmd-note">PowerShell on native Windows. Adds an anyscribe app to your Start menu that runs in the system tray from login. CLI only? Run <code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1))) -NoDesktop</code>. If you're on WSL2, use the macOS / Linux command above.</p>
     </div>
     <div class="tab-panel" data-panel="pip">
       <div class="big-cmd">
         <span class="p">$</span><span id="pip-cmd">pip install "anyscribe[tray]"</span>
         <button class="copy-btn" data-copy="pip-cmd">copy</button>
       </div>
-      <p class="big-cmd-note">If you already have Python 3.11+, yt-dlp and ffmpeg, pip is the shortest path there is.</p>
+      <p class="big-cmd-note">If you already have Python 3.11+, yt-dlp and ffmpeg, pip is the shortest path there is. Add the app and start-at-login afterwards with <code>anyscribe desktop install</code>.</p>
     </div>
 
     <div class="steps">
@@ -1979,7 +1979,7 @@
         <span class="n">i.</span>
         <div>
           <h4>Open the wizard in your browser</h4>
-          <p>Runs a local dashboard at <code>127.0.0.1:8457</code>. No cloud, no account. Pick an engine, paste a key (with a live Test button), confirm your folder. Prefer the terminal? <code>anyscribe onboard</code> does the same with arrow keys. &nbsp;&nbsp;<code>anyscribe ui</code></p>
+          <p>Runs a local dashboard at <code>127.0.0.1:8457</code>. No cloud, no account. The installer opens it for you; next time, click the anyscribe app (or run <code>anyscribe ui</code>). Pick an engine, paste a key (with a live Test button), confirm your folder. Prefer the terminal? <code>anyscribe onboard</code> does the same with arrow keys. &nbsp;&nbsp;<code>anyscribe ui</code></p>
         </div>
       </div>
       <div class="step">

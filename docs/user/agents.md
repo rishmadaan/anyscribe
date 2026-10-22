@@ -96,9 +96,11 @@ Both paths hit the same engine — the difference is how much of it is exposed.
 | Run the setup wizard (`onboard`) | ✓ | — |
 | Set up offline transcription (`local setup`) | ✓ | — |
 | Manage Whisper models (`model list` / `pull` / `rm`) | ✓ | — |
-| Menu-bar tray | ✗ | ✗ |
+| Desktop app | ✗ | ✗ |
 
-The tray is the one row where the agent runs out of road partway. Claude Code can *start* it (`anyscribe tray`) or set it to launch at login (`anyscribe install-service`), because those are ordinary commands. What no agent can do is use it: the tray's whole point is a menu-bar icon you click, and there's nothing to click on from a transcript. If you want anyscribe always running in the background, see [Getting Started → Keep it running](getting-started.md#keep-it-running).
+The desktop app is the one row where the agent runs out of road partway. Claude Code can *set it up* with `anyscribe desktop install --yes --json` (and check or remove it with `anyscribe desktop status --json` and `anyscribe desktop uninstall --yes --json`), because those are ordinary commands. What no agent can do is use it: the app's whole point is an icon you click and a dashboard you look at, and there's nothing to click on from a transcript. See [Getting Started → Two ways to install](getting-started.md#two-ways-to-install).
+
+> **Neither the skill nor the MCP server needs the app running.** Both run each transcription themselves and exit; they never talk to the dashboard. Close the app, quit the tray, or never install it: Claude Code keeps working. What Claude transcribes appears in the dashboard's History the next time you open it, because the dashboard reads straight from your vault.
 
 > **Why the short list on MCP?** Every MCP tool is a permanent promise with a fixed shape. Ten cover the work; the rest are one-off maintenance jobs better done by a human at a terminal — or by Claude Code, which has the whole CLI anyway.
 

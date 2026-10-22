@@ -46,7 +46,9 @@ def test_autostart_enable_refused_without_tray(client, monkeypatch, tmp_path):
     monkeypatch.setattr(system_routes, "find_spec", lambda name: None)
     r = client.put("/api/autostart", json={"enabled": True})
     assert r.status_code == 400
-    assert "anyscribe[tray]" in r.json()["detail"]
+    assert (
+        r.json()["detail"] == 'The tray isn\'t installed. Run: pip install "anyscribe[tray]" first.'
+    )
     assert not (tmp_path / "com.anyscribe.tray.plist").exists()
 
 

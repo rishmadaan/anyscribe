@@ -41,9 +41,7 @@ class DesktopError(Exception):
 
 class TrayMissing(DesktopError):
     def __init__(self) -> None:
-        super().__init__(
-            'The menu-bar tray isn\'t installed. Run: pip install "anyscribe[tray]" first.'
-        )
+        super().__init__('The tray isn\'t installed. Run: pip install "anyscribe[tray]" first.')
 
 
 class PortInUseError(DesktopError):

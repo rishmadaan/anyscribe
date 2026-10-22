@@ -194,14 +194,15 @@ pip install -U "anyscribe[mcp]"</code></p>
 <td>—</td>
 </tr>
 <tr>
-<td>Menu-bar tray</td>
+<td>Desktop app</td>
 <td>✗</td>
 <td>✗</td>
 </tr>
 </tbody>
 </table>
-<p>The tray is the one row where the agent runs out of road partway. Claude Code can <em>start</em> it (<code>anyscribe tray</code>) or set it to launch at login (<code>anyscribe install-service</code>), because those are ordinary commands. What no agent can do is use it: the tray's whole point is a menu-bar icon you click, and there's nothing to click on from a transcript. If you want anyscribe always running in the background, see <a href="/docs/getting-started#keep-it-running">Getting Started → Keep it running</a>.</p>
+<p>The desktop app is the one row where the agent runs out of road partway. Claude Code can <em>set it up</em> with <code>anyscribe desktop install --yes --json</code> (and check or remove it with <code>anyscribe desktop status --json</code> and <code>anyscribe desktop uninstall --yes --json</code>), because those are ordinary commands. What no agent can do is use it: the app's whole point is an icon you click and a dashboard you look at, and there's nothing to click on from a transcript. See <a href="/docs/getting-started#two-ways-to-install">Getting Started → Two ways to install</a>.</p>
 <blockquote>
+<p><strong>Neither the skill nor the MCP server needs the app running.</strong> Both run each transcription themselves and exit; they never talk to the dashboard. Close the app, quit the tray, or never install it: Claude Code keeps working. What Claude transcribes appears in the dashboard's History the next time you open it, because the dashboard reads straight from your vault.</p>
 <p><strong>Why the short list on MCP?</strong> Every MCP tool is a permanent promise with a fixed shape. Ten cover the work; the rest are one-off maintenance jobs better done by a human at a terminal — or by Claude Code, which has the whole CLI anyway.</p>
 </blockquote>
 <h2 id="agent-friendly-flags">Agent-friendly flags</h2>

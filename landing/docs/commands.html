@@ -204,8 +204,28 @@ CLI-only.</p>
 <td>— (it <em>is</em> the Web UI)</td>
 </tr>
 <tr>
+<td><code>anyscribe desktop install</code></td>
+<td>Desktop mode: app icon, start at login, open the dashboard</td>
+<td>— (CLI only)</td>
+</tr>
+<tr>
+<td><code>anyscribe desktop uninstall</code></td>
+<td>Stop anyscribe and remove the app, login item and icons</td>
+<td>— (CLI only)</td>
+</tr>
+<tr>
+<td><code>anyscribe desktop status</code></td>
+<td>Is the desktop app installed, running and healthy?</td>
+<td>— (CLI only)</td>
+</tr>
+<tr>
+<td><code>anyscribe desktop open</code></td>
+<td>Open the dashboard, starting anyscribe first if needed</td>
+<td>— (CLI only)</td>
+</tr>
+<tr>
 <td><code>anyscribe tray</code></td>
-<td>Menu-bar icon that supervises the web server</td>
+<td>Menu-bar / system-tray icon that supervises the web server</td>
 <td>— (CLI only)</td>
 </tr>
 <tr>
@@ -1298,11 +1318,153 @@ anyscribe ui --no-open
 </code></pre>
 <blockquote>
 <p><strong>Local only.</strong> The web UI binds to <code>127.0.0.1</code> — it's only accessible from your machine. No auth needed. Stop it with Ctrl+C.</p>
+<p><strong>Want it without a terminal?</strong> <code>anyscribe desktop install</code> gives you an app icon that opens this same dashboard and keeps it running in the background. See <a href="#anyscribe-desktop">anyscribe desktop</a>.</p>
+</blockquote>
+<hr />
+<h2 id="anyscribe-desktop">anyscribe desktop</h2>
+<p>Set up, check, open, or remove <strong>desktop mode</strong>: an <strong>anyscribe</strong> app icon that opens the dashboard, with anyscribe running in your menu bar (macOS) or system tray (Windows, Linux) and starting at every login. The one-line installer runs <code>anyscribe desktop install --yes</code> for you.</p>
+<blockquote>
+<p><strong>Needs the tray extra.</strong> The one-line installers include it. Installed with a bare <code>pip install anyscribe</code>? Add it first: <code>pip install -U "anyscribe[tray]"</code>. Without it, <code>desktop install</code> stops with that instruction instead of setting up an app that can't run.</p>
+</blockquote>
+<pre><code class="language-bash">anyscribe desktop install      # app icon + start at login + start now + open the dashboard
+anyscribe desktop status       # what's installed, what's running, and whether it's healthy
+anyscribe desktop open         # open the dashboard (what clicking the app icon runs)
+anyscribe desktop uninstall    # stop it and remove the app, login item and icons
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Subcommand</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>install</code></td>
+<td>Makes the app icons, adds the <strong>anyscribe</strong> app, starts the tray and opens the dashboard (unless <code>--no-launch</code>), then adds the login item and records what it set up in <code>~/.anyscribe/desktop.json</code>. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new.</td>
+</tr>
+<tr>
+<td><code>uninstall</code></td>
+<td>Stops the tray and its server, then removes the app, the login item, the icons and <code>~/.anyscribe/desktop.json</code>. Never touches your transcripts (<code>~/anyscribe/</code>), config or API keys.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. Changes nothing.</td>
+</tr>
+<tr>
+<td><code>open</code></td>
+<td>Opens the dashboard in your browser, starting anyscribe first if nothing is running. This is what the app icon runs.</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>uninstall</code> stops a running copy, it prints:</p>
+<pre><code>Stopped anyscribe. Any transcription in progress was cancelled; it will resume from its checkpoint the next time you run it.
+</code></pre>
+<p>What gets written where:</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>The app</th>
+<th>The login item</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Applications/anyscribe.app</code></td>
+<td><code>~/Library/LaunchAgents/com.anyscribe.tray.plist</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\anyscribe.lnk</code></td>
+<td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\anyscribe tray.lnk</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>~/.local/share/applications/anyscribe.desktop</code></td>
+<td><code>~/.config/autostart/anyscribe-tray.desktop</code></td>
+</tr>
+</tbody>
+</table>
+<p>Icons go in <code>~/.anyscribe/desktop/</code> (and, on Linux, <code>~/.local/share/icons/hicolor/512x512/apps/anyscribe.png</code>). The tray's output goes to <code>~/.anyscribe/logs/tray.log</code> whenever there's no terminal to show it in: when the app icon starts it, and on macOS when it starts at login. <code>desktop open</code> writes its own errors there too.</p>
+<blockquote>
+<p><strong>macOS:</strong> loading the login item starts the tray straight away, so <code>--no-launch</code> still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute). Quitting it from its menu is not a crash, so it stays quit until your next login.</p>
+<p><strong>Status says "Partly installed"?</strong> An app or login item exists without the record in <code>~/.anyscribe/desktop.json</code> — usually from an <code>install-service</code> run, or an interrupted install. Run <code>anyscribe desktop install</code> to finish it.</p>
+</blockquote>
+<h3 id="flags_9">Flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Short</th>
+<th>On</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--port</code></td>
+<td><code>-p</code></td>
+<td><code>install</code>, <code>open</code></td>
+<td>Dashboard port. <code>install</code> stores it, and the app icon and login item use it; <code>open</code> defaults to the installed port</td>
+<td><code>8457</code></td>
+</tr>
+<tr>
+<td><code>--no-launch</code></td>
+<td></td>
+<td><code>install</code></td>
+<td>Set everything up but don't start it or open the browser now</td>
+<td>Off</td>
+</tr>
+<tr>
+<td><code>--yes</code></td>
+<td><code>-y</code></td>
+<td><code>install</code>, <code>uninstall</code></td>
+<td>Skip the confirmation prompt</td>
+<td>Off</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td><code>-j</code></td>
+<td><code>install</code>, <code>uninstall</code>, <code>status</code></td>
+<td>Output the result as JSON</td>
+<td>Off</td>
+</tr>
+</tbody>
+</table>
+<h3 id="examples_8">Examples</h3>
+<pre><code class="language-bash"># Set up desktop mode (asks to confirm)
+anyscribe desktop install
+
+# Set it up without starting it now
+anyscribe desktop install --yes --no-launch
+
+# Something else already uses port 8457
+anyscribe desktop install --port 9000
+
+# For agents and scripts
+anyscribe desktop install --yes --json
+anyscribe desktop status --json
+anyscribe desktop uninstall --yes --json
+</code></pre>
+<p>With <code>--json</code>, every subcommand prints one <code>{"success": ..., "data": ..., "error": ...}</code> object:</p>
+<ul>
+<li><code>install</code> → <code>data</code> is the record it saved: <code>{"version", "python", "port", "launcher", "login_item", "installed_at"}</code></li>
+<li><code>uninstall</code> → <code>{"stopped": true|false, "launcher": true|false, "login_item": true|false}</code> (each <code>true</code> if it was there)</li>
+<li><code>status</code> → <code>{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}</code>; <code>reason</code> is <code>null</code> when healthy, otherwise a sentence ending in the fix</li>
+</ul>
+<p><strong>Exit codes:</strong> <code>0</code> success · <code>1</code> refused or failed (the tray extra is missing, another program is using the port, or anyscribe didn't start) · <code>2</code> not supported on this operating system. <code>status</code> always exits <code>0</code>, even on an unsupported system; it says so instead.</p>
+<blockquote>
+<p><strong><code>Port 8457 is in use by another program.</code></strong> Some other program (not anyscribe) is listening on that port. The message ends with the fix: <code>Run: anyscribe desktop install --port &lt;free port&gt;</code>. Pick any free number, e.g. <code>9000</code>.</p>
+<p><strong>No browser available</strong> (over SSH, or a machine with no desktop)? <code>desktop open</code> prints the dashboard's address instead of opening it, on stderr, so a <code>--json</code> result on stdout stays clean.</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-tray">anyscribe tray</h2>
-<p>A menu-bar icon that keeps <code>anyscribe ui</code> running in the background — click the icon instead of remembering to run a command every time.</p>
+<p>An icon in your menu bar (macOS) or system tray (Windows, Linux) that keeps <code>anyscribe ui</code> running in the background — click the icon instead of remembering to run a command every time.</p>
 <blockquote>
+<p><strong>Most people never run this directly.</strong> Desktop mode (<a href="#anyscribe-desktop"><code>anyscribe desktop install</code></a>) starts the tray for you at login and from the app icon. Run <code>anyscribe tray</code> yourself when you want the tray once, without installing anything.</p>
 <p><strong>Already installed if you used the one-line installer.</strong> Both installers pull in the <code>[tray]</code> extra (<code>pystray</code>, <code>Pillow</code>, and <code>pyobjc</code> on macOS) by default, so <code>anyscribe tray</code> just works. If you installed with a bare <code>pip install anyscribe</code>, that extra isn't there — add it with <code>pip install -U "anyscribe[tray]"</code>. Running <code>anyscribe tray</code> without it prints an install hint rather than crashing.</p>
 </blockquote>
 <pre><code class="language-bash">anyscribe tray
@@ -1315,8 +1477,8 @@ anyscribe ui --no-open
 <li><strong>Check for updates…</strong> — opens the <a href="https://github.com/rishmadaan/anyscribe/releases">GitHub releases page</a></li>
 <li><strong>Quit</strong> — stops the server and exits the tray cleanly</li>
 </ul>
-<p>If an <code>anyscribe ui</code> server is already running on the port, <code>anyscribe tray</code> attaches to it instead of starting a second one. If a tray is already running, a second <code>anyscribe tray</code> refuses to start (no port collisions, no duplicate icons).</p>
-<h3 id="flags_9">Flags</h3>
+<p>If an <code>anyscribe ui</code> server is already running on the port, <code>anyscribe tray</code> attaches to it instead of starting a second one. If a tray is already running, a second <code>anyscribe tray</code> prints <code>An anyscribe tray is already running.</code> and exits successfully (exit code <code>0</code>) without starting another: no port collisions, no duplicate icons.</p>
+<h3 id="flags_10">Flags</h3>
 <table>
 <thead>
 <tr>
@@ -1335,7 +1497,7 @@ anyscribe ui --no-open
 </tr>
 </tbody>
 </table>
-<h3 id="examples_8">Examples</h3>
+<h3 id="examples_9">Examples</h3>
 <pre><code class="language-bash"># Start the tray
 anyscribe tray
 
@@ -1352,7 +1514,8 @@ anyscribe tray --port 9000
 <h2 id="anyscribe-install-service">anyscribe install-service</h2>
 <p>Register <code>anyscribe tray</code> to start automatically every time you log in — so the menu-bar icon is just always there, no manual launch.</p>
 <blockquote>
-<p><strong>Works on macOS, Windows and Linux.</strong> It needs the tray extra first: <code>pip install "anyscribe[tray]"</code>. Without it the command stops with that instruction instead of installing a login item that can't run.</p>
+<p><strong>Prefer <code>anyscribe desktop install</code>.</strong> It adds this same login item <em>and</em> the app icon, starts anyscribe now, and gives you <code>desktop status</code> and <code>desktop uninstall</code> to check and undo it. <code>install-service</code> is the login item on its own; the <strong>Settings → Startup → Start at login</strong> toggle runs the same code.</p>
+<p><strong>Works on macOS, Windows and Linux.</strong> It needs the tray extra first: <code>pip install "anyscribe[tray]"</code>. Without it the command stops with <code>The tray isn't installed. Run: pip install "anyscribe[tray]" first.</code> instead of installing a login item that can't run.</p>
 </blockquote>
 <pre><code class="language-bash">anyscribe install-service
 </code></pre>
@@ -1383,39 +1546,6 @@ anyscribe tray --port 9000
 </tr>
 </tbody>
 </table>
-<h3 id="flags_10">Flags</h3>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Short</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--yes</code></td>
-<td><code>-y</code></td>
-<td>Skip the confirmation prompt</td>
-</tr>
-<tr>
-<td><code>--json</code></td>
-<td><code>-j</code></td>
-<td>Output result as JSON</td>
-</tr>
-</tbody>
-</table>
-<h3 id="examples_9">Examples</h3>
-<pre><code class="language-bash">anyscribe install-service              # prompts for confirmation
-anyscribe install-service --yes        # no prompt
-anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&quot;: {&quot;path&quot;: &quot;...&quot;, &quot;plist&quot;: &quot;...&quot;}, &quot;error&quot;: null}
-</code></pre>
-<hr />
-<h2 id="anyscribe-uninstall-service">anyscribe uninstall-service</h2>
-<p>Remove the login auto-start registered by <code>anyscribe install-service</code>.</p>
-<pre><code class="language-bash">anyscribe uninstall-service
-</code></pre>
-<p>Removes the login item that <code>install-service</code> created (the file that starts the tray at login). A tray that is already running keeps running until you Quit it from its menu (or run <code>anyscribe desktop uninstall</code>, which stops it). anyscribe itself stays installed.</p>
 <h3 id="flags_11">Flags</h3>
 <table>
 <thead>
@@ -1439,6 +1569,42 @@ anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&
 </tbody>
 </table>
 <h3 id="examples_10">Examples</h3>
+<pre><code class="language-bash">anyscribe install-service              # prompts for confirmation
+anyscribe install-service --yes        # no prompt
+anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&quot;: {&quot;path&quot;: &quot;...&quot;, &quot;plist&quot;: &quot;...&quot;}, &quot;error&quot;: null}
+</code></pre>
+<hr />
+<h2 id="anyscribe-uninstall-service">anyscribe uninstall-service</h2>
+<p>Remove the login auto-start registered by <code>anyscribe install-service</code>.</p>
+<pre><code class="language-bash">anyscribe uninstall-service
+</code></pre>
+<p>Removes the login item that <code>install-service</code> created (the file that starts the tray at login). Removing it never stops a tray that is already running: that keeps running until you Quit it from its menu (or run <code>anyscribe desktop uninstall</code>, which stops it). anyscribe itself stays installed, and so does the app icon if you used desktop mode.</p>
+<blockquote>
+<p><strong>macOS detail:</strong> if the tray is running when you remove the login item, macOS keeps its record of it until you log out. Until then, a crash still restarts the tray, and turning <strong>Start at login</strong> back on in the same session doesn't start a second one.</p>
+</blockquote>
+<h3 id="flags_12">Flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Short</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--yes</code></td>
+<td><code>-y</code></td>
+<td>Skip the confirmation prompt</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td><code>-j</code></td>
+<td>Output result as JSON</td>
+</tr>
+</tbody>
+</table>
+<h3 id="examples_11">Examples</h3>
 <pre><code class="language-bash">anyscribe uninstall-service            # prompts for confirmation
 anyscribe uninstall-service --yes      # no prompt
 </code></pre>
@@ -1453,7 +1619,7 @@ anyscribe uninstall-service --yes      # no prompt
 <p>Copies skill files from the anyscribe package to <code>~/.claude/skills/anyscribe/</code>. Requires Claude Code to be installed (<code>~/.claude/</code> must exist).</p>
 <p>The installed skill includes its copyright notice and full AGPLv3 license text.
 Keep these with the skill if you share or modify it.</p>
-<h3 id="flags_12">Flags</h3>
+<h3 id="flags_13">Flags</h3>
 <table>
 <thead>
 <tr>
@@ -1478,7 +1644,7 @@ Keep these with the skill if you share or modify it.</p>
 <p>Update anyscribe to the latest version: <code>pip install --upgrade</code> for normal installs, or <code>git pull</code> plus reinstall for a cloned (editable) install.</p>
 <pre><code class="language-bash">anyscribe update
 </code></pre>
-<h3 id="flags_13">Flags</h3>
+<h3 id="flags_14">Flags</h3>
 <table>
 <thead>
 <tr>
@@ -1500,7 +1666,7 @@ Keep these with the skill if you share or modify it.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="examples_11">Examples</h3>
+<h3 id="examples_12">Examples</h3>
 <pre><code class="language-bash"># Check for updates without installing
 anyscribe update --check
 
@@ -1527,7 +1693,7 @@ writes nothing at all. If the preview looks right, run it again without the flag
 anyscribe migrate             # actually migrate
 </code></pre>
 <p>Running it a second time is safe: it will simply report there is nothing left to do.</p>
-<h3 id="flags_14">Flags</h3>
+<h3 id="flags_15">Flags</h3>
 <table>
 <thead>
 <tr>
@@ -1549,7 +1715,7 @@ anyscribe migrate             # actually migrate
 </tr>
 </tbody>
 </table>
-<h3 id="examples_12">Examples</h3>
+<h3 id="examples_13">Examples</h3>
 <pre><code class="language-bash"># See what would move, change nothing
 anyscribe migrate --dry-run
 
@@ -1800,6 +1966,10 @@ Argument-parsing errors may still be plain text.</p>
 <tr>
 <td><code>anyscribe install-service</code> / <code>anyscribe uninstall-service</code></td>
 <td>Changes login-item registration</td>
+</tr>
+<tr>
+<td><code>anyscribe desktop install</code> / <code>anyscribe desktop uninstall</code></td>
+<td>Adds or removes the app, the login item and the icons (<code>--json</code> also skips the prompt)</td>
 </tr>
 </tbody>
 </table>

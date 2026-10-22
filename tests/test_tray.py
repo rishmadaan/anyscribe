@@ -304,7 +304,9 @@ def test_install_service_refused_without_tray(monkeypatch, fake_agents):
     monkeypatch.setattr(service_cmd, "find_spec", lambda name: None)
     result = runner.invoke(app, ["install-service", "--yes", "--json"])
     assert result.exit_code == 1
-    assert 'pip install \\"anyscribe[tray]\\" first.' in result.output  # JSON-escaped
+    assert (
+        'The tray isn\'t installed. Run: pip install \\"anyscribe[tray]\\" first.' in result.output
+    )
     assert not agents.exists() and calls == []
 
 

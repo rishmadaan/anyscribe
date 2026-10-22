@@ -43,7 +43,7 @@ def install_service(
     # With KeepAlive, a login item that can't import pystray relaunches every 60 s.
     if find_spec("pystray") is None:
         _fail(
-            'The menu-bar tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',
+            'The tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',
             output_json,
         )
     from anyscribe.core.service import install_service as do_install, login_item_path

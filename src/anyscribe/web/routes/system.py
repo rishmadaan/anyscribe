@@ -39,7 +39,7 @@ async def set_autostart(req: AutostartRequest, request: Request) -> dict:
         if find_spec("pystray") is None:
             raise HTTPException(
                 status_code=400,
-                detail='The menu-bar tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',
+                detail='The tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',
             )
         try:
             # The login item must reopen this dashboard's port, not always 8457.

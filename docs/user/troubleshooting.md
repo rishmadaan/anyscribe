@@ -470,7 +470,7 @@ anyscribe model reinstall base --yes
 
 ---
 
-## Web UI and menu-bar tray
+## Web UI, tray and desktop app
 
 ### The "Setup needed to start transcribing" banner won't go away
 
@@ -524,8 +524,79 @@ A tray is already active and its pidfile (`~/.anyscribe/tray.pid`) still points
 at a live process. This is intentional — anyscribe refuses to start a second tray
 rather than collide with the first.
 
-**Fix:** use the existing one (check your menu bar), or quit it first (menu →
-Quit, or Ctrl+C in its terminal) and relaunch.
+**Fix:** use the existing one (check your menu bar or system tray), or quit it
+first (menu → Quit, or Ctrl+C in its terminal) and relaunch. This isn't an error:
+the second `anyscribe tray` exits successfully, so a login item that runs it
+again doesn't keep retrying.
+
+### `The tray isn't installed. Run: pip install "anyscribe[tray]" first.`
+
+You'll see this from the **Settings → Startup → Start at login** toggle,
+`anyscribe install-service`, or `anyscribe desktop install`. All three refuse to
+set up a login item that couldn't run, because the tray's extra packages are
+missing — usually because anyscribe was installed with a bare
+`pip install anyscribe`. Add them, then try again:
+
+```bash
+pip install "anyscribe[tray]"
+anyscribe desktop install
+```
+
+### Transcribing from the app says ffmpeg (or Deno) is missing, but the terminal works
+
+When anyscribe starts at login or from the app icon, it doesn't get your
+terminal's settings. In particular it doesn't get your *PATH* (the list of
+folders your computer searches for programs like ffmpeg). Desktop mode saves a
+copy of your PATH when you install it, plus the usual Homebrew and Deno folders.
+If you installed or moved ffmpeg or Deno afterwards, that saved copy can't find
+it, while `anyscribe` in a terminal still can.
+
+**Fix:** run the install again. It saves your current PATH and restarts
+anyscribe:
+
+```bash
+anyscribe desktop install
+```
+
+### The desktop app stopped opening after I reinstalled or upgraded Python
+
+The app and login item remember the exact Python that ran
+`anyscribe desktop install`. If that Python is removed or replaced, they point
+at nothing. Check:
+
+```bash
+anyscribe desktop status
+```
+
+It shows `Healthy: no` with the reason, e.g. `The recorded Python (...) no longer
+exists. Run: anyscribe desktop install`. Run that command; it points everything
+at your current Python. Do the same once after `pip install --upgrade anyscribe`.
+
+### Clicking the app does nothing (Windows)
+
+On Windows the app runs without a console window, so it has nowhere to show an
+error. It writes it to `~/.anyscribe/logs/tray.log` instead
+(`%USERPROFILE%\.anyscribe\logs\tray.log`). Open that file and read the last
+lines; each one starts with `desktop open:`. The most common one is
+`Port 8457 is in use by another program.`, fixed by
+`anyscribe desktop install --port 9000` (any free port).
+
+### No tray icon on Linux (GNOME)
+
+Plain GNOME (Fedora Workstation and Debian, for example; Ubuntu ships the fix
+already) hides tray icons unless the **AppIndicator** extension is installed. anyscribe is still running; you just
+can't see its icon. Open the dashboard with the **anyscribe** icon in your app
+menu (or `anyscribe desktop open`). To get the icon and its **Quit** menu back,
+install your distribution's AppIndicator extension
+(`gnome-shell-extension-appindicator` on Fedora and Debian), then log out and back
+in. To stop anyscribe without the icon: `anyscribe desktop uninstall`.
+
+### Windows didn't show a security warning when I installed
+
+That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is
+for apps downloaded through a web browser. Desktop mode doesn't download an app:
+it builds the small launcher on your own machine from the anyscribe you just
+installed, so there is nothing for those checks to flag.
 
 ### `port already in use`
 
@@ -555,13 +626,17 @@ anyscribe tray --port 9000
 
 ### Removing the tray completely
 
-1. Quit the tray if it's running (menu → Quit).
-2. Remove the login auto-start (macOS): `anyscribe uninstall-service --yes`
-3. Optionally drop the extra packages: `pip uninstall pystray Pillow`
+```bash
+anyscribe desktop uninstall
+```
 
-`uninstall-service` removes the login item. If the tray was started by that login
-item, this also stops it (and any server it started). A tray you started by hand
-keeps running until you quit it. anyscribe itself stays installed.
+This stops the tray and its server, then removes the app icon, the login item and
+the icons, on macOS, Windows and Linux. Your transcripts, config and API keys stay.
+Optionally drop the extra packages afterwards: `pip uninstall pystray Pillow`.
+
+Only turned on start-at-login, never the app? `anyscribe uninstall-service --yes`
+removes the login item. It never stops a tray that is already running; quit that
+from its menu (menu → Quit). anyscribe itself stays installed either way.
 
 ---
 

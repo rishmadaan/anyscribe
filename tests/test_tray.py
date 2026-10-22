@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import types
 from pathlib import Path
@@ -294,7 +295,7 @@ def test_teardown_stops_owned_server_and_removes_pidfile(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
     tray.write_pidfile()
     proc = FakeProc()
-    state = {"proc": proc}
+    state = {"proc": proc, "lock": threading.Lock()}
 
     tray_cmd._teardown(state, port=1)  # port 1: /shutdown POST fails fast, ignored
 
@@ -310,7 +311,7 @@ def test_teardown_leaves_attached_server_alone(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
     tray.write_pidfile()
 
-    tray_cmd._teardown({"proc": None}, port=1)  # attached: we own nothing
+    tray_cmd._teardown({"proc": None, "lock": threading.Lock()}, port=1)  # attached: own nothing
 
     assert not (tmp_path / "tray.pid").exists()  # pidfile still cleaned up
 
@@ -716,10 +717,11 @@ class _FakeMenuItem:
         self.text, self.action = text, action
 
 
-def _run_fake_tray(monkeypatch, port: int, signals: list | None = None) -> dict:
+def _run_fake_tray(monkeypatch, port: int, signals: list | None = None, during=None) -> dict:
     """Run _run_tray with a fake pystray whose loop returns at once; return its menu.
 
-    ``signals`` receives the (restart, teardown) callbacks the tray would watch.
+    ``signals`` receives the (restart, teardown) callbacks the tray would watch;
+    ``during()`` runs inside the icon loop, before the tray's own teardown.
     """
     menu = {}
     signals = [] if signals is None else signals
@@ -729,7 +731,8 @@ def _run_fake_tray(monkeypatch, port: int, signals: list | None = None) -> dict:
             menu.update({str(i.text): i for i in m.items if i})
 
         def run(self, setup=None):
-            pass
+            if during:
+                during()
 
     fake = types.ModuleType("pystray")
     fake.Menu, fake.MenuItem, fake.Icon = _FakeMenu, _FakeMenuItem, FakeIcon
@@ -811,38 +814,133 @@ def test_uvicorn_config_with_no_stdout(tmp_path):
     assert (tmp_path / ".anyscribe" / "logs" / "tray.log").exists()
 
 
-def test_tray_restart_lock_is_idempotent(monkeypatch, tmp_path):
-    """Two `desktop open` clicks send two SIGUSR1s: the second must not kill the new server."""
-    spawned, events = [], []
+class _Server:
+    """Fake server Popen: alive until stopped (``wait`` after /shutdown), or ``exited``."""
 
-    class Proc:
-        def poll(self):
-            return 0  # exited, like a server stopped by the dashboard's Shutdown
+    def __init__(self, pid, alive=True):
+        self.pid, self.alive = pid, alive
 
-        def wait(self, timeout=None):
-            return 0
+    def poll(self):
+        return None if self.alive else 0
+
+    def wait(self, timeout=None):
+        self.alive = False
+        return 0
+
+
+def _fake_servers(monkeypatch, tmp_path, health=lambda port: False, gate=None):
+    """Stub the tray's server spawn; return the list of every server it started.
+
+    ``gate``: (entered, release) events; every spawn after the first signals
+    ``entered`` and waits for ``release``, like a slow Popen.
+    """
+    servers: list[_Server] = []
 
     def popen(args, **kwargs):
-        proc = Proc()
-        proc.pid = 4000 + len(spawned)
-        spawned.append(proc.pid)
-        events.append(("spawn", proc.pid))
-        return proc
+        if gate and servers:
+            gate[0].set()
+            assert gate[1].wait(10)
+        server = _Server(4000 + len(servers))
+        servers.append(server)
+        return server
 
     monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
     monkeypatch.setattr(tray_cmd.time, "sleep", lambda s: None)
     monkeypatch.setattr(tray_cmd.subprocess, "Popen", popen)
-    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: events.append("shutdown"))
-    # Up once the restart has spawned its server (the startup spawn is the first).
-    monkeypatch.setattr(tray_cmd.core, "health_is_anyscribe", lambda port: len(spawned) > 1)
+    monkeypatch.setattr(tray_cmd.core, "health_is_anyscribe", health)
     monkeypatch.setattr(tray_cmd.core, "port_responding", lambda port, **k: False)
+    return servers
+
+
+def test_tray_restart_lock_is_idempotent(monkeypatch, tmp_path):
+    """Two `desktop open` clicks send two SIGUSR1s: the second must not kill the new server."""
+    events, seen = [], []
+    servers = _fake_servers(monkeypatch, tmp_path)
+    # Up once the restart has spawned its server (the startup spawn is the first).
+    monkeypatch.setattr(tray_cmd.core, "health_is_anyscribe", lambda port: len(servers) > 1)
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: events.append("shutdown"))
     signals = []
-    _run_fake_tray(monkeypatch, _free_port(), signals)
-    restart = signals[0]
-    events.clear()  # startup spawn, and the teardown of the fake icon loop returning at once
-    restart()
-    restart()
-    assert events == [("spawn", 4001)]  # one new server, and it is never shut down again
+
+    def during():
+        servers[0].alive = False  # stopped by the dashboard's Shutdown
+        signals[0]()
+        signals[0]()
+        seen.extend([s.pid for s in servers if s.alive])
+        seen.append(events.count("shutdown"))
+
+    _run_fake_tray(monkeypatch, _free_port(), signals, during)
+    assert seen == [4001, 1]  # one new server; only the dead one was shut down
+
+
+def test_tray_restart_leaves_a_starting_server_alone(monkeypatch, tmp_path):
+    """A server still starting (alive, health not yet up) is not shut down or doubled."""
+    events, seen = [], []
+    servers = _fake_servers(monkeypatch, tmp_path)  # health never answers
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: events.append("shutdown"))
+    signals = []
+
+    def during():
+        signals[0]()
+        seen.extend([[s.pid for s in servers if s.alive], list(events)])
+
+    _run_fake_tray(monkeypatch, _free_port(), signals, during)
+    assert seen == [[4000], []]
+
+
+def test_teardown_stops_a_server_a_concurrent_restart_is_starting(monkeypatch, tmp_path):
+    """Quit while a restart is mid-spawn: the restart's server is stopped, not orphaned."""
+    entered, release = threading.Event(), threading.Event()
+    servers = _fake_servers(monkeypatch, tmp_path, gate=(entered, release))
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: None)
+    signals, alive_after = [], []
+
+    def during():
+        restart, teardown = signals
+        servers[0].alive = False  # stopped by the dashboard's Shutdown
+        r = threading.Thread(target=restart)
+        r.start()
+        assert entered.wait(10)  # the restart popped the old server and is spawning
+        t = threading.Thread(target=teardown)
+        t.start()
+        threading.Event().wait(0.2)  # teardown is waiting for the lock
+        release.set()
+        r.join(10)
+        t.join(10)
+        alive_after.extend([s.pid for s in servers if s.alive])
+
+    _run_fake_tray(monkeypatch, _free_port(), signals, during)
+    assert [s.pid for s in servers] == [4000, 4001]
+    assert alive_after == []  # the restart's server 4001 was stopped by the teardown
+
+
+def test_restart_waiting_on_the_lock_spawns_nothing_after_quit(monkeypatch, tmp_path):
+    """A restart queued behind a teardown must not start a server the exiting tray orphans."""
+    in_teardown, release = threading.Event(), threading.Event()
+    servers = _fake_servers(monkeypatch, tmp_path)
+
+    def post_shutdown(port):  # the teardown pauses while holding the lock
+        in_teardown.set()
+        assert release.wait(10)
+
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", post_shutdown)
+    signals, spawned_after = [], []
+
+    def during():
+        restart, teardown = signals
+        servers[0].alive = False
+        t = threading.Thread(target=teardown)
+        t.start()
+        assert in_teardown.wait(10)
+        r = threading.Thread(target=restart)
+        r.start()
+        threading.Event().wait(0.2)  # the restart is waiting for the lock
+        release.set()
+        t.join(10)
+        r.join(10)
+        spawned_after.extend([s.pid for s in servers])
+
+    _run_fake_tray(monkeypatch, _free_port(), signals, during)
+    assert spawned_after == [4000]  # only the startup server; nothing after Quit began
 
 
 _SIGNAL_CHILD = """

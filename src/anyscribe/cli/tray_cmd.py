@@ -124,8 +124,14 @@ def _watch_signals_in_thread(restart: Callable[[], None], teardown: Callable[[],
 
 
 def _teardown(state: dict, port: int) -> None:
-    """Single teardown for menu Quit, signals, and exceptions. Idempotent."""
-    _shutdown_server(state.pop("proc", None), port)
+    """Single teardown for menu Quit, signals, and exceptions. Idempotent.
+
+    ``closing`` is set before waiting for the lock: a restart already holding it
+    finishes and its server is stopped here; one still waiting starts nothing.
+    """
+    state["closing"] = True
+    with state["lock"]:
+        _shutdown_server(state.pop("proc", None), port)
     core.remove_pidfile()
 
 
@@ -159,31 +165,35 @@ def _run_tray(port: int) -> None:
     import pystray
 
     core.write_pidfile()
-    state: dict = {"proc": None}
+    # One lock for start, restart and teardown; RLock because restart calls start.
+    state: dict = {"proc": None, "closing": False, "lock": threading.RLock()}
 
     def _log(msg: str) -> None:
         print(f"tray: {msg}", file=sys.stderr, flush=True)  # the tray's stderr is tray.log
 
     def _start_server() -> None:
         """Spawn the uvicorn server as a subprocess unless anyscribe is already up."""
-        state["foreign"] = False
-        if core.health_is_anyscribe(port):
-            return  # attach to an externally-started anyscribe server (we don't own it)
-        if core.port_responding(port):
-            state["foreign"] = True
-            _log(f"port {port} is used by another program; not starting the server")
-            return
-        core.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with open(core.TRAY_LOG, "ab") as log:
-            # Explicit streams: under pythonw.exe the tray has none to hand down.
-            state["proc"] = subprocess.Popen(
-                [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=log,
-                **_child_kwargs(),
-            )
-        core.write_pidfile(state["proc"].pid, core.SERVER_PIDFILE)
+        with state["lock"]:
+            if state["closing"]:
+                return  # Quit has begun: a server started now would outlive the tray
+            state["foreign"] = False
+            if core.health_is_anyscribe(port):
+                return  # attach to an externally-started anyscribe server (we don't own it)
+            if core.port_responding(port):
+                state["foreign"] = True
+                _log(f"port {port} is used by another program; not starting the server")
+                return
+            core.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(core.TRAY_LOG, "ab") as log:
+                # Explicit streams: under pythonw.exe the tray has none to hand down.
+                state["proc"] = subprocess.Popen(
+                    [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=log,
+                    **_child_kwargs(),
+                )
+            core.write_pidfile(state["proc"].pid, core.SERVER_PIDFILE)
 
     def on_open(icon, item) -> None:  # noqa: ANN001
         if core.health_is_anyscribe(port):
@@ -191,11 +201,11 @@ def _run_tray(port: int) -> None:
         else:
             _log(f"Open UI: anyscribe is not answering on port {port}")
 
-    restart_lock = threading.Lock()
-
     def restart_server(force: bool = True) -> None:
         """Menu Restart (force), or SIGUSR1 from `desktop open`: only when the server is down."""
-        with restart_lock:  # the menu and a signal must not spawn two servers
+        with state["lock"]:  # the menu and a signal must not spawn two servers
+            if state["closing"]:
+                return
             proc = state.get("proc")
             starting = proc is not None and proc.poll() is None
             if not force and (starting or core.health_is_anyscribe(port)):

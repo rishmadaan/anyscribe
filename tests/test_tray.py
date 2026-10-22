@@ -105,13 +105,12 @@ def test_service_path_appends_known_dirs_once(tmp_path):
 
 
 def test_render_plist_carries_path_log_keepalive_and_port():
-    xml = service.render_plist(
-        python="/usr/bin/python3", port=9000, path_env="/a:/b", log=Path("/tmp/t.log")
-    )
+    log = Path("/tmp/t.log")
+    xml = service.render_plist(python="/usr/bin/python3", port=9000, path_env="/a:/b", log=log)
     assert "<key>PATH</key>" in xml and "<string>/a:/b</string>" in xml
     assert "<string>--port</string>" in xml and "<string>9000</string>" in xml
     assert "<key>SuccessfulExit</key>" in xml and "<false/>" in xml
-    assert "<string>/tmp/t.log</string>" in xml
+    assert f"<string>{log}</string>" in xml
 
 
 def test_plist_has_throttle_interval():
@@ -174,7 +173,7 @@ def test_uninstall_when_absent(fake_agents):
 
 
 def test_linux_autostart_exec_quotes_path(tmp_path):
-    py = str(tmp_path / "Rish O'Brien" / "py env" / "python3")
+    py = "/home/Rish O'Brien/py env/python3"  # POSIX literal: a .desktop path has no backslashes
     txt = service.render_autostart_entry(py, 8457, "/a:/b c")
     exec_line = (
         f"Exec=env {launcher.desktop_quote('PATH=/a:/b c')} {launcher.desktop_quote(py)}"
@@ -352,7 +351,9 @@ def test_signal_watch_is_skipped_on_windows(monkeypatch):
 
 
 def test_child_kwargs_per_platform(monkeypatch):
-    assert set(tray_cmd._child_kwargs()) == {"preexec_fn"}
+    assert set(tray_cmd._child_kwargs()) == (
+        {"creationflags"} if os.name == "nt" else {"preexec_fn"}
+    )
     monkeypatch.setattr(tray_cmd.os, "name", "nt")
     monkeypatch.setattr(tray_cmd.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     assert tray_cmd._child_kwargs() == {"creationflags": 0x08000000}

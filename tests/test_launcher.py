@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import sys
@@ -24,8 +25,10 @@ def home(tmp_path, monkeypatch):
 def test_renders_quote_paths_with_space_and_apostrophe(home):
     py = str(home / "py env" / "python3")
     assert shlex.quote(py) in launcher.render_app_script(py, 8457)
-    entry = launcher.render_desktop_entry(py, 8457)
-    assert f'Exec="{py}" -m anyscribe' in entry and "\\'" not in entry
+    # A .desktop file is a Linux artifact: its path never has backslashes (which desktop_quote doubles).
+    py_posix = "/home/Rish O'Brien/py env/python3"
+    entry = launcher.render_desktop_entry(py_posix, 8457)
+    assert f'Exec="{py_posix}" -m anyscribe' in entry and "\\'" not in entry
     ps = launcher.render_shortcut_script(home / "a.lnk", py, "-m anyscribe tray", None, "anyscribe")
     assert "Rish O''Brien" in ps and "$s.Save()" in ps
 
@@ -72,7 +75,8 @@ def test_install_launcher_macos_writes_app_tree(home, monkeypatch):
     monkeypatch.setattr(launcher.sys, "platform", "darwin")
     monkeypatch.setattr(launcher, "applications_dir", lambda: home / "Applications")
     app = launcher.install_launcher("/usr/bin/python3", 8457, {"icns": home / "i.icns"})
-    assert (app / "Contents" / "MacOS" / "anyscribe").stat().st_mode & 0o111
+    if os.name != "nt":  # no executable bit on Windows
+        assert (app / "Contents" / "MacOS" / "anyscribe").stat().st_mode & 0o111
     assert (app / "Contents" / "Info.plist").exists()
     assert app.stat().st_mtime_ns >= (app / "Contents" / "MacOS" / "anyscribe").stat().st_mtime_ns
     assert launcher.uninstall_launcher() is True and not app.exists()

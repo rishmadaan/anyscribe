@@ -203,6 +203,11 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
     ``expect_external``: a tray is being started by someone else (launchd's
     RunAtLoad); give it ``EXTERNAL_WAIT`` seconds to show up before spawning one.
     """
+    installed = installed_port()
+    if installed is not None and installed != port:
+        # Its tray serves another port: signalling or stopping it would take that one
+        # down, and a tray spawned here would be killed by the next app click.
+        raise PortMismatch(installed, port)
     url = f"http://127.0.0.1:{port}"
     if expect_external:
         _wait_until(
@@ -211,11 +216,6 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
     if not health_is_anyscribe(port):
         if tray.port_responding(port):
             raise PortInUseError(port)
-        installed = installed_port()
-        if installed is not None and installed != port:
-            # Its tray serves another port: signalling or stopping it would take that one
-            # down, and a tray spawned here would be killed by the next app click.
-            raise PortMismatch(installed, port)
         proc = None  # a tray already running (e.g. launchd's) brings its server up
         pid = tray.read_pidfile()
         if pid is None:

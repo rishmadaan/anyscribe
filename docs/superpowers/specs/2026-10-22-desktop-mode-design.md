@@ -63,7 +63,12 @@ not macOS / Windows / Linux. Then, in order:
 3. **Login item** — runs `<python> -m anyscribe tray --port <port>` at login:
    - macOS: `~/Library/LaunchAgents/com.anyscribe.tray.plist` with
      `EnvironmentVariables.PATH` (see §3), `KeepAlive {SuccessfulExit: false}`,
-     `ThrottleInterval 60`, stdout/stderr to `~/.anyscribe/logs/tray.log`.
+     `ThrottleInterval 60`, `ProcessType Interactive`, stdout/stderr to
+     `~/.anyscribe/logs/tray.log`. `ProcessType` was added after measurement
+     on 2026-10-22: a plain launchd job throttles the server's child processes
+     (`/api/health`, which spawns ffmpeg and friends, took 5–13 s; with
+     `Interactive` 0.32 s, the same as a terminal start). Transcriptions are
+     child processes too.
    - Windows: `...\Start Menu\Programs\Startup\anyscribe tray.lnk` → `pythonw.exe`.
    - Linux: `~/.config/autostart/anyscribe-tray.desktop` with
      `Exec=env PATH=<path> <python> -m anyscribe tray --port <port>`.

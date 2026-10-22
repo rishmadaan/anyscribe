@@ -131,8 +131,16 @@ def render_plist(
 
 
 def _launchctl(*args: str) -> None:
-    """Run launchctl. Wrapped so tests can monkeypatch it (no real load)."""
-    subprocess.run(["launchctl", *args], check=False)
+    """Run launchctl; on failure print one plain line. Wrapped so tests can monkeypatch it.
+
+    ``load``/``unload`` report failure on stderr with exit status 0 (seen on macOS 26.6), so
+    any stderr counts as failure too; success prints nothing.
+    """
+    r = subprocess.run(["launchctl", *args], check=False, capture_output=True, text=True)
+    detail = (r.stderr or "").strip()
+    if r.returncode != 0 or detail:
+        first = detail.splitlines()[0] if detail else f"exit status {r.returncode}"
+        print(f"launchctl {args[0]} did not succeed: {first}", file=sys.stderr)
 
 
 def render_autostart_entry(python: str, port: int, path_env: str) -> str:

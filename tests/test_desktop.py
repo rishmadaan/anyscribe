@@ -229,6 +229,22 @@ def test_install_over_existing_stops_old_tray_first(monkeypatch, calls, tmp_mani
     )
 
 
+def test_install_stops_running_tray_without_manifest(monkeypatch, fake_platform_darwin, calls):
+    """The upgrade from a pre-desktop-mode tray: no manifest, but its tray is running."""
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
+    monkeypatch.setattr(
+        desktop.tray,
+        "stop_tray",
+        lambda port: calls["stop"].append(port) or calls["order"].append("stop_tray"),
+    )
+    desktop.install(port=9000, launch=False)
+    assert calls["stop"] == [9000]
+    order = calls["order"]
+    assert (
+        order.index("stop_tray") < order.index("uninstall_service") < order.index("install_service")
+    )
+
+
 # ---- open ----------------------------------------------------------------
 
 

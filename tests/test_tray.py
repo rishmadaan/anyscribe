@@ -190,6 +190,33 @@ def test_uninstall_when_absent(fake_agents):
     assert service.uninstall_service() is False
 
 
+@pytest.mark.parametrize("code", [0, 5])  # legacy load/unload exit 0 even when they fail
+def test_launchctl_failure_prints_one_plain_line(monkeypatch, capsys, code):
+    err = "Load failed: 5: Input/output error\nTry running `launchctl bootstrap` as root for richer errors.\n"
+    monkeypatch.setattr(
+        service.subprocess,
+        "run",
+        lambda args, **k: subprocess.CompletedProcess(args, code, "", err),
+    )
+    service._launchctl("load", "/x.plist")
+    out = capsys.readouterr()
+    assert out.err == "launchctl load did not succeed: Load failed: 5: Input/output error\n"
+    assert out.out == ""
+
+
+def test_launchctl_success_prints_nothing(monkeypatch, capsys):
+    seen = {}
+
+    def run(args, **k):
+        seen.update(k)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(service.subprocess, "run", run)
+    service._launchctl("load", "/x.plist")
+    assert capsys.readouterr() == ("", "")
+    assert seen["capture_output"] is True  # launchctl's own text never reaches the terminal
+
+
 def test_linux_autostart_exec_quotes_path(tmp_path):
     py = "/home/Rish O'Brien/py env/python3"  # POSIX literal: a .desktop path has no backslashes
     txt = service.render_autostart_entry(py, 8457, "/a:/b c")

@@ -203,11 +203,14 @@ def install(port: int = tray.DEFAULT_PORT, launch: bool = True) -> Manifest:
         raise TrayMissing()
 
     old = read_manifest()
-    if old:
+    # A tray with no manifest is the pre-desktop-mode upgrade: it must go too, or it keeps
+    # serving the old code and launchd's load of the new login item fails.
+    if old or tray.read_pidfile() is not None:
         # Clean reinstall: a running tray keeps launchd's old job and the old port alive.
-        tray.stop_tray(old["port"])
+        old_port = old["port"] if old else port
+        tray.stop_tray(old_port)
         service.uninstall_service()
-        _wait_until(lambda: not tray.port_responding(old["port"]), 10)
+        _wait_until(lambda: not tray.port_responding(old_port), 10)
     if tray.port_responding(port) and not health_is_anyscribe(port):
         raise PortInUseError(port)
 

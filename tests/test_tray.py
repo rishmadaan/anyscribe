@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -71,6 +73,30 @@ def test_render_plist_contents():
     assert "<string>anyscribe</string>" in xml
     assert "<string>tray</string>" in xml
     assert "<key>RunAtLoad</key>" in xml
+
+
+def test_service_path_appends_known_dirs_once(tmp_path):
+    env = {"PATH": f"/opt/homebrew/bin{os.pathsep}/usr/bin"}
+    parts = service.service_path(env, home=tmp_path).split(os.pathsep)
+    assert parts[:2] == ["/opt/homebrew/bin", "/usr/bin"]
+    assert parts.count("/opt/homebrew/bin") == 1
+    assert str(tmp_path / ".deno" / "bin") in parts
+    assert str(Path(sys.executable).parent) in parts
+
+
+def test_render_plist_carries_path_log_keepalive_and_port():
+    xml = service.render_plist(
+        python="/usr/bin/python3", port=9000, path_env="/a:/b", log=Path("/tmp/t.log")
+    )
+    assert "<key>PATH</key>" in xml and "<string>/a:/b</string>" in xml
+    assert "<string>--port</string>" in xml and "<string>9000</string>" in xml
+    assert "<key>SuccessfulExit</key>" in xml and "<false/>" in xml
+    assert "<string>/tmp/t.log</string>" in xml
+
+
+def test_plist_has_throttle_interval():
+    xml = service.render_plist(python="/usr/bin/python3")
+    assert "<key>ThrottleInterval</key>" in xml and "<integer>60</integer>" in xml
 
 
 # ---- install / uninstall (no real launchctl) -----------------------------

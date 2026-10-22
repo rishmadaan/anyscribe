@@ -11,9 +11,10 @@ from __future__ import annotations
 import os
 import socket
 
-from anyscribe.config.paths import APP_HOME
+from anyscribe.config.paths import APP_HOME, LOGS_DIR
 
 PIDFILE = APP_HOME / "tray.pid"
+TRAY_LOG = LOGS_DIR / "tray.log"
 GITHUB_RELEASES_URL = "https://github.com/rishmadaan/anyscribe/releases"
 DEFAULT_PORT = 8457
 

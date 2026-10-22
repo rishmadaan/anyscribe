@@ -10,9 +10,14 @@ changes that would leave a hardcoded binary path dangling (per the plan).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from xml.sax.saxutils import escape
+
+from anyscribe.core import tray
 
 LABEL = "com.anyscribe.tray"
 
@@ -25,26 +30,71 @@ def plist_path() -> Path:
     return launch_agents_dir() / f"{LABEL}.plist"
 
 
-def render_plist(python: str | None = None, label: str = LABEL) -> str:
-    """Return the launchd plist XML for the tray LaunchAgent."""
+def service_path(environ: Mapping[str, str] | None = None, home: Path | None = None) -> str:
+    """PATH for the login item: launchd's default lacks ffmpeg, Deno and our venv.
+
+    The installing shell's PATH first, then the usual install dirs, de-duplicated.
+    """
+    environ = os.environ if environ is None else environ
+    home = home or Path.home()
+    dirs = environ.get("PATH", "").split(os.pathsep) + [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        str(home / ".deno" / "bin"),
+        str(home / ".local" / "bin"),
+        str(Path(sys.executable).parent),
+    ]
+    return os.pathsep.join(dict.fromkeys(d for d in dirs if d))
+
+
+def render_plist(
+    python: str | None = None,
+    label: str = LABEL,
+    port: int = tray.DEFAULT_PORT,
+    path_env: str | None = None,
+    log: Path | None = None,
+) -> str:
+    """Return the launchd plist XML for the tray LaunchAgent.
+
+    KeepAlive restarts the tray after a crash (non-zero exit) but not after Quit;
+    ThrottleInterval keeps a crash loop to one try a minute.
+    """
     python = python or sys.executable
+    path_env = service_path() if path_env is None else path_env
+    log = log or tray.TRAY_LOG
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{label}</string>
+    <string>{escape(label)}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{python}</string>
+        <string>{escape(python)}</string>
         <string>-m</string>
         <string>anyscribe</string>
         <string>tray</string>
+        <string>--port</string>
+        <string>{port}</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{escape(path_env)}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <false/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>{escape(str(log))}</string>
+    <key>StandardErrorPath</key>
+    <string>{escape(str(log))}</string>
 </dict>
 </plist>
 """
@@ -59,7 +109,9 @@ def install_service() -> Path:
     """Write the LaunchAgent plist and load it. Returns the plist path."""
     path = plist_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_plist())
+    # launchd won't create the log's folder; a missing one stops the agent starting.
+    tray.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_plist(port=8457, path_env=service_path(), log=tray.TRAY_LOG))
     _launchctl("load", str(path))
     return path
 

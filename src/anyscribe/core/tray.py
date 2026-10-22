@@ -62,7 +62,12 @@ def port_responding(port: int, host: str = "127.0.0.1", timeout: float = 0.5) ->
 
 
 def health_is_anyscribe(port: int) -> bool:
-    """True if anyscribe's own web server answers on this port."""
+    """True if anyscribe's own web server answers on this port.
+
+    An ``app`` field decides alone. Without one, a string ``version`` and a
+    ``dependencies`` object pass: a compatibility heuristic for pre-0.18
+    servers, which had no ``app`` field.
+    """
     try:
         import httpx
 
@@ -74,9 +79,10 @@ def health_is_anyscribe(port: int) -> bool:
         return False
     if r.status_code != 200 or not isinstance(body, dict):
         return False
+    if "app" in body:
+        return body["app"] == "anyscribe"
     # Before 0.18 there was no "app" field: a pip-upgraded user's running server is still ours.
-    legacy = "version" in body and "dependencies" in body
-    return body.get("app") == "anyscribe" or legacy
+    return isinstance(body.get("version"), str) and isinstance(body.get("dependencies"), dict)
 
 
 def ensure_streams() -> None:

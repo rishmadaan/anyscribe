@@ -558,6 +558,17 @@ def test_health_identity_accepts_pre_0_18_shape(health_server):
     assert tray.health_is_anyscribe(health_server.port) is True
 
 
+def test_health_identity_explicit_foreign_app_wins(health_server):
+    """Another program's own "app" name is foreign even with anyscribe's legacy keys."""
+    health_server.body = {"app": "another-program", "version": "1", "dependencies": {}}
+    assert tray.health_is_anyscribe(health_server.port) is False
+
+
+def test_health_identity_legacy_shape_is_typed(health_server):
+    health_server.body = {"version": None, "dependencies": None}
+    assert tray.health_is_anyscribe(health_server.port) is False
+
+
 def test_post_shutdown_leaves_foreign_server_alone(health_server):
     tray._post_shutdown(health_server.port)
     assert health_server.posts == []

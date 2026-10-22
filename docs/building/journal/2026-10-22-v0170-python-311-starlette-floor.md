@@ -18,7 +18,8 @@ tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct st
   manager for 3.11 by its own name (apt: `python3.11 python3.11-venv`, dnf:
   `python3.11`), tolerates a failed package install so its own message speaks,
   installs with `pip install --upgrade` or, on the pipx route, `pipx uninstall`
-  of an existing anyscribe followed by `pipx install --force --python <checked
+  of an existing anyscribe (a failed uninstall stops the installer, since
+  continuing would keep the old Python) followed by `pipx install --force --python <checked
   python>` (pipx 1.0.0 otherwise keeps the old venv and its old Python, even
   under `--force`; both reproduced on Ubuntu 22.04), and verifies the copy it installed rather
   than whichever `anyscribe` PATH finds first. install.ps1 also tries the `py`

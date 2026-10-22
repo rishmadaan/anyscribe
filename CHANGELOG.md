@@ -48,8 +48,9 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 - The bundled Claude Code skill was corrected against the CLI: wrong flags,
   JSON shapes, provider routing and chunk sizes, dozens of corrections. After
   upgrading, running a normal command such as `anyscribe ui` updates the
-  skill Claude Code uses; `anyscribe --version`, `--help` and `migrate` alone
-  do not. To update it straight away, run `anyscribe install-skill --force`.
+  skill Claude Code uses; `anyscribe --version`, `--help` and
+  `anyscribe migrate --dry-run` do not. To update it straight away, run
+  `anyscribe install-skill --force`.
 - The CLI's own help and error text: `anyscribe model info` names the right
   repository for the turbo model; the Groq and OpenAI "no speaker labels"
   errors say exactly how to retry; the hint to paste a URL interactively now

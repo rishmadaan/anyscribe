@@ -297,9 +297,12 @@ install_with_pipx() {
     # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one
     # that passed the check. An existing anyscribe venv keeps its old Python even
     # under --force (pipx 1.0.0 only reinstalls the package), so remove it first.
-    if pipx list 2>/dev/null | grep -q "package anyscribe "; then
+    local venvs
+    venvs="$(pipx environment --value PIPX_LOCAL_VENVS 2>/dev/null || echo "$HOME/.local/pipx/venvs")"
+    if [[ -d "$venvs/anyscribe" ]]; then
         info "Replacing the existing pipx anyscribe so it runs on $PY..."
-        pipx uninstall anyscribe >/dev/null 2>&1 || true
+        pipx uninstall anyscribe || true
+        [[ ! -d "$venvs/anyscribe" ]] || die "Could not remove the existing pipx anyscribe, so it would keep its old Python. Run: pipx uninstall anyscribe, then re-run the installer."
     fi
     pipx install --force --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
@@ -320,6 +323,7 @@ install_anyscribe() {
 
     if [[ "$DRY_RUN" == true ]]; then
         echo "    [dry-run] $PY -m pip install --upgrade $pip_cmd"
+        return 0  # nothing was installed, so there is nothing to verify
     else
         # Try pip first; fall back to pipx if this Python has no pip or is
         # externally managed.
@@ -343,18 +347,20 @@ install_anyscribe() {
     # not an older anyscribe from another Python that sits earlier on PATH.
     local installed_ver="" found_ver=""
     if [[ "$USED_PIPX" == true ]]; then
-        installed_ver="$("$(pipx_bin_dir)/anyscribe" --version 2>/dev/null | awk '{print $2}')"
+        # || true: a dead or foreign copy must produce a warning, not a silent exit under set -e
+        installed_ver="$("$(pipx_bin_dir)/anyscribe" --version 2>/dev/null | awk '{print $2}' || true)"
     else
-        installed_ver="$("$PY" -m anyscribe --version 2>/dev/null | awk '{print $2}')"
+        installed_ver="$("$PY" -m anyscribe --version 2>/dev/null | awk '{print $2}' || true)"
     fi
     if command_exists anyscribe; then
-        found_ver="$(anyscribe --version 2>/dev/null | awk '{print $2}')"
+        found_ver="$(anyscribe --version 2>/dev/null | awk '{print $2}' || true)"
         if [[ -n "$installed_ver" && "$found_ver" != "$installed_ver" ]]; then
             warn "An older anyscribe (${found_ver:-unknown version}, $(command -v anyscribe)) is first on PATH; the new one is $installed_ver."
+            echo "    Remove the old one (a pip install on Python 3.10: python3.10 -m pip uninstall anyscribe) and open a new terminal,"
             if [[ "$USED_PIPX" == true ]]; then
-                echo "    Remove the old one, or run the new one as: $(pipx_bin_dir)/anyscribe"
+                echo "    or run the new one as: $(pipx_bin_dir)/anyscribe"
             else
-                echo "    Remove the old one, or run the new one as: $PY -m anyscribe"
+                echo "    or run the new one as: $PY -m anyscribe"
             fi
         else
             ok "anyscribe ${found_ver:-installed}"

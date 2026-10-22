@@ -287,15 +287,23 @@ Download from <a href="https://www.python.org/downloads/">python.org/downloads</
 <pre><code class="language-powershell">winget install ffmpeg
 pip install yt-dlp
 </code></pre>
-<p><strong>3. anyscribe itself.</strong></p>
-<p><strong>macOS / Windows:</strong></p>
-<pre><code class="language-bash">pip install &quot;anyscribe[tray]&quot;
+<p><strong>3. anyscribe itself.</strong> Install with the same Python you checked in step 1, so a second, older Python's <code>pip</code> cannot sneak in.</p>
+<p><strong>macOS:</strong></p>
+<pre><code class="language-bash">python3 -m pip install &quot;anyscribe[tray]&quot;
 </code></pre>
-<p><strong>Linux:</strong></p>
+<p>If Homebrew's Python answers "externally-managed-environment", use pipx instead: <code>brew install pipx</code>, then <code>pipx install "anyscribe[tray]"</code> and <code>pipx ensurepath</code>.</p>
+<p><strong>Windows:</strong></p>
+<pre><code class="language-powershell">python -m pip install &quot;anyscribe[tray]&quot;
+</code></pre>
+<p><strong>Linux (Debian 12, Ubuntu 24.04 and newer, where <code>python3</code> is already 3.11+):</strong></p>
+<pre><code class="language-bash">pipx install &quot;anyscribe[tray]&quot;
+pipx ensurepath
+</code></pre>
+<p><strong>Linux (Ubuntu 22.04, using the python3.11 from step 1):</strong></p>
 <pre><code class="language-bash">pipx install --python /usr/bin/python3.11 &quot;anyscribe[tray]&quot;
 pipx ensurepath
 </code></pre>
-<p>Then open a new terminal. Use the Python from step 1: on Ubuntu 22.04 that is <code>/usr/bin/python3.11</code>; on Debian 12 and Ubuntu 24.04 plain <code>pipx install "anyscribe[tray]"</code> is enough. Plain <code>pip install</code> is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.</p>
+<p>Then open a new terminal. Plain <code>pip install</code> is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.</p>
 <p>Verify:</p>
 <p><strong>macOS / Linux:</strong></p>
 <pre><code class="language-bash">anyscribe --version

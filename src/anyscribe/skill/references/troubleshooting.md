@@ -55,12 +55,15 @@ Current anyscribe needs Python 3.11 or newer. On Python 3.10, pip and
 `anyscribe update` stop at the last release that supported it and report it as
 up to date.
 
-**Fix:** check with `python3 --version`. To move up, re-run the one-line
-installer from the getting-started guide: it finds or installs Python 3.11 or
-newer and installs anyscribe with it. Then `anyscribe --version`; if it still
-shows the old version, an older copy comes first on PATH. Remove it with
-`python3.10 -m pip uninstall anyscribe` (Windows: `py -3.10 -m pip uninstall
-anyscribe`) and open a new terminal.
+**Fix:** run `anyscribe doctor`; its Python row shows the Python anyscribe
+actually runs on (`python3 --version` can differ). If it is 3.10, give the
+user the one-line installer to run in their own terminal (macOS / Linux:
+`curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash`;
+Windows PowerShell:
+`irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex`).
+Then `anyscribe --version`; if it still shows the old version, an older copy
+comes first on PATH. Remove it with `python3.10 -m pip uninstall anyscribe`
+(Windows: `py -3.10 -m pip uninstall anyscribe`) and open a new terminal.
 
 ### "No matches found" when pasting a URL
 

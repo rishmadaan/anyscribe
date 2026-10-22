@@ -326,20 +326,33 @@ winget install ffmpeg
 pip install yt-dlp
 ```
 
-**3. anyscribe itself.**
+**3. anyscribe itself.** Install with the same Python you checked in step 1, so a second, older Python's `pip` cannot sneak in.
 
-**macOS / Windows:**
+**macOS:**
 ```bash
-pip install "anyscribe[tray]"
+python3 -m pip install "anyscribe[tray]"
 ```
 
-**Linux:**
+If Homebrew's Python answers "externally-managed-environment", use pipx instead: `brew install pipx`, then `pipx install "anyscribe[tray]"` and `pipx ensurepath`.
+
+**Windows:**
+```powershell
+python -m pip install "anyscribe[tray]"
+```
+
+**Linux (Debian 12, Ubuntu 24.04 and newer, where `python3` is already 3.11+):**
+```bash
+pipx install "anyscribe[tray]"
+pipx ensurepath
+```
+
+**Linux (Ubuntu 22.04, using the python3.11 from step 1):**
 ```bash
 pipx install --python /usr/bin/python3.11 "anyscribe[tray]"
 pipx ensurepath
 ```
 
-Then open a new terminal. Use the Python from step 1: on Ubuntu 22.04 that is `/usr/bin/python3.11`; on Debian 12 and Ubuntu 24.04 plain `pipx install "anyscribe[tray]"` is enough. Plain `pip install` is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.
+Then open a new terminal. Plain `pip install` is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.
 
 Verify:
 

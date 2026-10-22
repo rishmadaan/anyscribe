@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -657,14 +658,12 @@ def test_uninstall_removes_everything(calls, tmp_manifest):
     assert not paths.DESKTOP_DIR.exists() and desktop.read_manifest() is None
 
 
-def test_uninstall_removes_tray_lock_only_when_no_tray_holds_it(calls, tmp_manifest):
+def test_uninstall_leaves_tray_lock_in_place(calls, tmp_manifest):
     tmp_manifest()
-    held = tray.acquire_instance_lock()  # a tray still alive
+    tray.acquire_instance_lock().close()  # lock file present, no tray holds it
+    inode = os.stat(tray.LOCKFILE).st_ino
     desktop.uninstall()
-    assert tray.LOCKFILE.exists()
-    held.close()
-    desktop.uninstall()
-    assert not tray.LOCKFILE.exists()
+    assert os.stat(tray.LOCKFILE).st_ino == inode  # the same file, not a recreated one
 
 
 def test_status_without_manifest_reports_the_login_item_port(monkeypatch, tmp_path):

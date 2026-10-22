@@ -1345,7 +1345,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 </tr>
 <tr>
 <td><code>uninstall</code></td>
-<td>Stops the tray and its server, then removes the app, the login item, the icons, <code>~/.anyscribe/desktop.json</code> and <code>~/.anyscribe/tray.lock</code>. Never touches your transcripts (<code>~/anyscribe/</code>), config or API keys.</td>
+<td>Stops the tray and its server, then removes the app, the login item, the icons and <code>~/.anyscribe/desktop.json</code>. Never touches your transcripts (<code>~/anyscribe/</code>), config or API keys. <code>~/.anyscribe/tray.lock</code> is a zero-byte file the running tray holds a lock on; it stays after uninstall and is harmless (its presence does not mean a tray is running).</td>
 </tr>
 <tr>
 <td><code>status</code></td>

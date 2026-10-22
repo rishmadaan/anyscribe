@@ -125,7 +125,7 @@
 <tr>
 <td>Tray lock</td>
 <td><code>~/.anyscribe/tray.lock</code></td>
-<td>Empty file the running tray holds a lock on, so only one tray runs; safe to leave in place</td>
+<td>Zero-byte file the running tray holds a lock on, so only one tray runs; it stays after <code>desktop uninstall</code> and is harmless (its presence does not mean a tray is running)</td>
 </tr>
 <tr>
 <td>Server PID</td>

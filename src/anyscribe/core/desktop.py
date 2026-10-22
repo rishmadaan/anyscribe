@@ -314,10 +314,7 @@ def uninstall() -> dict:
     launcher_removed = launcher.uninstall_launcher()
     shutil.rmtree(paths.DESKTOP_DIR, ignore_errors=True)
     paths.DESKTOP_MANIFEST.unlink(missing_ok=True)
-    lock = tray.acquire_instance_lock()
-    if lock is not None:  # no tray holds it (a live tray's lock must stay)
-        lock.close()
-        tray.LOCKFILE.unlink(missing_ok=True)
+    # tray.lock stays: unlinking it lets a starting tray lock an orphaned inode beside a new one.
     return {"stopped": stopped, "launcher": launcher_removed, "login_item": login_item}
 
 

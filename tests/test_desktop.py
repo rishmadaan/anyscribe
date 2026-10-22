@@ -16,6 +16,7 @@ from anyscribe.config import paths
 from anyscribe.core import desktop, tray
 
 REAL_HEALTH = desktop.health_is_anyscribe  # before the autouse fixture stubs it
+REAL_OPEN = desktop.open_dashboard
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +138,8 @@ def test_install_writes_manifest_and_launches(fake_platform_darwin, calls):
     assert m["port"] == 9000 and Path(m["launcher"]).name == "anyscribe.app"
     assert calls["install_launcher"] == [("python", 9000)] and calls["install_service"] == [9000]
     assert calls["open_dashboard"] == [9000]
+    # tray first, then the login item: launchd's RunAtLoad copy must find a live pidfile
+    assert calls["order"].index("open_dashboard") < calls["order"].index("install_service")
     assert desktop.read_manifest() == m
 
 
@@ -241,7 +244,7 @@ def test_open_prints_url_when_no_browser(monkeypatch, fake_browser, capsys):
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
     fake_browser.result = False
     desktop.open_dashboard(8457)
-    assert "http://127.0.0.1:8457" in capsys.readouterr().out
+    assert "http://127.0.0.1:8457" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -352,6 +355,43 @@ def test_cli_install_json(calls):
     r = CliRunner().invoke(app, ["desktop", "install", "--yes", "--no-launch", "--json"])
     data = json.loads(r.output)
     assert r.exit_code == 0 and data["success"] is True and data["data"]["port"] == 8457
+
+
+def test_cli_install_json_stays_clean_without_browser(calls, monkeypatch, fake_browser):
+    monkeypatch.setattr(desktop, "open_dashboard", REAL_OPEN)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
+    fake_browser.result = False
+    r = CliRunner().invoke(app, ["desktop", "install", "--yes", "--json"])
+    assert r.exit_code == 0 and json.loads(r.stdout)["success"] is True
+    assert "http://127.0.0.1:8457" in r.stderr
+
+
+def test_status_partly_installed_without_manifest(monkeypatch, tmp_path):
+    monkeypatch.setattr(desktop.launcher, "launcher_path", lambda: tmp_path)  # exists
+    s = desktop.status()
+    assert s["installed"] is False and s["reason"].startswith("Partly installed")
+
+
+def test_uninstall_does_not_claim_stop_for_foreign_listener(monkeypatch, calls, tmp_manifest):
+    tmp_manifest()
+    monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: True)
+    assert desktop.uninstall()["stopped"] is False
+
+
+@pytest.mark.parametrize("cmd", [["uninstall", "--yes", "--json"], ["open", "--port", "8457"]])
+def test_cli_os_errors_fail_cleanly(monkeypatch, cmd):
+    def boom(*a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(desktop, "uninstall", boom)
+    monkeypatch.setattr(desktop, "open_dashboard", boom)
+    r = CliRunner().invoke(app, ["desktop", *cmd])
+    assert r.exit_code == 1 and not isinstance(r.exception, PermissionError)  # no traceback
+    assert "Permission denied" in r.output
+    if cmd[0] == "uninstall":
+        assert json.loads(r.stdout)["success"] is False
+    else:
+        assert "Permission denied" in tray.TRAY_LOG.read_text()
 
 
 def test_cli_open_foreign_port_exit_1(monkeypatch):

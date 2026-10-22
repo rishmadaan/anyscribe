@@ -32,6 +32,10 @@ STOPPED_COPY = (
 )
 
 
+# Expected failures: shown as a message or JSON envelope with exit 1, never a traceback.
+_FAILURES = (desktop.DesktopError, RuntimeError, OSError, subprocess.CalledProcessError)
+
+
 def _emit(data: object) -> None:
     json.dump({"success": True, "data": data, "error": None}, sys.stdout, indent=2)
     sys.stdout.write("\n")
@@ -69,7 +73,7 @@ def install(
         )
     try:
         m = desktop.install(port=port, launch=not no_launch)
-    except (desktop.DesktopError, RuntimeError, OSError, subprocess.CalledProcessError) as e:
+    except _FAILURES as e:
         _fail(str(e), output_json)
     if output_json:
         _emit(m)
@@ -94,7 +98,10 @@ def uninstall(
     _require_supported(output_json)
     if not yes and not output_json:
         typer.confirm("Stop anyscribe and remove the desktop app?", abort=True)
-    r = desktop.uninstall()
+    try:
+        r = desktop.uninstall()
+    except _FAILURES as e:
+        _fail(str(e), output_json)
     if output_json:
         _emit(r)
         return
@@ -139,12 +146,12 @@ def open_cmd(
     ),
 ) -> None:
     """[bold]Open[/bold] the dashboard, starting anyscribe first if needed (what the app icon runs)."""
-    if port is None:
-        m = desktop.read_manifest()
-        port = m["port"] if m else tray.DEFAULT_PORT
     try:
+        if port is None:
+            m = desktop.read_manifest()
+            port = m["port"] if m else tray.DEFAULT_PORT
         desktop.open_dashboard(port)
-    except desktop.DesktopError as e:
+    except _FAILURES as e:
         # Started from the app icon there is no terminal; the log is where it shows.
         tray.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(tray.TRAY_LOG, "a") as log:

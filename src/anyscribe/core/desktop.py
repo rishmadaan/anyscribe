@@ -158,7 +158,7 @@ def open_dashboard(port: int, timeout: float = 15.0) -> str:
         if state != "up":
             raise StartFailed(port)
     if not webbrowser.open(url):
-        print(url)
+        print(url, file=sys.stderr)  # stdout may carry a --json envelope
     return url
 
 
@@ -203,7 +203,7 @@ def uninstall() -> dict:
     stopped = False
     # Nothing recorded and no tray: a server on the port was started by hand; leave it.
     if m or tray.read_pidfile():
-        was_serving = tray.port_responding(port)
+        was_serving = health_is_anyscribe(port)
         stopped = tray.stop_tray(port) or was_serving
     login_item = service.uninstall_service()  # after the stop, so macOS unloads the job
     launcher_removed = launcher.uninstall_launcher()
@@ -218,7 +218,9 @@ def status() -> dict:
     launcher_p = Path(m["launcher"]) if m else launcher.launcher_path()
     login_item = Path(m["login_item"]) if m else service.login_item_path()
     reinstall = "Run: anyscribe desktop install"
-    if not m:
+    if not m and (launcher_p.exists() or service.is_installed()):
+        reason = f"Partly installed (launcher or login item present, no manifest). {reinstall}"
+    elif not m:
         reason = f"Not installed. {reinstall}"
     elif not Path(m["python"]).exists():
         reason = f"The recorded Python ({m['python']}) no longer exists. {reinstall}"

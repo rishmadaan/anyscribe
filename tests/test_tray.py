@@ -133,7 +133,7 @@ def test_render_plist_carries_path_log_keepalive_and_port():
 
 def test_plist_has_throttle_interval():
     xml = service.render_plist(python="/usr/bin/python3")
-    assert "<key>ThrottleInterval</key>" in xml and "<integer>60</integer>" in xml
+    assert "<key>ThrottleInterval</key>" in xml and "<integer>10</integer>" in xml
 
 
 def test_plist_process_type_interactive():
@@ -394,7 +394,7 @@ def test_signal_watch_is_skipped_on_windows(monkeypatch):
         lambda *a: pytest.fail("pthread_sigmask called on nt"),
         raising=False,
     )
-    tray_cmd._watch_signals_in_thread({"proc": None}, 8457)
+    tray_cmd._watch_signals_in_thread(lambda: None, lambda: None)
 
 
 def test_child_kwargs_per_platform(monkeypatch):
@@ -622,9 +622,13 @@ class _FakeMenuItem:
         self.text, self.action = text, action
 
 
-def _run_fake_tray(monkeypatch, port: int) -> dict:
-    """Run _run_tray with a fake pystray whose loop returns at once; return its menu."""
+def _run_fake_tray(monkeypatch, port: int, signals: list | None = None) -> dict:
+    """Run _run_tray with a fake pystray whose loop returns at once; return its menu.
+
+    ``signals`` receives the (restart, teardown) callbacks the tray would watch.
+    """
     menu = {}
+    signals = [] if signals is None else signals
 
     class FakeIcon:
         def __init__(self, name, image, title, m):
@@ -637,7 +641,9 @@ def _run_fake_tray(monkeypatch, port: int) -> dict:
     fake.Menu, fake.MenuItem, fake.Icon = _FakeMenu, _FakeMenuItem, FakeIcon
     monkeypatch.setitem(sys.modules, "pystray", fake)
     monkeypatch.setattr(tray_cmd, "_make_image", lambda: None)
-    monkeypatch.setattr(tray_cmd, "_watch_signals_in_thread", lambda state, port: None)
+    monkeypatch.setattr(
+        tray_cmd, "_watch_signals_in_thread", lambda *callbacks: signals.extend(callbacks)
+    )
     tray_cmd._run_tray(port)
     return menu
 
@@ -709,3 +715,76 @@ def test_uvicorn_config_with_no_stdout(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     assert (tmp_path / ".anyscribe" / "logs" / "tray.log").exists()
+
+
+def test_tray_restart_lock_is_idempotent(monkeypatch, tmp_path):
+    """Two `desktop open` clicks send two SIGUSR1s: the second must not kill the new server."""
+    spawned, events = [], []
+
+    class Proc:
+        def poll(self):
+            return 0  # exited, like a server stopped by the dashboard's Shutdown
+
+        def wait(self, timeout=None):
+            return 0
+
+    def popen(args, **kwargs):
+        proc = Proc()
+        proc.pid = 4000 + len(spawned)
+        spawned.append(proc.pid)
+        events.append(("spawn", proc.pid))
+        return proc
+
+    monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
+    monkeypatch.setattr(tray_cmd.time, "sleep", lambda s: None)
+    monkeypatch.setattr(tray_cmd.subprocess, "Popen", popen)
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: events.append("shutdown"))
+    # Up once the restart has spawned its server (the startup spawn is the first).
+    monkeypatch.setattr(tray_cmd.core, "health_is_anyscribe", lambda port: len(spawned) > 1)
+    monkeypatch.setattr(tray_cmd.core, "port_responding", lambda port, **k: False)
+    signals = []
+    _run_fake_tray(monkeypatch, _free_port(), signals)
+    restart = signals[0]
+    events.clear()  # startup spawn, and the teardown of the fake icon loop returning at once
+    restart()
+    restart()
+    assert events == [("spawn", 4001)]  # one new server, and it is never shut down again
+
+
+_SIGNAL_CHILD = """
+import sys, time
+from pathlib import Path
+from anyscribe.cli import tray_cmd
+out = Path(sys.argv[1])
+tray_cmd._watch_signals_in_thread(
+    lambda: out.write_text("restarted"),
+    lambda: out.write_text(out.read_text() + ",stopped"),
+)
+print("ready", flush=True)
+time.sleep(30)
+"""
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGUSR1 and sigwait are POSIX only")
+def test_sigusr1_restarts_and_sigterm_still_stops(tmp_path):
+    """The real signal path: SIGUSR1 restarts and keeps the tray alive; SIGTERM still exits 0."""
+    out = tmp_path / "out"
+    child = subprocess.Popen(
+        [sys.executable, "-c", _SIGNAL_CHILD, str(out)], stdout=subprocess.PIPE, text=True
+    )
+    try:
+        assert child.stdout.readline().strip() == "ready"
+        child.send_signal(signal.SIGUSR1)
+        deadline = time.monotonic() + 10
+        while not out.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.3)  # a kill, had SIGUSR1 been fatal, has landed
+        assert out.read_text() == "restarted"
+        assert child.poll() is None
+        child.send_signal(signal.SIGTERM)
+        assert child.wait(timeout=10) == 0
+        assert out.read_text() == "restarted,stopped"
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()

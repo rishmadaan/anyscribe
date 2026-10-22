@@ -11,6 +11,7 @@ import json
 import os
 import plistlib
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -110,8 +111,10 @@ def _wait_until(done: Callable[[], bool], timeout: float, interval: float = 0.25
 
 
 def _kickstart(port: int) -> bool:
-    """(Re)start the tray under launchd, so KeepAlive restarts it after a crash.
+    """Start the tray under launchd, so KeepAlive restarts it after a crash.
 
+    Only reached with no tray alive, so no ``-k``: killing a job launchd is
+    already respawning waits out its ThrottleInterval and then kills it again.
     False if there is no login item for this port or launchctl refused.
     """
     try:
@@ -123,7 +126,7 @@ def _kickstart(port: int) -> bool:
     target = f"gui/{os.getuid()}/{service.LABEL}"
     try:
         r = subprocess.run(
-            ["launchctl", "kickstart", "-k", target], check=False, capture_output=True, timeout=15
+            ["launchctl", "kickstart", target], check=False, capture_output=True, timeout=15
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -139,6 +142,17 @@ def _start_tray(port: int) -> subprocess.Popen | None:
         return None
     python = launcher.pythonw(sys.executable)
     return spawn_detached([python, "-m", "anyscribe", "tray", "--port", str(port)], tray.TRAY_LOG)
+
+
+def _signal_restart(pid: int) -> bool:
+    """Ask a live tray to restart its server (SIGUSR1). False on Windows or if it is gone."""
+    if os.name == "nt":
+        return False
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except OSError:
+        return False
+    return True
 
 
 def _await_health(proc: subprocess.Popen | None, port: int, timeout: float) -> str:
@@ -177,12 +191,15 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
         if tray.port_responding(port):
             raise PortInUseError(port)
         proc = None  # a tray already running (e.g. launchd's) brings its server up
-        if tray.read_pidfile() is None:
+        pid = tray.read_pidfile()
+        if pid is None:
             proc = _start_tray(port)
         elif not _wait_until(lambda: tray.port_responding(port), ORPHAN_GRACE):
-            # A tray whose server is gone (dashboard Shutdown, a crash) starts nothing: replace it.
-            tray.stop_tray(port)
-            proc = _start_tray(port)
+            # A tray whose server is gone (dashboard Shutdown, a crash): ask it for a new
+            # server rather than kill it. Replace it only if that fails (or on Windows).
+            if not (_signal_restart(pid) and _await_health(None, port, timeout) == "up"):
+                tray.stop_tray(port)
+                proc = _start_tray(port)
         state = _await_health(proc, port, timeout)
         if state == "exited":
             # The tray exits at once with no tray backend (headless Linux, no display).

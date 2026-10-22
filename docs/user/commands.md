@@ -922,7 +922,7 @@ What gets written where:
 
 Icons go in `~/.anyscribe/desktop/` (and, on Linux, `~/.local/share/icons/hicolor/512x512/apps/anyscribe.png`). The tray's output goes to `~/.anyscribe/logs/tray.log` whenever there's no terminal to show it in: when the app icon starts it, and on macOS when it starts at login. `desktop open` writes its own errors there too.
 
-> **macOS:** loading the login item starts the tray straight away, so `--no-launch` still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute), from the moment you install. Quitting it from its menu is not a crash, so it stays quit until your next login or until you click the app, which starts it again under the same crash guard.
+> **macOS:** loading the login item starts the tray straight away, so `--no-launch` still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once every 10 seconds), from the moment you install. Quitting it from its menu is not a crash, so it stays quit until your next login or until you click the app, which starts it again under the same crash guard.
 
 > **Status says "Partly installed"?** An app or login item exists without the record in `~/.anyscribe/desktop.json` — usually from an `install-service` run, or an interrupted install. Run `anyscribe desktop install` to finish it.
 

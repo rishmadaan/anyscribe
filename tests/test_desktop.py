@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import subprocess
 import sys
 from collections import defaultdict
@@ -39,6 +40,14 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: False)
     monkeypatch.setattr(desktop, "tray_available", lambda: True)
     monkeypatch.setattr(desktop.time, "sleep", lambda s: None)
+
+
+@pytest.fixture(autouse=True)
+def kills(monkeypatch):
+    """Signals open_dashboard sends: the fake pids here may be real processes."""
+    sent = []
+    monkeypatch.setattr(desktop.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+    return sent
 
 
 @pytest.fixture
@@ -292,15 +301,32 @@ def test_open_does_not_spawn_second_tray(monkeypatch, fake_spawn, fake_browser):
     assert fake_spawn.args == []
 
 
-def test_open_replaces_orphaned_tray(monkeypatch, fake_spawn, fake_browser):
-    """Dashboard Shutdown leaves the tray up with no server; clicking the app must recover."""
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGUSR1 is POSIX only")
+def test_open_signals_live_tray_to_restart_server(monkeypatch, kills, fake_spawn, fake_browser):
+    """Dashboard Shutdown leaves the tray up with no server: ask it for a new one, never kill it.
+
+    Killing it hands the restart to launchd, which holds it back by its ThrottleInterval.
+    """
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(kills))
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("killed a live tray"))
+    monkeypatch.setattr(desktop, "_start_tray", lambda port: pytest.fail("started a second tray"))
+    url = desktop.open_dashboard(8457, timeout=1)
+    assert kills == [(4242, signal.SIGUSR1)]
+    assert fake_spawn.args == []
+    assert fake_browser.opened == [url]
+
+
+@pytest.mark.parametrize("os_name", ["posix", "nt"])
+def test_open_falls_back_to_stop_and_start_when_restart_fails(
+    monkeypatch, kills, fake_spawn, fake_browser, os_name
+):
+    """A tray that does not bring its server back (or Windows, which has no SIGUSR1) is replaced."""
+    if os_name == "nt":
+        monkeypatch.setattr(desktop.os, "name", "nt")
     order = []
     monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: None if "stop" in order else 4242)
-
-    def stop(port):
-        order.append("stop")
-
-    monkeypatch.setattr(desktop.tray, "stop_tray", stop)
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: order.append("stop"))
     real_spawn = desktop.spawn_detached
 
     def spawn(args, log):
@@ -309,7 +335,8 @@ def test_open_replaces_orphaned_tray(monkeypatch, fake_spawn, fake_browser):
 
     monkeypatch.setattr(desktop, "spawn_detached", spawn)
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: "start" in order)
-    url = desktop.open_dashboard(8457, timeout=1)
+    url = desktop.open_dashboard(8457, timeout=0.5)
+    assert kills == ([] if os_name == "nt" else [(4242, signal.SIGUSR1)])
     assert order == ["stop", "start"]
     assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
     assert fake_browser.opened == [url]
@@ -343,9 +370,7 @@ def test_open_uses_launchctl_kickstart_on_macos_with_login_item(
     ran = _fake_run(monkeypatch, 0)
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(ran))
     desktop.open_dashboard(8457, timeout=1)
-    assert ran == [
-        ["launchctl", "kickstart", "-k", f"gui/{desktop.os.getuid()}/com.anyscribe.tray"]
-    ]
+    assert ran == [["launchctl", "kickstart", f"gui/{desktop.os.getuid()}/com.anyscribe.tray"]]
     assert fake_spawn.args == []
     assert fake_browser.opened == ["http://127.0.0.1:8457"]
 
@@ -357,6 +382,15 @@ def test_open_spawns_when_kickstart_fails(monkeypatch, tmp_path, fake_spawn, fak
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(fake_spawn.args))
     desktop.open_dashboard(8457, timeout=1)
     assert len(ran) == 1 and len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="launchctl targets gui/<uid>, POSIX only")
+def test_kickstart_has_no_kill_flag(monkeypatch, tmp_path):
+    """-k on a job launchd is respawning waits out its throttle, then kills it again."""
+    _login_item(tmp_path, monkeypatch)
+    ran = _fake_run(monkeypatch, 0)
+    assert desktop._kickstart(8457) is True
+    assert ran == [["launchctl", "kickstart", f"gui/{desktop.os.getuid()}/com.anyscribe.tray"]]
 
 
 def test_kickstart_skips_login_item_for_another_port(monkeypatch, tmp_path):

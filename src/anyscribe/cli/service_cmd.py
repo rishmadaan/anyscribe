@@ -40,7 +40,7 @@ def install_service(
 ) -> None:
     """[bold]Register[/bold] the tray companion to start automatically at login."""
     _require_supported(output_json)
-    # With KeepAlive, a login item that can't import pystray relaunches every 60 s.
+    # With KeepAlive, a login item that can't import pystray relaunches every 10 s.
     if find_spec("pystray") is None:
         _fail(
             'The tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',

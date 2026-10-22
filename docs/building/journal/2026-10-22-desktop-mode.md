@@ -122,3 +122,21 @@ processes too, so the key is not cosmetic. The plist now carries
 Signed downloadable app (Tauri + SignPath Foundation + Apple Developer
 Program), bundling ffmpeg/Deno/yt-dlp, in-app self-update, remote access to the
 dashboard, and the tray restarting a crashed server. All in `BACKLOG.md`.
+
+## Addendum: recovering after the dashboard's Shutdown
+
+Measured on a Mac after the dashboard's Shutdown button: clicking the app took
+21 s and ended with a tray started outside launchd. `desktop open` stopped the
+live tray, then ran `launchctl kickstart -k`. With `ThrottleInterval 60`,
+launchd holds back any respawn within 60 s of the job's exit; `kickstart -k`
+straight after the exit blocked 116 s (one throttle wait, then `-k` killed and
+respawned it again: `launchctl list` showed `-15`, runs 4 to 6). The 15 s
+subprocess timeout then fell through to a detached spawn.
+
+Now a live tray is never killed to recover its server: `desktop open` sends it
+`SIGUSR1`, which the tray's sigwait loop turns into a server restart (under a
+lock, and skipped if a server is already up or starting, so two clicks spawn
+one). Stop-and-replace remains the fallback, and the only path on Windows.
+`_kickstart` runs plain `launchctl kickstart` (it is reached only with no tray
+alive), and the plist's `ThrottleInterval` is 10 s, launchd's default, so a
+click within a minute of Quit comes back under launchd inside the wait.

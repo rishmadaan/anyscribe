@@ -625,7 +625,7 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 Design: `docs/superpowers/specs/2026-10-22-desktop-mode-design.md`. Journal: `docs/building/journal/2026-10-22-desktop-mode.md`.
 
 - [x] `core/launcher.py`: icons from `assets/app-icon.png` (Pillow; `.icns` via `iconutil`), app launcher per OS (`~/Applications/anyscribe.app`, Start-menu `anyscribe.lnk` via PowerShell `WScript.Shell`, `~/.local/share/applications/anyscribe.desktop`) running `desktop open`.
-- [x] `core/service.py`: login item on macOS (plist with PATH, `KeepAlive {SuccessfulExit false}`, `ThrottleInterval 60`, `ProcessType Interactive`, `tray.log`), Windows (Startup `anyscribe tray.lnk`), Linux (`~/.config/autostart/anyscribe-tray.desktop`); `service_path()`; removing it never stops a running tray.
+- [x] `core/service.py`: login item on macOS (plist with PATH, `KeepAlive {SuccessfulExit false}`, `ThrottleInterval 10`, `ProcessType Interactive`, `tray.log`), Windows (Startup `anyscribe tray.lnk`), Linux (`~/.config/autostart/anyscribe-tray.desktop`); `service_path()`; removing it never stops a running tray.
 - [x] `core/desktop.py` + `cli/desktop_cmd.py`: `install` / `uninstall` / `status` / `open`, manifest `~/.anyscribe/desktop.json`, exit codes 0/1/2, `--json` envelope.
 - [x] `core/tray.py`: Windows guards (`pthread_sigmask`, `sigwait`, `preexec_fn`), second tray exits 0, `stop_tray(port)`.
 - [x] Installers end with `desktop install --yes` (`--no-desktop` / `-NoDesktop`); git-method installs skip it with a message; failure warns and keeps the plain banner.

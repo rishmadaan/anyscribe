@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 
 import typer
 from rich.console import Console
@@ -25,6 +26,8 @@ err_console = Console(stderr=True)
 _MISSING_EXTRA = "The tray companion needs extra packages.\nRun: pip install -U 'anyscribe[tray]'"
 
 _SIGNALS = {signal.SIGTERM, signal.SIGINT}
+if os.name != "nt":
+    _SIGNALS.add(signal.SIGUSR1)  # from `anyscribe desktop open`: restart the server, keep the tray
 
 
 def _make_image():
@@ -90,14 +93,14 @@ def _child_kwargs() -> dict:
     if os.name == "nt":
         # No console window flashing up for a tray started without one.
         return {"creationflags": subprocess.CREATE_NO_WINDOW}
-    # The tray blocks SIGTERM/SIGINT (see _watch_signals_in_thread) and the
+    # The tray blocks SIGTERM/SIGINT/SIGUSR1 (see _watch_signals_in_thread) and the
     # mask is inherited across exec — unblock in the child so uvicorn still
     # responds to signals.
     return {"preexec_fn": lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, _SIGNALS)}
 
 
-def _watch_signals_in_thread(state: dict, port: int) -> None:
-    """Route SIGTERM/SIGINT to the same teardown as menu Quit (POSIX only).
+def _watch_signals_in_thread(restart: Callable[[], None], teardown: Callable[[], None]) -> None:
+    """SIGUSR1 runs ``restart``; SIGTERM/SIGINT run ``teardown`` (menu Quit's) and exit. POSIX only.
 
     A plain signal.signal handler never fires here: the Cocoa event loop
     blocks in ObjC, so Python bytecode (where handlers run) may never
@@ -109,8 +112,12 @@ def _watch_signals_in_thread(state: dict, port: int) -> None:
     signal.pthread_sigmask(signal.SIG_BLOCK, _SIGNALS)
 
     def _watch() -> None:
-        signal.sigwait(_SIGNALS)
-        _teardown(state, port)
+        while signal.sigwait(_SIGNALS) == signal.SIGUSR1:
+            try:
+                restart()
+            except Exception as e:  # the loop must survive, or SIGTERM is never caught again
+                print(f"tray: restart failed: {e}", file=sys.stderr, flush=True)
+        teardown()
         os._exit(0)  # Cocoa loop can't be trusted to unwind from a signal
 
     threading.Thread(target=_watch, daemon=True).start()
@@ -184,10 +191,21 @@ def _run_tray(port: int) -> None:
         else:
             _log(f"Open UI: anyscribe is not answering on port {port}")
 
+    restart_lock = threading.Lock()
+
+    def restart_server(force: bool = True) -> None:
+        """Menu Restart (force), or SIGUSR1 from `desktop open`: only when the server is down."""
+        with restart_lock:  # the menu and a signal must not spawn two servers
+            proc = state.get("proc")
+            starting = proc is not None and proc.poll() is None
+            if not force and (starting or core.health_is_anyscribe(port)):
+                return
+            _shutdown_server(state.pop("proc", None), port)
+            time.sleep(0.5)
+            _start_server()
+
     def on_restart(icon, item) -> None:  # noqa: ANN001
-        _shutdown_server(state.pop("proc", None), port)
-        time.sleep(0.5)
-        _start_server()
+        restart_server()
 
     def on_updates(icon, item) -> None:  # noqa: ANN001
         webbrowser.open(core.GITHUB_RELEASES_URL)
@@ -201,7 +219,7 @@ def _run_tray(port: int) -> None:
         _teardown(state, port)
         icon.stop()
 
-    _watch_signals_in_thread(state, port)
+    _watch_signals_in_thread(lambda: restart_server(force=False), lambda: _teardown(state, port))
 
     menu = pystray.Menu(
         pystray.MenuItem("Open UI", on_open, default=True),

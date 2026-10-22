@@ -83,7 +83,7 @@ def render_plist(
     """Return the launchd plist XML for the tray LaunchAgent.
 
     KeepAlive restarts the tray after a crash (non-zero exit) but not after Quit;
-    ThrottleInterval keeps a crash loop to one try a minute. ProcessType Interactive:
+    ThrottleInterval (launchd's default, 10 s) spaces out a crash loop. ProcessType Interactive:
     the default lets launchd throttle the server's children (ffmpeg, yt-dlp), measured
     at 5-13 s for /api/health against 0.3 s.
     """
@@ -120,7 +120,7 @@ def render_plist(
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>ThrottleInterval</key>
-    <integer>60</integer>
+    <integer>10</integer>
     <key>StandardOutPath</key>
     <string>{escape(str(log))}</string>
     <key>StandardErrorPath</key>

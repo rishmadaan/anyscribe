@@ -116,8 +116,12 @@ dependency. The chain is **launcher → `desktop open` → tray → ui**:
   Icons render from `assets/app-icon.png` into `~/.anyscribe/desktop/`.
 - **`desktop open`** (`core/desktop.py::open_dashboard`) opens the browser if
   `/api/health` on the port answers as anyscribe; refuses (exit 1) if another
-  program holds the port; otherwise spawns `anyscribe tray --port N` detached
-  (output to `~/.anyscribe/logs/tray.log`), falls back to a detached
+  program holds the port; otherwise starts the tray (`launchctl kickstart`, no
+  `-k`, when the macOS login item serves the port; else spawns `anyscribe tray
+  --port N` detached, output to `~/.anyscribe/logs/tray.log`). A live tray whose
+  server is gone (dashboard Shutdown) gets `SIGUSR1`, which the tray's sigwait
+  loop turns into a server restart; it is stopped and replaced only if that
+  fails, and always on Windows (no signals). Then it falls back to a detached
   `anyscribe ui --no-open` if the tray process dies (no display), waits for
   health, then opens the browser or prints the URL to stderr.
 - **`desktop install`** (`core/desktop.py::install`) orders the steps by OS. On
@@ -133,7 +137,7 @@ dependency. The chain is **launcher → `desktop open` → tray → ui**:
 - The **tray** supervises the **ui** server as before.
 - The **login item** (`core/service.py`) starts the tray at login: a launchd
   LaunchAgent (`com.anyscribe.tray.plist`: `EnvironmentVariables.PATH` from
-  `service_path()`, `KeepAlive {SuccessfulExit: false}`, `ThrottleInterval 60`,
+  `service_path()`, `KeepAlive {SuccessfulExit: false}`, `ThrottleInterval 10`,
   `ProcessType Interactive`, log to `tray.log`), a Startup-folder
   `anyscribe tray.lnk`, or `~/.config/autostart/anyscribe-tray.desktop` with
   `Exec=env PATH=…`. `service_path()` is the installing shell's PATH plus the

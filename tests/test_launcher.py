@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -23,7 +24,8 @@ def home(tmp_path, monkeypatch):
 def test_renders_quote_paths_with_space_and_apostrophe(home):
     py = str(home / "py env" / "python3")
     assert shlex.quote(py) in launcher.render_app_script(py, 8457)
-    assert shlex.quote(py) in launcher.render_desktop_entry(py, 8457)
+    entry = launcher.render_desktop_entry(py, 8457)
+    assert f'Exec="{py}" -m anyscribe' in entry and "\\'" not in entry
     ps = launcher.render_shortcut_script(home / "a.lnk", py, "-m anyscribe tray", None, "anyscribe")
     assert "Rish O''Brien" in ps and "$s.Save()" in ps
 
@@ -32,6 +34,22 @@ def test_app_script_execs_desktop_open():
     assert launcher.render_app_script("/usr/bin/python3", 8457) == (
         "#!/bin/sh\nexec /usr/bin/python3 -m anyscribe desktop open --port 8457\n"
     )
+
+
+def _desktop_unquote(value: str) -> str:
+    """Reference decoder for one Exec argument: string escapes, then quoting, then %%."""
+    unescaped = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t", "r": "\r"}.get(m[1], m[1]), value)
+    if unescaped.startswith('"'):
+        unescaped = re.sub(r"\\(.)", r"\1", unescaped[1:-1])
+    return unescaped.replace("%%", "%")
+
+
+def test_desktop_quote_escapes_reserved_and_percent():
+    raw = '/a b/$x"y\\z%'
+    assert launcher.desktop_quote(raw) == '"/a b/\\\\$x\\\\"y\\\\\\\\z%%"'
+    assert _desktop_unquote(launcher.desktop_quote(raw)) == raw
+    assert launcher.desktop_quote("/usr/bin/python3") == "/usr/bin/python3"
+    assert launcher.desktop_quote("/opt/100%/python") == "/opt/100%%/python"
 
 
 def test_info_plist_is_background_launcher():
@@ -50,6 +68,7 @@ def test_install_launcher_macos_writes_app_tree(home, monkeypatch):
     app = launcher.install_launcher("/usr/bin/python3", 8457, {"icns": home / "i.icns"})
     assert (app / "Contents" / "MacOS" / "anyscribe").stat().st_mode & 0o111
     assert (app / "Contents" / "Info.plist").exists()
+    assert app.stat().st_mtime_ns >= (app / "Contents" / "MacOS" / "anyscribe").stat().st_mtime_ns
     assert launcher.uninstall_launcher() is True and not app.exists()
 
 
@@ -82,11 +101,11 @@ def test_install_launcher_linux_writes_desktop_and_icon(home, monkeypatch):
 
 def test_install_launcher_windows_calls_create_shortcut(home, monkeypatch):
     monkeypatch.setattr(launcher.sys, "platform", "win32")
+    # A fake interpreter that is not sys.executable: the target must come from it.
     python = home / "py env" / "python.exe"
     python.parent.mkdir()
     python.write_text("")
     (python.parent / "pythonw.exe").write_text("")
-    monkeypatch.setattr(launcher.sys, "executable", str(python))
     monkeypatch.setattr(launcher, "start_menu_dir", lambda: home / "Programs")
     seen = {}
     monkeypatch.setattr(launcher, "create_shortcut", lambda *a: seen.update(args=a))

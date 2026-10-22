@@ -58,12 +58,27 @@ def render_info_plist(icon_file: str = APP_NAME) -> str:
 """
 
 
+_DESKTOP_RESERVED = set(" \t\n\"'\\><~|&;$*?#()`")
+# The string-value escape layer is decoded BEFORE the quoting layer, so each
+# backslash the quoting produces must itself be doubled (spec: a literal "\"
+# in a quoted argument is four backslashes, a literal "$" is "\\$").
+_DESKTOP_STRING_ESCAPES = str.maketrans({"\\": "\\\\", "\n": "\\n", "\t": "\\t", "\r": "\\r"})
+
+
+def desktop_quote(arg: str) -> str:
+    """Quote one argument for a Desktop Entry ``Exec`` value (freedesktop spec)."""
+    if any(c in _DESKTOP_RESERVED for c in arg):
+        quoted = "".join("\\" + c if c in '\\"`$' else c for c in arg)
+        arg = f'"{quoted}"'.translate(_DESKTOP_STRING_ESCAPES)
+    return arg.replace("%", "%%")
+
+
 def render_desktop_entry(python: str, port: int, icon: str = APP_NAME) -> str:
     return (
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={APP_NAME}\n"
-        f"Exec={_open_command(python, port)}\n"
+        f"Exec={desktop_quote(python)} -m anyscribe desktop open --port {port}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"
         "Categories=AudioVideo;Utility;\n"
@@ -130,13 +145,14 @@ def launcher_path() -> Path:
 # ---- effects -------------------------------------------------------------
 
 
-def pythonw() -> str:
+def pythonw(python: str | None = None) -> str:
     """The windowless interpreter on Windows, so the shortcut opens no console."""
+    python = python or sys.executable
     if sys.platform == "win32":
-        candidate = Path(sys.executable).with_name("pythonw.exe")
+        candidate = Path(python).with_name("pythonw.exe")
         if candidate.exists():
             return str(candidate)
-    return sys.executable
+    return python
 
 
 def create_shortcut(
@@ -197,10 +213,11 @@ def install_launcher(python: str, port: int, icons: dict[str, Path]) -> Path:
         if icns and icns.exists():
             (contents / "Resources").mkdir()
             shutil.copyfile(icns, contents / "Resources" / f"{APP_NAME}.icns")
+        os.utime(path)  # Finder/Dock re-read the icon only when the bundle mtime moves
     elif sys.platform == "win32":
         create_shortcut(
             path,
-            pythonw(),
+            pythonw(python),
             f"-m anyscribe desktop open --port {port}",
             icons.get("ico"),
             APP_NAME,

@@ -276,6 +276,9 @@ def status() -> dict:
         reason = f"The login item is missing ({login_item}). {reinstall}"
     else:
         reason = None
+    server_running = health_is_anyscribe(port)
+    if reason is None and not server_running:
+        reason = "Installed but not running. Click the anyscribe app or run: anyscribe desktop open"
     return {
         "platform": sys.platform,
         "supported": service.supported(),
@@ -285,7 +288,7 @@ def status() -> dict:
         "python": m["python"] if m else None,
         "port": port,
         "tray_running": tray.read_pidfile() is not None,
-        "server_running": health_is_anyscribe(port),
+        "server_running": server_running,
         "healthy": reason is None,
         "reason": reason,
     }

@@ -442,10 +442,21 @@ def test_status_not_installed():
     assert s["installed"] is False and s["healthy"] is False and "install" in s["reason"]
 
 
-def test_status_healthy(tmp_manifest):
+def test_status_healthy(monkeypatch, tmp_manifest):
     tmp_manifest()
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
     s = desktop.status()
     assert s["installed"] is True and s["healthy"] is True and s["reason"] is None
+
+
+def test_status_installed_but_not_running_is_not_healthy(tmp_manifest):
+    """Intact files are not a working app: healthy needs the dashboard to answer."""
+    tmp_manifest()
+    s = desktop.status()
+    assert s["installed"] is True and s["server_running"] is False and s["healthy"] is False
+    assert s["reason"] == (
+        "Installed but not running. Click the anyscribe app or run: anyscribe desktop open"
+    )
 
 
 def test_status_unhealthy_when_python_missing(tmp_manifest):

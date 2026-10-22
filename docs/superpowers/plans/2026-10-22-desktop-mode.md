@@ -32,7 +32,7 @@
 | Per-task reviewer (subagent-driven-development gate) | Opus 5.5, effort high | Claude lane only, to keep Codex allowance for the final review. |
 | Final PR gate | `independent-review` skill, size L | Correctness rounds on `gpt-6.1-sol` high; fit-to-job on Fable (else Opus high); the single `gpt-6-astra` closing pass. |
 | Build check the way Rishabh will use it (Task 10) | `gpt-6.1-sol` effort medium writes the checklist script, the lead runs it outside the sandbox on this Mac and repeats a few claims by hand | Roster rule: Opus/lead owns the verdict. |
-| Stranger test of the new getting-started text (Task 10) | Sonnet 5.5 (`model: sonnet`) | Follows the doc word for word on phantom-linux. |
+| Stranger test of the new getting-started text (Task 10) | Sonnet 5.5 (`model: sonnet`) | Follows the doc word for word on the Linux test machine. |
 
 ## Review Focus
 
@@ -442,6 +442,6 @@ def test_ps1_has_nodesktop_switch_and_desktop_step():
 
 - [ ] **Step 1 (Mac, lead):** On this Mac, from the branch's editable install: `anyscribe desktop install --yes`. Confirm: `~/Applications/anyscribe.app` opens the dashboard from Spotlight; menu-bar icon present; `launchctl list | grep com.anyscribe.tray` shows a pid; `curl -s 127.0.0.1:8457/api/health`. Then `launchctl unload` + `load` the plist (stands in for logout/login) and transcribe a short local audio file **from the dashboard** — this proves the launchd-started server finds ffmpeg. Quit from the tray menu; confirm the server stopped and launchd did not relaunch it (`launchctl list` shows exit 0, no new pid after 70 s).
 - [ ] **Step 2 (Mac, Sol build check):** `gpt-6.1-sol` effort medium writes a checklist script covering every control named in the docs (install, status, open, Settings toggle off/on, uninstall) and one planted bug (e.g. `health_is_anyscribe` forced False); the lead runs it outside the sandbox and repeats three of its claims by hand.
-- [ ] **Step 3 (Linux, stranger test):** Sonnet 5.5 follows `docs/user/getting-started.md` word for word over SSH on phantom-linux (`--no-desktop` is *not* passed), then reports: did `desktop install` succeed, does `~/.local/share/applications/anyscribe.desktop` exist, does `desktop status` say healthy, does `desktop open` print the URL (no browser over SSH). The lead checks the autostart file's `Exec` by eye.
+- [ ] **Step 3 (Linux, stranger test):** Sonnet 5.5 follows `docs/user/getting-started.md` word for word over SSH on the Linux test machine (`--no-desktop` is *not* passed), then reports: did `desktop install` succeed, does `~/.local/share/applications/anyscribe.desktop` exist, does `desktop status` say healthy, does `desktop open` print the URL (no browser over SSH). The lead checks the autostart file's `Exec` by eye.
 - [ ] **Step 4:** Windows: CI (Task 8) is the only check for now; the click-through waits for a Windows PC (Rishabh, 2026-10-22). Say so in the PR.
 - [ ] **Step 5:** Open the PR; run the `independent-review` skill at size L; fix or answer every finding; re-check the last fix round; then hand to Rishabh for the release decision.

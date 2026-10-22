@@ -30,7 +30,7 @@ By the end of this guide you will have:
 
 ## What you need
 
-- **A computer running macOS, Linux, or Windows** (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, and yt-dlp.
+- **A computer running macOS, Linux, or Windows** (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, yt-dlp, and Deno for YouTube.
 - **Then pick one engine:**
   - **Free, offline** — the **local** provider. No API key, no internet, runs Whisper on your machine. Downloads a model once during setup.
   - **Or an API key** from one provider — OpenAI is the default. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys); transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. Six cloud providers are supported alongside local — see [providers.md](providers.md) for the comparison.
@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-The installer checks for Python 3.11+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
+The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
 
 Verify it worked:
 
@@ -69,7 +69,7 @@ You should see `anyscribe` followed by a version number.
 pip install "anyscribe[tray]"
 ```
 
-The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run `anyscribe doctor`, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
+The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. Installing anyscribe with pip also installs yt-dlp and its default extras. Install ffmpeg yourself and, for YouTube, Deno 2.3+ (`brew install deno`, or [deno.com](https://docs.deno.com/runtime/getting_started/installation/)) unless Node 22+ is available. Run `anyscribe doctor` to see what is missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
 
 > **Want to install Python and the dependencies by hand?** See the [Appendix: manual install](#appendix-manual-install) at the bottom.
 
@@ -306,25 +306,30 @@ Download from [python.org/downloads](https://www.python.org/downloads/) and run 
 
 > **Don't have Homebrew?** It's the standard package manager for macOS. Install it from [brew.sh](https://brew.sh).
 
-**2. ffmpeg and yt-dlp.** ffmpeg converts audio; yt-dlp fetches the video.
+**2. ffmpeg and Deno.** ffmpeg converts audio; Deno runs the small JavaScript puzzle YouTube sets before it hands over media (Node 22+ works too, if you already have it; skip Deno then). yt-dlp, which fetches the video, comes with anyscribe in step 3.
 
 **macOS:**
 ```bash
-brew install ffmpeg yt-dlp
+brew install ffmpeg deno
 ```
+
+No separate yt-dlp step: anyscribe installs it in step 3.
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo apt install ffmpeg pipx
+sudo apt install ffmpeg pipx unzip
+curl -fsSL https://deno.land/install.sh | sh
 ```
 
-No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3.
+No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3. Deno's script puts the program in `~/.deno/bin` and adds it to your shell profile; anyscribe finds it there even before you open a new terminal.
 
 **Windows:**
 ```powershell
 winget install ffmpeg
-pip install yt-dlp
+winget install DenoLand.Deno
 ```
+
+No separate yt-dlp step: anyscribe installs it in step 3.
 
 **3. anyscribe itself.** Install with the same Python you checked in step 1, so a second, older Python's `pip` cannot sneak in.
 

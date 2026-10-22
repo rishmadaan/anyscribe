@@ -30,14 +30,15 @@ Shared backend, shared state: a transcription started from any surface is visibl
 ## What you need
 
 - **Python 3.11 or newer** — [python.org](https://www.python.org/downloads/)
-- **ffmpeg and yt-dlp** — the installers below put both in place for you; with the pip route, install them yourself (`brew install ffmpeg yt-dlp`, or [ffmpeg.org](https://ffmpeg.org/))
+- **ffmpeg and yt-dlp** — the installers below put both in place. Installing anyscribe with pip includes yt-dlp and its default extras; install ffmpeg separately (`brew install ffmpeg`, or [ffmpeg.org](https://ffmpeg.org/))
+- **Deno or Node 22+ for YouTube** — YouTube makes downloaders solve a small JavaScript puzzle, and yt-dlp runs it on one of these. The installers add Deno when neither is present; with the pip route, `brew install deno` or [deno.com](https://docs.deno.com/runtime/getting_started/installation/). Without one, YouTube downloads warn and may miss formats.
 - **An API key** for one cloud provider (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — or none at all if you run offline with the local provider
 
 `anyscribe doctor` checks all of this at any time, and the setup wizard checks it for you on first run.
 
 ## Install
 
-**macOS / Linux** — installs Python, ffmpeg, yt-dlp, and anyscribe with the menu-bar app:
+**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe with the menu-bar app:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash
@@ -49,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-**Already have Python 3.11 or newer, ffmpeg, and yt-dlp?**
+**Already have Python 3.11 or newer, ffmpeg, and Deno or Node 22+?**
 
 ```bash
 pip install "anyscribe[tray]"

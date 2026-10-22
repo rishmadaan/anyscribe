@@ -153,6 +153,40 @@ anyscribe transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 Or run `anyscribe transcribe` with no URL and paste it at the prompt, where no
 quoting is needed.
 
+### `No JavaScript runtime found` or `No supported JavaScript runtime could be found`
+
+YouTube makes downloaders solve a small JavaScript puzzle before it hands over
+the media. yt-dlp ships the puzzle-solving script, but needs a program to run
+it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
+warn, may miss formats, and can fail outright when YouTube changes the puzzle.
+
+**Fix** — install Deno, then check that the "JavaScript runtime" row of `anyscribe doctor` says Found.
+
+**macOS:**
+```bash
+brew install deno
+anyscribe doctor
+```
+
+**Linux (Ubuntu/Debian; other distros: install unzip or 7z first):**
+```bash
+sudo apt install unzip
+curl -fsSL https://deno.land/install.sh | sh
+anyscribe doctor
+```
+
+**Windows (PowerShell):**
+```powershell
+winget install DenoLand.Deno
+anyscribe doctor
+```
+
+If you already have Node 22 or newer, anyscribe uses it and there is nothing
+to install. If you still see this warning, anyscribe could not find it: run
+`node --version` in the same terminal you run anyscribe from. If that fails,
+which is common when Node comes from nvm, install Deno as above. The one-line
+installer from [Getting Started](getting-started.md) does all of this for you.
+
 ### `yt-dlp download failed: Video unavailable`
 
 The video is private, deleted, age-restricted, or blocked in your region.
@@ -162,7 +196,7 @@ formats often and old versions break — so this is rarely a stale-tool problem.
 Still:
 
 1. Try a different video, to confirm anyscribe itself is working.
-2. Update yt-dlp by hand: `pip install --upgrade yt-dlp`
+2. Update yt-dlp by hand: `pip install --upgrade "yt-dlp[default]"`
 3. If it's age-restricted, yt-dlp needs browser cookies (advanced).
 
 ### Instagram: `rate-limit reached` or `login required`

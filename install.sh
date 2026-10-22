@@ -11,7 +11,7 @@
 # What it does:
 #   1. Checks your OS (macOS or Linux)
 #   2. Checks for Python 3.11+, installs if missing
-#   3. Checks for yt-dlp and ffmpeg, installs if missing
+#   3. Checks for yt-dlp, ffmpeg and a JavaScript runtime (Deno or Node 22+), installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
 #   5. Tells you to run `anyscribe ui`
 # ──────────────────────────────────────────────────────────────
@@ -225,16 +225,21 @@ check_python() {
     read -rp "    Install Python? [Y/n] " answer </dev/tty
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
-        # Ubuntu 22.04 and Debian 11 ship python3 at 3.10 or older, so the bare
-        # python3 package would install nothing new; ask for 3.11 by name, with
-        # each package manager's own names. || true: where the package does not
-        # exist (Debian 11) the honest die below should speak, not apt's raw error.
-        local py_pkg="python3"
+        # First the distro's own python3 (3.12 on Ubuntu 24.04, 3.11 on Debian
+        # 12, and the only name that exists everywhere). Where that is still too
+        # old (Ubuntu 22.04 ships 3.10), ask for 3.11 by name with the package
+        # manager's own spelling. || true: where a package does not exist the
+        # honest die below should speak, not the package manager's raw error.
         case "$LINUX_PKG" in
-            apt) py_pkg="python3.11 python3.11-venv" ;;
-            dnf) py_pkg="python3.11" ;;
+            apt) install_package "Python" "python@3.12" "python3 python3-venv" "" || true ;;
+            *)   install_package "Python" "python@3.12" "python3" "" || true ;;
         esac
-        install_package "Python" "python@3.12" "$py_pkg" "" || true
+        if ! resolve_python; then
+            case "$LINUX_PKG" in
+                apt) install_package "Python" "python@3.12" "python3.11 python3.11-venv" "" || true ;;
+                dnf) install_package "Python" "python@3.12" "python3.11" "" || true ;;
+            esac
+        fi
         resolve_python || die "Python 3.11+ still not found on PATH. Install Python 3.11 or newer with your package manager (macOS: brew install python@3.12; Ubuntu 22.04: sudo apt install python3.11 python3.11-venv; Debian 11 has none, upgrade to Debian 12), open a new terminal, and re-run the installer."
     else
         die "Python 3.11+ is required. Install from https://python.org and try again."
@@ -307,6 +312,119 @@ install_with_pipx() {
     pipx install --force --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
     USED_PIPX=true
+}
+
+# ── Check JavaScript runtime (for YouTube) ────────────────────
+# yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
+# 22+. Without one, downloads warn and may miss formats. Optional: a refusal
+# only warns.
+# Runs a version probe, bounded to about 11 s where timeout(1) exists (SIGTERM
+# at 10 s, SIGKILL a second later), and prints its output (stdout then stderr)
+# only when the program exits 0; a hung or failing binary prints nothing so the
+# caller moves on to the next candidate.
+# Prints the bounded-run prefix (SIGTERM at 10 s, SIGKILL a second later; the
+# short -k form is accepted by GNU coreutils and BusyBox alike), or nothing
+# where neither timeout nor gtimeout exists (stock macOS: the probe is unbounded).
+bounded_prefix() {
+    local t
+    for t in timeout gtimeout; do
+        command -v "$t" >/dev/null 2>&1 || continue
+        printf '%s -k 1 10' "$t"
+        return 0
+    done
+    return 0
+}
+
+probe_version() {
+    local out prefix
+    prefix="$(bounded_prefix)"
+    # shellcheck disable=SC2086  # the prefix is meant to split into words
+    out="$($prefix "$@" 2>&1)" || return 1
+    printf '%s\n' "$out"
+}
+
+# Prints the first line of stdin that is the named runtime's own version banner
+# ("deno X.Y.Z ..." or "vX.Y.Z"), skipping wrapper warnings and other noise.
+version_banner() {
+    local name="$1" line
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+        case "$name" in
+            deno) [[ "$line" =~ ^deno\ ([0-9]+)\.([0-9]+)\.([0-9]+)([^[:alnum:]_]|$) ]] && { printf '%s\n' "$line"; return 0; } ;;
+            node) [[ "$line" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.]+)?$ ]] && { printf '%s\n' "$line"; return 0; } ;;
+        esac
+    done
+    return 1
+}
+
+js_runtime_found() {
+    local d v
+    for d in "$(command -v deno 2>/dev/null || true)" "$HOME/.deno/bin/deno"; do
+        [[ -n "$d" && -x "$d" ]] || continue
+        v="$(probe_version "$d" --version | version_banner deno || true)"
+        [[ -n "$v" ]] || continue  # not deno, or it failed
+        [[ "$v" =~ ^deno\ ([0-9]+)\.([0-9]+)\. ]]
+        if (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] >= 3) )); then
+            ok "deno ${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            return 0
+        fi
+        warn "$v found at $d, but yt-dlp needs Deno 2.3 or newer"
+    done
+    if command_exists node; then
+        v="$(probe_version node --version | version_banner node || true)"
+        if [[ -n "$v" ]]; then
+            [[ "$v" =~ ^v([0-9]+)\. ]]
+            if (( BASH_REMATCH[1] >= 22 )); then
+                ok "node $v (yt-dlp will use it for YouTube)"
+                return 0
+            fi
+            warn "node $v found, but yt-dlp needs 22 or newer"
+        else
+            warn "node found, but its version could not be read (yt-dlp needs 22 or newer)"
+        fi
+    fi
+    return 1
+}
+
+check_js_runtime() {
+    info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
+    js_runtime_found && return 0
+    warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"
+    if [[ "$OS" != "macos" ]] || ! command_exists brew; then
+        echo "    Deno's installer (deno.land) puts it in ~/.deno and adds that folder to your shell profile."
+    fi
+    # This step is optional: an unreadable prompt (no terminal) skips it, never aborts.
+    if ! read -rp "    Install Deno? [Y/n] " answer </dev/tty; then
+        warn "No terminal to ask on. Skipping; install Deno later and run: anyscribe doctor"
+        return 0
+    fi
+    answer="${answer:-Y}"
+    if [[ ! "$answer" =~ ^[Yy] ]]; then
+        warn "Skipping. Install Deno later and run: anyscribe doctor"
+        return 0
+    fi
+    if [[ "$OS" == "macos" ]] && command_exists brew; then
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] brew install deno"
+        else
+            brew install deno || true
+        fi
+    else
+        # Deno publishes no apt/dnf package; its script installs to ~/.deno/bin
+        # and (with --yes) adds that to the shell profile. It needs unzip.
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] curl -fsSL https://deno.land/install.sh | sh -s -- --yes"
+        else
+            if ! command_exists unzip && [[ "$LINUX_PKG" == "apt" ]]; then
+                sudo apt update -qq && sudo apt install -y unzip || true
+            fi
+            curl -fsSL https://deno.land/install.sh | sh -s -- --yes || true
+        fi
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        return 0
+    fi
+    js_runtime_found || warn "Deno did not install (its installer needs unzip or 7z). Install it by hand (https://docs.deno.com/runtime/getting_started/installation/) and run: anyscribe doctor"
 }
 
 # ── Install anyscribe ────────────────────────────────────────
@@ -441,6 +559,7 @@ main() {
     check_python
     check_ytdlp
     check_ffmpeg
+    check_js_runtime
 
     echo ""
     install_anyscribe

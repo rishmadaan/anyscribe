@@ -74,6 +74,7 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.16.4 | **`CHANGELOG.md` + dependency-drift fix** — a user-facing changelog covering every release (`BACKLOG.md` keeps the implementation detail and roadmap), with a new `check-docs.py` gate that fails CI when the shipped version has no entry, so it can't silently rot. Drops the dead `typer[all]` extra (typer stopped declaring it; plain `typer` has bundled rich + shellingham since 0.12) and bounds it `>=0.12,<1` — same latent-drift shape as the 0.16.3 `mcp` break, caught in that release's clean-install check | Released 2026-08-09 |
 | 0.16.5 | **AGPLv3-or-later migration** - first-party licensing, bundled MIT/ISC notices, editable frontend source, standalone skill license, and audited CLI/UI/legal documentation | Released 2026-09-13 |
 | 0.17.0 | **Python 3.11 floor + Starlette security floor** (`requires-python>=3.11`, `starlette>=1.3.1`, `fastapi>=0.133`), carrying the 2026-10-21 staleness audit's five PRs (#15 UI deps, #16 installers/CI/pins, #17 user docs + landing, #18 skill + CLI strings, #19 building docs) | Released 2026-10-22 (current) |
+| 0.17.1 | **JavaScript runtime for YouTube**: `yt-dlp[default]` (ships `yt-dlp-ejs`), `core/deps.py` finds Deno or Node 22+ and passes `--js-runtimes`, doctor row, installers add Deno when neither runtime exists | Prepared 2026-10-22; publication pending |
 | 1.0.0 | Stable: broader test coverage and release hardening | Future |
 
 ### How to bump versions
@@ -605,7 +606,16 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 - [x] `requires-python >= 3.11`; 3.10 classifier dropped; CI matrix 3.11 / 3.12 / 3.14; installers, `anyscribe doctor`, README, getting-started and landing say 3.11+. Python 3.10 went end of life in October 2026; pip keeps 3.10 users on 0.16.5 by `requires-python`.
 - [x] Direct `starlette>=1.3.1` floor (first release clear of the OSV advisories) with `fastapi>=0.133` (first release whose Starlette pin is open-ended). FastAPI's Starlette requirement still permits versions below 1.3.1; the direct floor excludes them (PR #16 review found no FastAPI floor alone does).
 - [x] Ships the five audit PRs merged 2026-10-21 (journal: `2026-10-21-staleness-audit.md`); review record under `docs/reviews/2026-10-21-staleness-audit/`.
-- [ ] Carried forward, not in 0.17.0: a JavaScript runtime for yt-dlp (Deno recommended upstream; without one YouTube downloads warn and may miss formats); batch `--timeout` real cancel; Groq language list in the web picker; the React wizard's ElevenLabs card text; Deepgram landing price check.
+- [ ] Carried forward, not in 0.17.0: batch `--timeout` real cancel; Groq language list in the web picker; the React wizard's ElevenLabs card text; Deepgram landing price check.
+
+---
+
+## v0.17.1 — JavaScript runtime for YouTube
+
+- [x] `yt-dlp[default]>=2025.11.12` (first release whose `default` extra ships `yt-dlp-ejs`, the YouTube challenge solver).
+- [x] `core/deps.py`: `find_js_runtime` (deno on PATH, `~/.deno/bin/deno`, node), `js_runtime_args` (`--js-runtimes name:path`), `warn_if_no_js_runtime` (once per process), a "JavaScript runtime" doctor row (optional). `downloaders/youtube.py` and `cli/download.py` (YouTube video downloads) pass the flag.
+- [x] install.sh / install.ps1: `check_js_runtime` / `Test-JsRuntime` accept Deno or Node 22+, else install Deno (brew; Deno's script with `--yes`; winget). Declining warns.
+- [x] Owner decision 2026-10-22 ("yes, let's go with C"): a runtime is installed, not merely warned about, because a warning the user cannot act on from inside anyscribe is not reliability.
 
 ---
 

@@ -16,7 +16,7 @@ async def health() -> dict:
     results = check_dependencies()
     deps = {r.dep.name: r.found for r in results}
     return {
-        "ok": all(deps.values()),
+        "ok": all(r.found for r in results if r.dep.required),  # optional rows never flip it
         "version": __version__,
         "dependencies": deps,
     }

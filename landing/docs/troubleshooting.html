@@ -150,6 +150,30 @@ happens before anyscribe ever runs.</p>
 </code></pre>
 <p>Or run <code>anyscribe transcribe</code> with no URL and paste it at the prompt, where no
 quoting is needed.</p>
+<h3 id="no-javascript-runtime-found-or-no-supported-javascript-runtime-could-be-found"><code>No JavaScript runtime found</code> or <code>No supported JavaScript runtime could be found</code></h3>
+<p>YouTube makes downloaders solve a small JavaScript puzzle before it hands over
+the media. yt-dlp ships the puzzle-solving script, but needs a program to run
+it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
+warn, may miss formats, and can fail outright when YouTube changes the puzzle.</p>
+<p><strong>Fix</strong> — install Deno, then check that the "JavaScript runtime" row of <code>anyscribe doctor</code> says Found.</p>
+<p><strong>macOS:</strong></p>
+<pre><code class="language-bash">brew install deno
+anyscribe doctor
+</code></pre>
+<p><strong>Linux (Ubuntu/Debian; other distros: install unzip or 7z first):</strong></p>
+<pre><code class="language-bash">sudo apt install unzip
+curl -fsSL https://deno.land/install.sh | sh
+anyscribe doctor
+</code></pre>
+<p><strong>Windows (PowerShell):</strong></p>
+<pre><code class="language-powershell">winget install DenoLand.Deno
+anyscribe doctor
+</code></pre>
+<p>If you already have Node 22 or newer, anyscribe uses it and there is nothing
+to install. If you still see this warning, anyscribe could not find it: run
+<code>node --version</code> in the same terminal you run anyscribe from. If that fails,
+which is common when Node comes from nvm, install Deno as above. The one-line
+installer from <a href="/docs/getting-started">Getting Started</a> does all of this for you.</p>
 <h3 id="yt-dlp-download-failed-video-unavailable"><code>yt-dlp download failed: Video unavailable</code></h3>
 <p>The video is private, deleted, age-restricted, or blocked in your region.</p>
 <p>anyscribe auto-updates yt-dlp when it's more than 60 days old — YouTube changes
@@ -157,7 +181,7 @@ formats often and old versions break — so this is rarely a stale-tool problem.
 Still:</p>
 <ol>
 <li>Try a different video, to confirm anyscribe itself is working.</li>
-<li>Update yt-dlp by hand: <code>pip install --upgrade yt-dlp</code></li>
+<li>Update yt-dlp by hand: <code>pip install --upgrade "yt-dlp[default]"</code></li>
 <li>If it's age-restricted, yt-dlp needs browser cookies (advanced).</li>
 </ol>
 <h3 id="instagram-rate-limit-reached-or-login-required">Instagram: <code>rate-limit reached</code> or <code>login required</code></h3>

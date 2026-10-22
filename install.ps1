@@ -152,6 +152,96 @@ function Test-Ffmpeg {
     Write-Host ""
 }
 
+# ── Check JavaScript runtime (for YouTube) ───────────────────
+# yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
+# 22+. Optional: a failure only warns.
+
+# Bounded probe: every output line (stdout then stderr) when the program exits
+# 0 within 10 s, else $null. Both streams are drained concurrently so a chatty
+# program cannot block on a full pipe.
+function Get-ProbeLines($exe, $argument) {
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe
+        $psi.Arguments = $argument
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $out = $p.StandardOutput.ReadToEndAsync()
+        $err = $p.StandardError.ReadToEndAsync()
+        if (-not $p.WaitForExit(10000)) { try { $p.Kill() } catch {}; return $null }
+        if (-not [System.Threading.Tasks.Task]::WaitAll(@($out, $err), 5000)) { return $null }
+        if ($p.ExitCode -ne 0) { return $null }
+        return (($out.Result + "`n" + $err.Result) -split "`r?`n") | ForEach-Object { $_.Trim() }
+    } catch { return $null }
+}
+
+# The runtime's own version banner among the probe lines, or $null.
+function Get-RuntimeBanner($name, $lines) {
+    if (-not $lines) { return $null }
+    $pattern = if ($name -eq 'deno') { '^deno (\d+)\.(\d+)\.(\d+)\b' } else { '^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$' }
+    foreach ($line in $lines) { if ($line -match $pattern) { return $line } }
+    return $null
+}
+
+function Test-DenoUsable {
+    # True when the deno on PATH is Deno 2.3 or newer; prints the verdict.
+    $banner = Get-RuntimeBanner 'deno' (Get-ProbeLines 'deno' '--version')
+    if ($banner -and $banner -match '^deno (\d+)\.(\d+)\.') {
+        if ([int]$Matches[1] -gt 2 -or ([int]$Matches[1] -eq 2 -and [int]$Matches[2] -ge 3)) {
+            Write-Ok "deno $($Matches[1]).$($Matches[2])"
+            return $true
+        }
+        Write-Warn "deno $($Matches[1]).$($Matches[2]) found, but yt-dlp needs 2.3 or newer"
+        return $false
+    }
+    Write-Warn "deno found, but its version could not be read"
+    return $false
+}
+
+function Test-JsRuntime {
+    Write-Info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
+    # Optional step: any failure inside only warns and returns.
+    try {
+        if ((Test-CommandExists 'deno') -and (Test-DenoUsable)) { return }
+        if (Test-CommandExists 'node') {
+            $banner = Get-RuntimeBanner 'node' (Get-ProbeLines 'node' '--version')
+            if ($banner -and $banner -match '^v(\d+)\.') {
+                if ([int]$Matches[1] -ge 22) {
+                    Write-Ok "node $banner (yt-dlp will use it for YouTube)"
+                    return
+                }
+                Write-Warn "node $banner found, but yt-dlp needs 22 or newer"
+            } else {
+                Write-Warn "node found, but its version could not be read (yt-dlp needs 22 or newer)"
+            }
+        }
+
+        Write-Warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"
+        if (Test-CommandExists 'winget') {
+            Write-Host "    Install Deno via winget? [Y/n] " -NoNewline
+            $answer = Read-Host
+            if ($answer -eq '' -or $answer -match '^[Yy]') {
+                Write-Info "Installing Deno via winget..."
+                winget install DenoLand.Deno --accept-package-agreements --accept-source-agreements
+                $wingetExit = $LASTEXITCODE
+                Refresh-Path
+                # Re-check the version: an older deno earlier on PATH, or a failed
+                # winget, must not be reported as an install.
+                if ($wingetExit -eq 0 -and (Test-CommandExists 'deno') -and (Test-DenoUsable)) {
+                    return
+                }
+                Write-Warn "winget did not leave a usable Deno (exit $wingetExit)."
+            }
+        }
+        Write-Warn "Deno not installed. Install it from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
+    } catch {
+        Write-Warn "Could not check or install a JavaScript runtime ($_). Install Deno from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
+    }
+}
+
 # ── Check yt-dlp ──────────────────────────────────────────────
 
 function Test-YtDlp {
@@ -235,6 +325,7 @@ Write-Banner
 try {
     Test-Python
     Test-Ffmpeg
+    Test-JsRuntime
     Test-YtDlp
     Write-Host ""
     Install-Anyscribe

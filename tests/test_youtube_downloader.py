@@ -12,6 +12,14 @@ import pytest
 from anyscribe.downloaders.youtube import YouTubeDownloader
 
 
+@pytest.fixture(autouse=True)
+def no_js_runtime():
+    # The runtime flag is covered in tests/test_js_runtime.py; here the command
+    # under test must not depend on what the test machine has installed.
+    with patch("anyscribe.core.deps.find_js_runtime", return_value=None):
+        yield
+
+
 @pytest.fixture
 def downloader() -> YouTubeDownloader:
     return YouTubeDownloader()

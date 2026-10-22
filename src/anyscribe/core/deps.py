@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 import shutil
@@ -9,14 +10,20 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
 console = Console()
+# Warnings go to stderr: `anyscribe URL --json --quiet` and the MCP stdio server
+# hand stdout to a parser, so a line of prose there breaks the skill's call.
+err_console = Console(stderr=True)
 
 # yt-dlp versions older than this many days trigger an auto-update
 YTDLP_MAX_AGE_DAYS = 60
+
+JS_RUNTIME_URL = "https://docs.deno.com/runtime/getting_started/installation/"
 
 
 @dataclass
@@ -53,10 +60,20 @@ DEPENDENCIES = [
         required=True,
         description="YouTube/video downloader",
         install_brew="brew install yt-dlp",
-        install_pip="pip install yt-dlp",
+        install_pip="pip install yt-dlp[default]",  # the extra ships the YouTube challenge solver
         install_apt="sudo apt install yt-dlp",
         install_url="https://github.com/yt-dlp/yt-dlp#installation",
         module_name="yt_dlp",
+    ),
+    Dependency(
+        name="JavaScript runtime",
+        command="deno",
+        required=False,
+        description=f"Deno 2.3+ or Node 22+, for YouTube. Install Deno: {JS_RUNTIME_URL}",
+        install_brew="brew install deno",
+        install_pip="",
+        install_apt="",  # no apt package; the doctor points at the Deno page instead
+        install_url=JS_RUNTIME_URL,
     ),
     Dependency(
         name="ffmpeg",
@@ -94,6 +111,93 @@ def get_command(name: str) -> list[str]:
                 return [sys.executable, "-m", dep.module_name]
             return [dep.command]
     return [name]
+
+
+JS_RUNTIME_MIN = {"deno": (2, 3), "node": (22, 0)}  # yt-dlp's minimums (EJS wiki)
+
+
+# The exact banner each runtime prints for --version; anything else (a wrapper's
+# warning line, an unrelated tool with the same name) is not a version.
+_JS_VERSION_LINE = {
+    "deno": re.compile(r"^deno (\d+)\.(\d+)\.(\d+)\b"),
+    "node": re.compile(r"^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$"),  # allows a pre-release suffix
+}
+
+
+def _probe_js_runtime(name: str, path: str) -> str | None:
+    """Return "<name> <version>" when `path` is a usable deno or node, else None.
+
+    The probe must exit 0 within 10 s and print the runtime's own version
+    banner on some line; the version must meet yt-dlp's minimum. Anything
+    else returns None so the next candidate is tried.
+    """
+    try:
+        out = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, errors="replace", timeout=10
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if out.returncode != 0:
+        return None
+    pattern = _JS_VERSION_LINE[name]
+    for line in (out.stdout or "").splitlines() + (out.stderr or "").splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            break
+    else:
+        return None
+    major, minor = int(match.group(1)), int(match.group(2))
+    if (major, minor) < JS_RUNTIME_MIN[name]:
+        return None
+    return f"{name} {major}.{minor}.{match.group(3)}"
+
+
+def find_js_runtime() -> tuple[str, str, str] | None:
+    """Return (name, path, version) of a JavaScript runtime yt-dlp can use, or None.
+
+    yt-dlp runs its YouTube challenge scripts on deno (enabled by default) or
+    node (needs --js-runtimes). Candidates in order: deno on PATH, then
+    ~/.deno/bin/deno (Deno's install script puts it there and only a shell
+    opened afterwards has it on PATH), then node on PATH. Each is run with
+    --version and skipped when it is not what its name says or is older than
+    yt-dlp's minimum.
+    """
+    deno_home = Path.home() / ".deno" / "bin" / ("deno.exe" if os.name == "nt" else "deno")
+    candidates: list[tuple[str, str]] = []
+    if which := shutil.which("deno"):
+        candidates.append(("deno", which))
+    if deno_home.is_file() and os.access(deno_home, os.X_OK):
+        candidates.append(("deno", str(deno_home)))
+    if which := shutil.which("node"):
+        candidates.append(("node", which))
+    for name, path in candidates:
+        version = _probe_js_runtime(name, path)
+        if version:
+            return name, path, version
+    return None
+
+
+def js_runtime_args(runtime: tuple[str, str, str] | None) -> list[str]:
+    """yt-dlp flags that enable `runtime` (from find_js_runtime); [] when None."""
+    if runtime is None:
+        return []
+    name, path, _ = runtime
+    return ["--js-runtimes", f"{name}:{path}"]
+
+
+_js_runtime_warned = False
+
+
+def warn_if_no_js_runtime(runtime: tuple[str, str, str] | None) -> None:
+    """Print one warning per process when `runtime` is None."""
+    global _js_runtime_warned
+    if runtime is not None or _js_runtime_warned:
+        return
+    _js_runtime_warned = True
+    err_console.print(
+        "[yellow]No JavaScript runtime found (Deno 2.3+ or Node 22+), so YouTube downloads "
+        f"may miss formats or fail. Install Deno: {JS_RUNTIME_URL} then run: anyscribe doctor[/yellow]"
+    )
 
 
 def _detect_os() -> str:
@@ -171,6 +275,11 @@ def check_dependencies() -> list[DepCheckResult]:
             version = f"{major}.{minor}"
             found = (major, minor) >= (3, 11)
             path = sys.executable
+        elif dep.name == "JavaScript runtime":
+            runtime = find_js_runtime()
+            found = runtime is not None
+            path = runtime[1] if runtime else None
+            version = runtime[2] if runtime else None
         elif dep.module_name:
             # pip-installed tool: check via `python -m module` (works cross-platform)
             found, version = _check_module(dep.module_name)
@@ -298,12 +407,13 @@ def ensure_ytdlp_current() -> None:
     if age_days <= YTDLP_MAX_AGE_DAYS:
         return
 
-    console.print(
+    err_console.print(
         f"[yellow]yt-dlp is {age_days} days old ({version_str.strip()}) — updating...[/yellow]"
     )
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+            # [default] keeps yt-dlp-ejs (the YouTube challenge solver) in step with yt-dlp
+            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp[default]"],
             capture_output=True,
             text=True,
             timeout=120,
@@ -319,14 +429,14 @@ def ensure_ytdlp_current() -> None:
                 new_version = v.stdout.strip() or "unknown"
             except (subprocess.TimeoutExpired, OSError):
                 new_version = "unknown"
-            console.print(f"[green]yt-dlp updated to {new_version.strip()}[/green]")
+            err_console.print(f"[green]yt-dlp updated to {new_version.strip()}[/green]")
         else:
-            console.print(
-                "[yellow]yt-dlp auto-update failed. Run manually: pip install -U yt-dlp[/yellow]"
+            err_console.print(
+                "[yellow]yt-dlp auto-update failed. Run manually: pip install -U 'yt-dlp[default]'[/yellow]"
             )
     except (subprocess.TimeoutExpired, OSError):
-        console.print(
-            "[yellow]yt-dlp auto-update timed out. Run manually: pip install -U yt-dlp[/yellow]"
+        err_console.print(
+            "[yellow]yt-dlp auto-update timed out. Run manually: pip install -U 'yt-dlp[default]'[/yellow]"
         )
 
 

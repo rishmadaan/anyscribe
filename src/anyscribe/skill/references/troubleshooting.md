@@ -92,8 +92,24 @@ The video is private, age-restricted, geo-blocked, or deleted.
 
 **Fix:**
 1. Try a different video to confirm anyscribe works
-2. Update yt-dlp: `pip install --upgrade yt-dlp`
+2. Update yt-dlp: `pip install --upgrade "yt-dlp[default]"`
 3. If age-restricted: yt-dlp may need browser cookies (advanced)
+
+### "No JavaScript runtime found" (YouTube; printed on stderr)
+
+yt-dlp needs Deno (or Node 22+) to solve YouTube's JavaScript challenges.
+Without one, YouTube downloads warn, may miss formats, or fail.
+
+**Fix:** install Deno and re-check: macOS `brew install deno`; Linux
+`sudo apt install unzip` (or 7z on other distros) then
+`curl -fsSL https://deno.land/install.sh | sh`; Windows `winget install
+DenoLand.Deno`; then `anyscribe doctor` (the "JavaScript runtime" row should
+say Found). With Node 22+ already present, nothing to install; if the warning
+appears anyway, node is not on the PATH anyscribe sees, so suggest Deno. These
+install system software, so tell the user before running any of them. On
+Linux, do not run them yourself: give the user both commands to run in their
+own terminal (the first asks for their sudo password; the second edits their
+shell profile).
 
 ### "Instagram requires a login to fetch this reel"
 
@@ -125,7 +141,7 @@ client-side fix.
 
 The catch-all for any other yt-dlp error; the text after the colon is the start
 of yt-dlp's own output. Read it for the cause, then try updating yt-dlp
-(`pip install --upgrade yt-dlp`) or configuring `instagram.browser` as above.
+(`pip install --upgrade "yt-dlp[default]"`) or configuring `instagram.browser` as above.
 
 ### Transcription in wrong language
 

@@ -1,0 +1,8 @@
+# Lead evidence, round 4 (branch at ce39489d6c8bb6c19007d2f5e433552ca917e637)
+
+- CI on a29d340 (round-3 target): all green. CI on ce39489d6c8bb6c19007d2f5e433552ca917e637 in flight.
+- pytest 486 passed, 1 skipped; ruff clean; check-docs.py exit 0; build-docs.py output committed; bash -n install.sh ok. No pwsh here: install.ps1 not parsed by PowerShell.
+- Docker, ubuntu:22.04, pipx 1.0.0: `pipx install --python /usr/bin/python3.10 "anyscribe[tray]==0.16.5"` then `pipx install --force --python /usr/bin/python3.11 "anyscribe[tray]"`: venv python stays /usr/bin/python3.10, "after: 0.16.5 (3, 10)". So --force alone does NOT migrate the interpreter (the round-3 correctness reviewer's I3 was right). Log: <run-folder>/docker-pipx-migrate.log.
+- Docker, ubuntu:22.04 seeded with that 3.10 pipx anyscribe, then `bash install.sh` from this checkout (every prompt answered by Enter): installer prints "Replacing the existing pipx anyscribe so it runs on python3.11...", reinstalls, verifies "anyscribe v0.16.5" (0.17.0 not yet published); afterwards the pipx venv python -> /usr/bin/python3.11 and `import anyscribe` runs on (3, 11). Transcript: <run-folder>/docker-ubuntu2204-upgrade.txt.
+- Earlier rounds: fresh Ubuntu 22.04 install ends on /usr/bin/python3.11 via pipx (<run-folder>/docker-ubuntu2204-install.txt); Debian 11 reaches the honest failure text (older wording, same path; <run-folder>/docker-debian11-install.txt); pipx 1.0.0 --python/--force flags and exit codes (<run-folder>/docker-pipx-check.log).
+- Not run: dnf/pacman branches on real distros; install.ps1 on Windows (no parser here); macOS PATH-shadowing scenario on a real Mac with a python.org 3.10; a real 3.10 upgrade against the published 0.17.0 (not yet published).

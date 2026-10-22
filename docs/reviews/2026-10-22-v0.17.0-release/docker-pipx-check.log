@@ -1,0 +1,19 @@
+python3=Python 3.10.12 python3.11=Python 3.11.0rc1 pipx=1.0.0
+help has --python: 3  --force: 2
+--- network check via pip download
+cowsay-6.1-py3-none-any.whl
+--- pipx install --python (1st)
+  These apps are now globally available
+    - cowsay
+exit=0
+--- pipx install --python (2nd, no force)
+'cowsay' already seems to be installed. Not modifying existing installation in
+'/root/.local/pipx/venvs/cowsay'. Pass '--force' to force installation.
+exit=0
+--- pipx install --force --python
+  These apps are now globally available
+    - cowsay
+exit=0
+--- venv python
+/usr/bin/python3.11
+Python 3.11.0rc1

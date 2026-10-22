@@ -1,0 +1,8 @@
+pipx 1.0.0
+    - scribe-mcp
+exit=0
+before: 0.16.5 (3, 10) /root/.local/pipx/venvs/anyscribe/bin/python
+    - scribe-mcp
+force exit=0
+/usr/bin/python3.10
+after: 0.16.5 (3, 10) /root/.local/pipx/venvs/anyscribe/bin/python

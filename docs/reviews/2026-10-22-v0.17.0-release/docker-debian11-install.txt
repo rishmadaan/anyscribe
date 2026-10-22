@@ -1,0 +1,12 @@
+before: python3=bash: line 1: python3: command not found
+  ┌─────────────────────────────────────┐
+  │       anyscribe installer           │
+  │  Video → Transcript → Markdown      │
+  └─────────────────────────────────────┘
+==> Detected OS: linux (apt)
+==> Checking Python...
+  ! Python 3.11+ not found
+    Install Python? [Y/n] ==> Installing Python via apt...
+/tmp/install.sh: line 177: sudo: command not found
+  ✗ Python 3.11+ still not found on PATH. Your system's python3 is older (Ubuntu 22.04 ships 3.10). Install Python 3.11 or newer from https://python.org or your package manager, open a new terminal, and re-run the installer.
+installer exit=1

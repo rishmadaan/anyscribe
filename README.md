@@ -38,7 +38,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 
 ## Install
 
-**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe, then sets up **desktop mode**: an anyscribe app in Applications (or your app menu), started at login, with the dashboard opened for you:
+**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe, then sets up **desktop mode**: an anyscribe app in `~/Applications` (the Applications folder inside your home folder; on Linux, your app menu), started at login, with the dashboard opened for you:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash

@@ -32,8 +32,9 @@ by the owner over three rounds, 2026-10-22). Plan:
    prompt and `xattr` shows no `com.apple.quarantine` attribute on it; nothing
    pip installs carries that attribute either. Quarantine is stamped by the
    app that downloads a file (browsers, mail), so a file written by our own
-   Python never gets it. The same holds on Windows: SmartScreen keys off the
-   Mark of the Web, which only downloaded files carry. The signed app is
+   Python never gets it. The same should hold on Windows, where SmartScreen keys
+   off the Mark of the Web that only downloaded files carry (not probed;
+   general knowledge). The signed app is
    parked in `BACKLOG.md`.
 2. **No money, no new accounts, no new runtime dependencies.** Each OS's own
    plain-file mechanism holds the launcher and the login item (`.app` bundle

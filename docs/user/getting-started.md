@@ -237,13 +237,13 @@ anyscribe desktop install
 
 It does three things:
 
-1. **Adds an anyscribe app.** On macOS it's in your Applications folder (`~/Applications/anyscribe.app`); on Windows, in the Start menu; on Linux, in your app menu.
+1. **Adds an anyscribe app.** On macOS it's in the Applications folder inside your home folder (`~/Applications/anyscribe.app`, not the main Applications folder in Finder's sidebar); on Windows, in the Start menu; on Linux, in your app menu.
 2. **Starts anyscribe at login.** A small icon sits in your menu bar (macOS) or system tray (Windows, Linux) with the dashboard's server running behind it. This is called a *login item*: a file your computer reads when you log in to decide what to start.
 3. **Starts it now and opens the dashboard** at `http://127.0.0.1:8457`.
 
 **To open the dashboard:** click the app, the way you open any other.
 
-- **macOS:** press ⌘ Space, type `anyscribe`, press Enter (or open it from Applications)
+- **macOS:** press ⌘ Space, type `anyscribe`, press Enter (or open the Applications folder inside your home folder: Finder → **Go** → **Home** → **Applications**)
 - **Windows:** Start menu → type `anyscribe` → click it
 - **Linux:** your app menu → **anyscribe**
 
@@ -271,7 +271,7 @@ anyscribe desktop uninstall
 
 This stops anyscribe (any transcription in progress is cancelled and resumes from where it stopped the next time you run it), then removes the app, the login item and the icons. Your transcripts in `~/anyscribe/`, your settings and your API keys are left exactly as they were, and the `anyscribe` command keeps working.
 
-> **Upgraded anyscribe with pip?** Run `anyscribe desktop install` once afterwards so the app and login item point at the new copy.
+> **Upgraded anyscribe with pip?** Run `anyscribe desktop install` once afterwards. The app already runs the new code next time it starts, but a copy that is running right now is still the old version; this restarts it on the new one and rewrites the login item with the new version's settings.
 
 ### CLI mode
 
@@ -279,7 +279,7 @@ This stops anyscribe (any transcription in progress is cancelled and resumes fro
 anyscribe ui
 ```
 
-`anyscribe ui` runs the dashboard from a terminal window, so it stops when you close that window (or press Ctrl+C, or click **Shutdown** in the sidebar). Nothing is added to your Applications folder or your login items. Everything else (transcribing from the terminal, Claude Code, MCP) works exactly the same.
+`anyscribe ui` runs the dashboard from a terminal window, so it stops when you close that window (or press Ctrl+C, or click **Shutdown** in the sidebar). No app is added and nothing is added to your login items. Everything else (transcribing from the terminal, Claude Code, MCP) works exactly the same.
 
 **The way back in.** Closed the tab, clicked Shutdown, or rebooted? Run `anyscribe ui` again, or click the anyscribe app if you're in desktop mode. Your library, config, and API keys are untouched; nothing about stopping the server touches your data.
 

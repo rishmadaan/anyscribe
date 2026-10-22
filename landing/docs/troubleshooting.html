@@ -447,7 +447,8 @@ at your current Python. Do the same once after <code>pip install --upgrade anysc
 <p>On Windows the app runs without a console window, so it has nowhere to show an
 error. It writes it to <code>~/.anyscribe/logs/tray.log</code> instead
 (<code>%USERPROFILE%\.anyscribe\logs\tray.log</code>). Open that file and read the last
-lines; each one starts with <code>desktop open:</code>. The most common one is
+lines and look for lines starting with <code>desktop open:</code> (the file also holds the
+tray's and the server's own output). The most common one is
 <code>Port 8457 is in use by another program.</code>, fixed by
 <code>anyscribe desktop install --port 9000</code> (any free port).</p>
 <h3 id="no-tray-icon-on-linux-gnome">No tray icon on Linux (GNOME)</h3>
@@ -456,8 +457,9 @@ already) hides tray icons unless the <strong>AppIndicator</strong> extension is 
 can't see its icon. Open the dashboard with the <strong>anyscribe</strong> icon in your app
 menu (or <code>anyscribe desktop open</code>). To get the icon and its <strong>Quit</strong> menu back,
 install your distribution's AppIndicator extension
-(<code>gnome-shell-extension-appindicator</code> on Fedora and Debian), then log out and back
-in. To stop anyscribe without the icon: <code>anyscribe desktop uninstall</code>.</p>
+(<code>gnome-shell-extension-appindicator</code> on Fedora and Debian). On Fedora and Debian
+you may also need to switch it on in the <strong>Extensions</strong> app. Then log out and
+back in. To stop anyscribe without the icon: <code>anyscribe desktop uninstall</code>.</p>
 <h3 id="windows-didnt-show-a-security-warning-when-i-installed">Windows didn't show a security warning when I installed</h3>
 <p>That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is
 for apps downloaded through a web browser. Desktop mode doesn't download an app:

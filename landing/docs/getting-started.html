@@ -252,13 +252,13 @@ tags: [transcript, youtube]
 </code></pre>
 <p>It does three things:</p>
 <ol>
-<li><strong>Adds an anyscribe app.</strong> On macOS it's in your Applications folder (<code>~/Applications/anyscribe.app</code>); on Windows, in the Start menu; on Linux, in your app menu.</li>
+<li><strong>Adds an anyscribe app.</strong> On macOS it's in the Applications folder inside your home folder (<code>~/Applications/anyscribe.app</code>, not the main Applications folder in Finder's sidebar); on Windows, in the Start menu; on Linux, in your app menu.</li>
 <li><strong>Starts anyscribe at login.</strong> A small icon sits in your menu bar (macOS) or system tray (Windows, Linux) with the dashboard's server running behind it. This is called a <em>login item</em>: a file your computer reads when you log in to decide what to start.</li>
 <li><strong>Starts it now and opens the dashboard</strong> at <code>http://127.0.0.1:8457</code>.</li>
 </ol>
 <p><strong>To open the dashboard:</strong> click the app, the way you open any other.</p>
 <ul>
-<li><strong>macOS:</strong> press ⌘ Space, type <code>anyscribe</code>, press Enter (or open it from Applications)</li>
+<li><strong>macOS:</strong> press ⌘ Space, type <code>anyscribe</code>, press Enter (or open the Applications folder inside your home folder: Finder → <strong>Go</strong> → <strong>Home</strong> → <strong>Applications</strong>)</li>
 <li><strong>Windows:</strong> Start menu → type <code>anyscribe</code> → click it</li>
 <li><strong>Linux:</strong> your app menu → <strong>anyscribe</strong></li>
 </ul>
@@ -277,12 +277,12 @@ tags: [transcript, youtube]
 </code></pre>
 <p>This stops anyscribe (any transcription in progress is cancelled and resumes from where it stopped the next time you run it), then removes the app, the login item and the icons. Your transcripts in <code>~/anyscribe/</code>, your settings and your API keys are left exactly as they were, and the <code>anyscribe</code> command keeps working.</p>
 <blockquote>
-<p><strong>Upgraded anyscribe with pip?</strong> Run <code>anyscribe desktop install</code> once afterwards so the app and login item point at the new copy.</p>
+<p><strong>Upgraded anyscribe with pip?</strong> Run <code>anyscribe desktop install</code> once afterwards. The app already runs the new code next time it starts, but a copy that is running right now is still the old version; this restarts it on the new one and rewrites the login item with the new version's settings.</p>
 </blockquote>
 <h3 id="cli-mode">CLI mode</h3>
 <pre><code class="language-bash">anyscribe ui
 </code></pre>
-<p><code>anyscribe ui</code> runs the dashboard from a terminal window, so it stops when you close that window (or press Ctrl+C, or click <strong>Shutdown</strong> in the sidebar). Nothing is added to your Applications folder or your login items. Everything else (transcribing from the terminal, Claude Code, MCP) works exactly the same.</p>
+<p><code>anyscribe ui</code> runs the dashboard from a terminal window, so it stops when you close that window (or press Ctrl+C, or click <strong>Shutdown</strong> in the sidebar). No app is added and nothing is added to your login items. Everything else (transcribing from the terminal, Claude Code, MCP) works exactly the same.</p>
 <p><strong>The way back in.</strong> Closed the tab, clicked Shutdown, or rebooted? Run <code>anyscribe ui</code> again, or click the anyscribe app if you're in desktop mode. Your library, config, and API keys are untouched; nothing about stopping the server touches your data.</p>
 <p>See <a href="/docs/commands#anyscribe-desktop">Commands → anyscribe desktop</a>, <a href="/docs/commands#anyscribe-tray">anyscribe tray</a> and <a href="/docs/commands#anyscribe-install-service">anyscribe install-service</a> for the full reference.</p>
 <h2 id="where-next">Where next</h2>

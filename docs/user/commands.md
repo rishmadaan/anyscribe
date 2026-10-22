@@ -953,7 +953,7 @@ anyscribe desktop status --json
 anyscribe desktop uninstall --yes --json
 ```
 
-With `--json`, every subcommand prints one `{"success": ..., "data": ..., "error": ...}` object:
+With `--json`, `install`, `uninstall` and `status` print one `{"success": ..., "data": ..., "error": ...}` object (`open` has no `--json`):
 
 - `install` → `data` is the record it saved: `{"version", "python", "port", "launcher", "login_item", "installed_at"}`
 - `uninstall` → `{"stopped": true|false, "launcher": true|false, "login_item": true|false}` (each `true` if it was there)

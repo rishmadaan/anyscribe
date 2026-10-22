@@ -577,7 +577,8 @@ at your current Python. Do the same once after `pip install --upgrade anyscribe`
 On Windows the app runs without a console window, so it has nowhere to show an
 error. It writes it to `~/.anyscribe/logs/tray.log` instead
 (`%USERPROFILE%\.anyscribe\logs\tray.log`). Open that file and read the last
-lines; each one starts with `desktop open:`. The most common one is
+lines and look for lines starting with `desktop open:` (the file also holds the
+tray's and the server's own output). The most common one is
 `Port 8457 is in use by another program.`, fixed by
 `anyscribe desktop install --port 9000` (any free port).
 
@@ -588,8 +589,9 @@ already) hides tray icons unless the **AppIndicator** extension is installed. an
 can't see its icon. Open the dashboard with the **anyscribe** icon in your app
 menu (or `anyscribe desktop open`). To get the icon and its **Quit** menu back,
 install your distribution's AppIndicator extension
-(`gnome-shell-extension-appindicator` on Fedora and Debian), then log out and back
-in. To stop anyscribe without the icon: `anyscribe desktop uninstall`.
+(`gnome-shell-extension-appindicator` on Fedora and Debian). On Fedora and Debian
+you may also need to switch it on in the **Extensions** app. Then log out and
+back in. To stop anyscribe without the icon: `anyscribe desktop uninstall`.
 
 ### Windows didn't show a security warning when I installed
 

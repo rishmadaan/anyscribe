@@ -15,7 +15,8 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 **Added**
 - **Desktop mode.** `anyscribe desktop install` adds an **anyscribe** app
-  (Applications on macOS, the Start menu on Windows, the app menu on Linux),
+  (`~/Applications`, the Applications folder inside your home folder, on macOS;
+  the Start menu on Windows; the app menu on Linux),
   starts anyscribe in your menu bar or system tray at every login, starts it
   now, and opens the dashboard. Click the app to open the dashboard; closing
   the browser tab leaves it running; Quit in the tray menu stops it. Nothing

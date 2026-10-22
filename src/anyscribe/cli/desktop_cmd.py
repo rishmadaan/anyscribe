@@ -155,8 +155,7 @@ def open_cmd(
     """[bold]Open[/bold] the dashboard, starting anyscribe first if needed (what the app icon runs)."""
     try:
         if port is None:
-            m = desktop.read_manifest()
-            port = m["port"] if m else tray.DEFAULT_PORT
+            port = desktop.installed_port() or tray.DEFAULT_PORT
         desktop.open_dashboard(port)
     except _FAILURES as e:
         # Started from the app icon there is no terminal; the log is where it shows.

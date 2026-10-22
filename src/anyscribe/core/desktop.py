@@ -211,12 +211,13 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
     if not health_is_anyscribe(port):
         if tray.port_responding(port):
             raise PortInUseError(port)
+        installed = installed_port()
+        if installed is not None and installed != port:
+            # Its tray serves another port: signalling or stopping it would take that one
+            # down, and a tray spawned here would be killed by the next app click.
+            raise PortMismatch(installed, port)
         proc = None  # a tray already running (e.g. launchd's) brings its server up
         pid = tray.read_pidfile()
-        installed = installed_port() if pid is not None else None
-        if installed is not None and installed != port:
-            # Its tray serves another port: signalling or stopping it would take that one down.
-            raise PortMismatch(installed, port)
         if pid is None:
             proc = _start_tray(port)
         elif not _wait_until(lambda: tray.port_responding(port), ORPHAN_GRACE):

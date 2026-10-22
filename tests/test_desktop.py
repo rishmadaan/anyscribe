@@ -374,6 +374,26 @@ def test_open_other_port_refuses_without_touching_running_instance(
     assert kills == []
 
 
+def test_open_other_port_refuses_even_with_no_tray(monkeypatch, tmp_manifest, fake_browser):
+    """After a Quit, `open --port 9000` must not spawn a tray outside the 8457 install."""
+    tmp_manifest(port=8457)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: None)
+    monkeypatch.setattr(desktop, "spawn_detached", lambda *a, **k: pytest.fail("spawned"))
+    monkeypatch.setattr(desktop, "_start_tray", lambda port: pytest.fail("started a tray"))
+    with pytest.raises(desktop.PortMismatch):
+        desktop.open_dashboard(9000, timeout=0.5)
+    assert fake_browser.opened == []
+
+
+def test_open_without_port_uses_the_login_item_port(monkeypatch, tmp_path):
+    """No manifest, a login item on 9100: a bare `desktop open` must not refuse itself."""
+    _login_item(tmp_path, monkeypatch, port=9100)
+    opened = []
+    monkeypatch.setattr(desktop, "open_dashboard", lambda port: opened.append(port))
+    r = CliRunner().invoke(app, ["desktop", "open"])
+    assert r.exit_code == 0 and opened == [9100]
+
+
 def test_installed_port_falls_back_to_login_item(monkeypatch, tmp_path):
     assert desktop.installed_port() is None
     _login_item(tmp_path, monkeypatch, port=9100)

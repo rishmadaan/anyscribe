@@ -178,7 +178,8 @@ def _signal_restart(pid: int) -> bool:
 def _await_health(proc: subprocess.Popen | None, port: int, timeout: float) -> str:
     """Wait for health on ``port`` (``proc``: what was started, None if someone else).
 
-    Returns "up", "exited" (the process died first) or "timeout".
+    Returns "up", "exited-ok" (the process exited 0 first: a duplicate tray that
+    found another holding the lock), "exited" (it failed) or "timeout".
     """
     result = "timeout"
 
@@ -186,8 +187,8 @@ def _await_health(proc: subprocess.Popen | None, port: int, timeout: float) -> s
         nonlocal result
         if health_is_anyscribe(port):
             result = "up"
-        elif proc is not None and proc.poll() is not None:
-            result = "exited"
+        elif proc is not None and (code := proc.poll()) is not None:
+            result = "exited-ok" if code == 0 else "exited"
         else:
             return False
         return True
@@ -225,7 +226,10 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
                 tray.stop_tray(port)
                 proc = _start_tray(port)
         state = _await_health(proc, port, timeout)
-        if state == "exited":
+        if state == "exited-ok":
+            # Another tray won the lock (two clicks at once): it brings the server up.
+            state = _await_health(None, port, timeout)
+        elif state == "exited":
             # The tray exits at once with no tray backend (headless Linux, no display).
             python = launcher.pythonw(sys.executable)
             ui_args = [python, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"]

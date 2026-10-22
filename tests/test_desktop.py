@@ -467,6 +467,28 @@ def test_open_falls_back_to_ui_when_tray_dies(monkeypatch, fake_browser):
     assert fake_browser.opened == [url]
 
 
+def test_open_waits_for_winning_tray_when_duplicate_exits_zero(monkeypatch, fake_browser):
+    """Two clicks at once: the second tray finds the lock held and exits 0. Not a failure."""
+    spawned, probes = [], []
+
+    class Proc:
+        def poll(self):
+            return 0
+
+    def spawn(args, log):
+        spawned.append(args)
+        return Proc()
+
+    monkeypatch.setattr(desktop, "spawn_detached", spawn)
+    # The winning tray's server answers a few probes after the loser has exited.
+    monkeypatch.setattr(
+        desktop, "health_is_anyscribe", lambda port: probes.append(port) or len(probes) > 4
+    )
+    url = desktop.open_dashboard(8457, timeout=1)
+    assert len(spawned) == 1 and "tray" in spawned[0]  # no bare `ui` server beside the tray
+    assert url == "http://127.0.0.1:8457" and fake_browser.opened == [url]
+
+
 def test_open_raises_start_failed_when_fallback_dies(monkeypatch, fake_browser):
     monkeypatch.setattr(desktop, "spawn_detached", lambda args, log: FakeProc(code=1))
     with pytest.raises(desktop.StartFailed):

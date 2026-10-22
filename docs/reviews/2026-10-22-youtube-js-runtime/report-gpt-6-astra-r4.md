@@ -30,7 +30,7 @@ Reviewed HEAD `ec59f544259fb024b47d0ab7eeef8e43876d3031` against `b061832`. No f
 
 1. **I1: should-fix · PLAUSIBLE · The new test can write into the configured video library.**
 
-   Location: [test_js_runtime.py:202](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/tests/test_js_runtime.py:202), reaching [download.py:165](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/src/anyscribe/cli/download.py:165).
+   Location: [test_js_runtime.py:202](<checkout>/tests/test_js_runtime.py:202), reaching [download.py:165](<checkout>/src/anyscribe/cli/download.py:165).
 
    The test creates `t.mp4` containing one byte, simulates a successful download, then calls the real `_download_video`. It patches neither `VIDEO_DIR` nor `shutil.move`. The Instagram call therefore reaches creation of `VIDEO_DIR/instagram` and moves the dummy file to `t.mp4` there. An existing file at that destination can be overwritten.
 
@@ -42,7 +42,7 @@ Reviewed HEAD `ec59f544259fb024b47d0ab7eeef8e43876d3031` against `b061832`. No f
 
 2. **I2: should-fix · CONFIRMED · Installer validation still disagrees with runtime discovery.**
 
-   Location: [install.sh:344](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/install.sh:344), [install.ps1:184](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/install.ps1:184), versus [deps.py:122](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/src/anyscribe/core/deps.py:122).
+   Location: [install.sh:344](<checkout>/install.sh:344), [install.ps1:184](<checkout>/install.ps1:184), versus [deps.py:122](<checkout>/src/anyscribe/core/deps.py:122).
 
    The installers require a **non-digit** after the patch number. Python requires a **word boundary**. These are different:
 
@@ -62,7 +62,7 @@ Reviewed HEAD `ec59f544259fb024b47d0ab7eeef8e43876d3031` against `b061832`. No f
 
 3. **I3: nit · CONFIRMED · The new test does not establish the claimed pre-PR command identity.**
 
-   Location: [test_js_runtime.py:224](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r4/tests/test_js_runtime.py:224).
+   Location: [test_js_runtime.py:224](<checkout>/tests/test_js_runtime.py:224).
 
    The assertion compares Instagram’s new command with YouTube’s new command after removing the runtime arguments. A regression shared by both commands passes.
 

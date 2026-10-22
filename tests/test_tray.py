@@ -119,6 +119,14 @@ def test_plist_has_throttle_interval():
     assert "<key>ThrottleInterval</key>" in xml and "<integer>60</integer>" in xml
 
 
+def test_plist_process_type_interactive():
+    """Without it launchd throttles the server's children (ffmpeg, yt-dlp): 5-13 s vs 0.3 s."""
+    import plistlib
+
+    xml = service.render_plist(python="/usr/bin/python3")
+    assert plistlib.loads(xml.encode())["ProcessType"] == "Interactive"
+
+
 # ---- install / uninstall (no real launchctl) -----------------------------
 
 

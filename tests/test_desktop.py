@@ -667,6 +667,19 @@ def test_uninstall_removes_tray_lock_only_when_no_tray_holds_it(calls, tmp_manif
     assert not tray.LOCKFILE.exists()
 
 
+def test_status_without_manifest_reports_the_login_item_port(monkeypatch, tmp_path):
+    _login_item(tmp_path, monkeypatch, port=9100)
+    assert desktop.status()["port"] == 9100
+
+
+def test_uninstall_without_manifest_stops_the_login_item_port(monkeypatch, calls, tmp_path):
+    _login_item(tmp_path, monkeypatch, port=9100)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: calls["stop"].append(port))
+    desktop.uninstall()
+    assert calls["stop"] == [9100]
+
+
 def test_uninstall_without_install_leaves_hand_started_server(monkeypatch, calls):
     monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: True)
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("must not stop"))

@@ -304,7 +304,7 @@ def install(port: int = tray.DEFAULT_PORT, launch: bool = True) -> Manifest:
 def uninstall() -> dict:
     """Stop the tray and server, remove launcher, login item, icons and manifest."""
     m = read_manifest()
-    port = m["port"] if m else tray.DEFAULT_PORT
+    port = installed_port() or tray.DEFAULT_PORT  # same rule as `desktop open`
     stopped = False
     # Nothing recorded and no tray: a server on the port was started by hand; leave it.
     if m or tray.read_pidfile():
@@ -323,7 +323,7 @@ def uninstall() -> dict:
 
 def status() -> dict:
     m = read_manifest()
-    port = m["port"] if m else tray.DEFAULT_PORT
+    port = installed_port() or tray.DEFAULT_PORT  # same rule as `desktop open`
     launcher_p = Path(m["launcher"]) if m else launcher.launcher_path()
     login_item = Path(m["login_item"]) if m else service.login_item_path()
     reinstall = "Run: anyscribe desktop install"

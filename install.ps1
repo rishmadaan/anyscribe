@@ -4,14 +4,22 @@
 # Usage (PowerShell):
 #   irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 #
+# Without desktop mode:
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1))) -NoDesktop
+#
 # What it does:
 #   1. Checks for Python 3.11+, offers to install via winget
 #   2. Checks for ffmpeg, offers to install via winget/choco
 #   3. Installs yt-dlp via pip
 #   4. Installs anyscribe (with menu-bar tray) via pip
 #   5. Fixes PATH so `anyscribe` works from any terminal
-#   6. Tells you to run `anyscribe ui`
+#   6. Sets up desktop mode (`anyscribe desktop install --yes`: a Start menu
+#      icon and a tray that starts at login, then opens the dashboard);
+#      -NoDesktop skips it
+#   7. Tells you how to reach anyscribe (`anyscribe ui`)
 # ──────────────────────────────────────────────────────────────
+
+param([switch]$NoDesktop)
 
 $ErrorActionPreference = 'Stop'
 
@@ -330,16 +338,44 @@ try {
     Write-Host ""
     Install-Anyscribe
 
+    # Desktop mode opens the dashboard itself. Its failure is not an install
+    # failure: anyscribe works, so warn and fall back to the plain banner.
+    $desktopState = ''
+    if (-not $NoDesktop) {
+        Write-Host ""
+        Write-Info "Setting up desktop mode..."
+        Write-Host ""
+        $desktopState = try {
+            & $script:PythonCmd -m anyscribe desktop install --yes | Out-Host
+            if ($LASTEXITCODE -eq 0) { 'done' } else { 'failed' }
+        } catch { Write-Warn "$_"; 'failed' }
+    }
+
     Write-Host ""
-    Write-Host "  +-------------------------------------+" -ForegroundColor Green
-    Write-Host "  |  anyscribe is installed!            |" -ForegroundColor Green
-    Write-Host "  |                                     |" -ForegroundColor Green
-    Write-Host "  |  Next step:                         |" -ForegroundColor Green
-    Write-Host "  |    anyscribe ui                     |" -ForegroundColor Green
-    Write-Host "  |                                     |" -ForegroundColor Green
-    Write-Host "  |  Opens a dashboard in your browser  |" -ForegroundColor Green
-    Write-Host "  |  to set up and start transcribing.  |" -ForegroundColor Green
-    Write-Host "  +-------------------------------------+" -ForegroundColor Green
+    if ($desktopState -eq 'done') {
+        Write-Ok "anyscribe is in your Start menu and running in your system tray"
+        Write-Host ""
+        Write-Host "  +-------------------------------------+" -ForegroundColor Green
+        Write-Host "  |  anyscribe is ready!                |" -ForegroundColor Green
+        Write-Host "  |                                     |" -ForegroundColor Green
+        Write-Host "  |  anyscribe ui       web dashboard   |" -ForegroundColor Green
+        Write-Host "  |  anyscribe `"<url>`"  transcribe now  |" -ForegroundColor Green
+        Write-Host "  +-------------------------------------+" -ForegroundColor Green
+    } else {
+        Write-Host "  +-------------------------------------+" -ForegroundColor Green
+        Write-Host "  |  anyscribe is installed!            |" -ForegroundColor Green
+        Write-Host "  |                                     |" -ForegroundColor Green
+        Write-Host "  |  Next step:                         |" -ForegroundColor Green
+        Write-Host "  |    anyscribe ui                     |" -ForegroundColor Green
+        Write-Host "  |                                     |" -ForegroundColor Green
+        Write-Host "  |  Opens a dashboard in your browser  |" -ForegroundColor Green
+        Write-Host "  |  to set up and start transcribing.  |" -ForegroundColor Green
+        Write-Host "  +-------------------------------------+" -ForegroundColor Green
+        if ($desktopState -eq 'failed') {
+            Write-Host ""
+            Write-Warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
+        }
+    }
     Write-Host ""
 
     if (-not (Test-CommandExists 'anyscribe')) {

@@ -362,8 +362,9 @@ def test_child_kwargs_per_platform(monkeypatch):
 def test_stop_tray_shuts_down_and_kills(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
     tray.PIDFILE.write_text("777")
-    monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     killed, posted = [], []
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: not killed)  # exits on SIGTERM
+    monkeypatch.setattr(tray, "port_responding", lambda port: False)
     monkeypatch.setattr(tray.os, "kill", lambda pid, sig: killed.append((pid, sig)))
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: posted.append(port))
     assert tray.stop_tray(8457) is True
@@ -375,6 +376,7 @@ def test_stop_tray_without_tray_signals_nothing(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
     monkeypatch.setattr(tray.os, "kill", lambda pid, sig: pytest.fail("kill without a pid"))
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    monkeypatch.setattr(tray, "port_responding", lambda port: False)
     assert tray.stop_tray(8457) is False
 
 
@@ -383,10 +385,58 @@ def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_pat
     tray.PIDFILE.write_text("777")
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    monkeypatch.setattr(tray, "port_responding", lambda port: False)
 
     def kill(pid, sig):
         raise PermissionError(1, "Operation not permitted")
 
     monkeypatch.setattr(tray.os, "kill", kill)
     assert tray.stop_tray(8457) is False
+    assert not tray.PIDFILE.exists()
+
+
+def test_stop_tray_waits_for_port_to_free(monkeypatch, tmp_path):
+    # The old server must be gone before stop_tray returns, or a new tray attaches to it.
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    tray.PIDFILE.write_text("777")
+    alive = iter([True, True, False])  # read_pidfile, first poll, then exited
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: next(alive, False))
+    answers, probes = iter([True, True, False]), []
+
+    def port_responding(port):
+        probes.append(port)
+        return next(answers, False)
+
+    monkeypatch.setattr(tray, "port_responding", port_responding)
+    monkeypatch.setattr(tray.time, "sleep", lambda s: None)
+    monkeypatch.setattr(tray.os, "kill", lambda pid, sig: None)
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    assert tray.stop_tray(8457) is True
+    assert len(probes) >= 3
+    assert not tray.PIDFILE.exists()
+
+
+def test_stop_tray_kills_when_pid_outlives_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    tray.PIDFILE.write_text("777")
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(tray, "port_responding", lambda port: False)
+    monkeypatch.setattr(tray.time, "sleep", lambda s: None)
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    killed = []
+    monkeypatch.setattr(tray.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    assert tray.stop_tray(8457, timeout=0.01) is True
+    kill_sig = getattr(signal, "SIGKILL", signal.SIGTERM)
+    assert killed == [(777, signal.SIGTERM), (777, kill_sig)]
+
+
+def test_remove_pidfile_leaves_another_trays_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    tray.PIDFILE.write_text(str(os.getpid() + 1))
+    tray.remove_pidfile()
+    assert tray.PIDFILE.read_text() == str(os.getpid() + 1)
+    tray.remove_pidfile(force=True)
+    assert not tray.PIDFILE.exists()
+    tray.PIDFILE.write_text(str(os.getpid()))
+    tray.remove_pidfile()
     assert not tray.PIDFILE.exists()

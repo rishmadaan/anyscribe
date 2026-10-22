@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import signal
 import socket
+import time
 
 from anyscribe.config.paths import APP_HOME, LOGS_DIR
 
@@ -76,10 +77,15 @@ def write_pidfile() -> None:
     PIDFILE.write_text(str(os.getpid()))
 
 
-def remove_pidfile() -> None:
+def remove_pidfile(force: bool = False) -> None:
+    """Remove the pidfile if this process owns it (or ``force``).
+
+    A tray tearing down after a newer tray started must not delete the newer one's file.
+    """
     try:
-        PIDFILE.unlink()
-    except FileNotFoundError:
+        if force or PIDFILE.read_text().strip() == str(os.getpid()):
+            PIDFILE.unlink()
+    except OSError:  # includes FileNotFoundError
         pass
 
 
@@ -93,8 +99,22 @@ def _post_shutdown(port: int) -> None:
         pass
 
 
-def stop_tray(port: int) -> bool:
-    """Stop a running tray and its server from outside. True if a tray pid was signalled."""
+def _wait_until(done, timeout: float) -> bool:
+    """Poll ``done()`` every 0.2 s until it is True or ``timeout`` elapses."""
+    deadline = time.monotonic() + timeout
+    while not done():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
+    return True
+
+
+def stop_tray(port: int, timeout: float = 10.0) -> bool:
+    """Stop a running tray and its server from outside. True if a tray pid was signalled.
+
+    Waits until the tray has exited and the port is free, so a tray started right
+    after this returns cannot mistake the dying server for an external one.
+    """
     _post_shutdown(port)
     pid = read_pidfile()
     signalled = False
@@ -104,5 +124,16 @@ def stop_tray(port: int) -> bool:
             signalled = True
         except OSError:
             pass  # exited since the pidfile read, or not ours to signal; drop the pidfile anyway
-    remove_pidfile()
+
+    def gone() -> bool:
+        return not (signalled and _pid_alive(pid)) and not port_responding(port)
+
+    if not _wait_until(gone, timeout) and signalled and _pid_alive(pid):
+        try:
+            # Windows has no SIGKILL; os.kill there terminates outright.
+            os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except OSError:
+            pass
+        _wait_until(lambda: not port_responding(port), 2.0)
+    remove_pidfile(force=True)
     return signalled

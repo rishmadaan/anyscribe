@@ -155,3 +155,35 @@ def test_ytdlp_auto_update_keeps_the_default_extra() -> None:
         deps.ensure_ytdlp_current()
     upgrade = next(c for c in calls if "install" in c)
     assert upgrade[-1] == "yt-dlp[default]"
+
+
+def test_node_impostors_and_warning_lines_are_not_versions(empty_home) -> None:
+    cases = {
+        "/usr/bin/node": (0, "unrelated-tool 99.1.2"),
+    }
+    with (
+        patch.object(deps.shutil, "which", _which({"node": "/usr/bin/node"})),
+        patch.object(deps.subprocess, "run", _versions(cases)),
+    ):
+        assert deps.find_js_runtime() is None
+    cases = {"/usr/bin/node": (0, "warning: build 2026.10.22\nv18.20.0")}
+    with (
+        patch.object(deps.shutil, "which", _which({"node": "/usr/bin/node"})),
+        patch.object(deps.subprocess, "run", _versions(cases)),
+    ):
+        assert deps.find_js_runtime() is None  # 18 is too old; the date is not a version
+    cases = {"/usr/bin/node": (0, "warning: helper 1.2.3\nv24.22.0")}
+    with (
+        patch.object(deps.shutil, "which", _which({"node": "/usr/bin/node"})),
+        patch.object(deps.subprocess, "run", _versions(cases)),
+    ):
+        assert deps.find_js_runtime() == ("node", "/usr/bin/node", "node 24.22.0")
+
+
+def test_failed_probe_is_skipped(empty_home) -> None:
+    cases = {"/usr/bin/node": (1, "v24.22.0")}
+    with (
+        patch.object(deps.shutil, "which", _which({"node": "/usr/bin/node"})),
+        patch.object(deps.subprocess, "run", _versions(cases)),
+    ):
+        assert deps.find_js_runtime() is None

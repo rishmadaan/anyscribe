@@ -69,7 +69,7 @@ You should see `anyscribe` followed by a version number.
 pip install "anyscribe[tray]"
 ```
 
-The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg, yt-dlp and, for YouTube, Deno yourself (`brew install deno`, or [deno.com](https://docs.deno.com/runtime/getting_started/installation/)); Node 22+ also works if you already have it. Or just run `anyscribe doctor`, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
+The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. Installing anyscribe with pip also installs yt-dlp and its default extras. Install ffmpeg yourself and, for YouTube, Deno 2.3+ (`brew install deno`, or [deno.com](https://docs.deno.com/runtime/getting_started/installation/)) unless Node 22+ is available. Run `anyscribe doctor` to see what is missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
 
 > **Want to install Python and the dependencies by hand?** See the [Appendix: manual install](#appendix-manual-install) at the bottom.
 
@@ -323,7 +323,8 @@ No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own envir
 
 **Windows:**
 ```powershell
-winget install ffmpeg DenoLand.Deno
+winget install ffmpeg
+winget install DenoLand.Deno
 python -m pip install yt-dlp
 ```
 

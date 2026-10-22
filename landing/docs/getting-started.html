@@ -103,7 +103,7 @@
 <p><strong>Already have Python 3.11 or newer and just want the package?</strong></p>
 <pre><code class="language-bash">pip install &quot;anyscribe[tray]&quot;
 </code></pre>
-<p>The <code>[tray]</code> extra is what gives you the menu-bar icon and open-at-login (see <a href="#keep-it-running">Keep it running</a>). Plain <code>pip install anyscribe</code> works too, and you can add the extra later. With pip you install ffmpeg, yt-dlp and, for YouTube, Deno yourself (<code>brew install deno</code>, or <a href="https://docs.deno.com/runtime/getting_started/installation/">deno.com</a>); Node 22+ also works if you already have it. Or just run <code>anyscribe doctor</code>, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
+<p>The <code>[tray]</code> extra is what gives you the menu-bar icon and open-at-login (see <a href="#keep-it-running">Keep it running</a>). Plain <code>pip install anyscribe</code> works too, and you can add the extra later. Installing anyscribe with pip also installs yt-dlp and its default extras. Install ffmpeg yourself and, for YouTube, Deno 2.3+ (<code>brew install deno</code>, or <a href="https://docs.deno.com/runtime/getting_started/installation/">deno.com</a>) unless Node 22+ is available. Run <code>anyscribe doctor</code> to see what is missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
 <blockquote>
 <p><strong>Want to install Python and the dependencies by hand?</strong> See the <a href="#appendix-manual-install">Appendix: manual install</a> at the bottom.</p>
 <p><strong><code>command not found: anyscribe</code> on Windows?</strong> Use <code>python -m anyscribe</code> as a drop-in replacement — it always works. See <a href="#troubleshooting">Troubleshooting</a>.</p>
@@ -285,7 +285,8 @@ curl -fsSL https://deno.land/install.sh | sh
 </code></pre>
 <p>No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3. Deno's script puts the program in <code>~/.deno/bin</code> and adds it to your shell profile; anyscribe finds it there even before you open a new terminal.</p>
 <p><strong>Windows:</strong></p>
-<pre><code class="language-powershell">winget install ffmpeg DenoLand.Deno
+<pre><code class="language-powershell">winget install ffmpeg
+winget install DenoLand.Deno
 python -m pip install yt-dlp
 </code></pre>
 <p><strong>3. anyscribe itself.</strong> Install with the same Python you checked in step 1, so a second, older Python's <code>pip</code> cannot sneak in.</p>

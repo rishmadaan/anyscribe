@@ -230,7 +230,10 @@ check_python() {
         # old (Ubuntu 22.04 ships 3.10), ask for 3.11 by name with the package
         # manager's own spelling. || true: where a package does not exist the
         # honest die below should speak, not the package manager's raw error.
-        install_package "Python" "python@3.12" "python3 python3-venv" "" || true
+        case "$LINUX_PKG" in
+            apt) install_package "Python" "python@3.12" "python3 python3-venv" "" || true ;;
+            *)   install_package "Python" "python@3.12" "python3" "" || true ;;
+        esac
         if ! resolve_python; then
             case "$LINUX_PKG" in
                 apt) install_package "Python" "python@3.12" "python3.11 python3.11-venv" "" || true ;;
@@ -315,30 +318,46 @@ install_with_pipx() {
 # yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
 # 22+. Without one, downloads warn and may miss formats. Optional: a refusal
 # only warns.
-# Prints "major minor" of the first version-looking number in $1, or nothing.
-semver_major_minor() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1 | tr '.' ' '; }
+# Runs a version probe, bounded to 10 s where timeout(1) exists, and prints its
+# first stdout line only when the program exits 0; a hung or failing binary
+# prints nothing so the caller moves on to the next candidate.
+probe_version() {
+    local out
+    if command -v timeout >/dev/null 2>&1; then
+        out="$(timeout 10 "$@" 2>/dev/null)" || return 1
+    elif command -v gtimeout >/dev/null 2>&1; then
+        out="$(gtimeout 10 "$@" 2>/dev/null)" || return 1
+    else
+        out="$("$@" 2>/dev/null)" || return 1
+    fi
+    printf '%s\n' "$out" | head -1
+}
 
 js_runtime_found() {
-    local d v major minor
+    local d v
     for d in "$(command -v deno 2>/dev/null || true)" "$HOME/.deno/bin/deno"; do
         [[ -n "$d" && -x "$d" ]] || continue
-        v="$("$d" --version 2>/dev/null | head -1 || true)"
-        [[ "$v" == deno\ * ]] || continue  # a same-named unrelated binary
-        read -r major minor <<<"$(semver_major_minor "$v")"
-        if [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] && (( major > 2 || (major == 2 && minor >= 3) )); then
-            ok "deno $major.$minor"
+        v="$(probe_version "$d" --version || true)"
+        # deno's own banner, "deno X.Y.Z (...)"; anything else is not deno
+        [[ "$v" =~ ^deno\ ([0-9]+)\.([0-9]+)\. ]] || continue
+        if (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] >= 3) )); then
+            ok "deno ${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
             return 0
         fi
         warn "$v found at $d, but yt-dlp needs Deno 2.3 or newer"
     done
     if command_exists node; then
-        v="$(node --version 2>/dev/null | head -1 || true)"
-        read -r major minor <<<"$(semver_major_minor "$v")"
-        if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 22 )); then
-            ok "node $v (yt-dlp will use it for YouTube)"
-            return 0
+        v="$(probe_version node --version || true)"
+        # node prints exactly "vX.Y.Z"
+        if [[ "$v" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            if (( BASH_REMATCH[1] >= 22 )); then
+                ok "node $v (yt-dlp will use it for YouTube)"
+                return 0
+            fi
+            warn "node $v found, but yt-dlp needs 22 or newer"
+        else
+            warn "node found, but its version could not be read (yt-dlp needs 22 or newer)"
         fi
-        warn "node ${v:-(version unknown)} found, but yt-dlp needs 22 or newer"
     fi
     return 1
 }

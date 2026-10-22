@@ -155,11 +155,19 @@ quoting is needed.</p>
 the media. yt-dlp ships the puzzle-solving script, but needs a program to run
 it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
 warn, may miss formats, and can fail outright when YouTube changes the puzzle.</p>
-<p><strong>Fix</strong> — install Deno, then check:</p>
-<pre><code class="language-bash">brew install deno                                  # macOS
-sudo apt install unzip &amp;&amp; curl -fsSL https://deno.land/install.sh | sh   # Linux (Ubuntu/Debian; other distros: install unzip or 7z first)
-winget install DenoLand.Deno                       # Windows (PowerShell)
-anyscribe doctor                                   # the &quot;JavaScript runtime&quot; row should say Found
+<p><strong>Fix</strong> — install Deno, then check that the "JavaScript runtime" row of <code>anyscribe doctor</code> says Found.</p>
+<p><strong>macOS:</strong></p>
+<pre><code class="language-bash">brew install deno
+anyscribe doctor
+</code></pre>
+<p><strong>Linux (Ubuntu/Debian; other distros: install unzip or 7z first):</strong></p>
+<pre><code class="language-bash">sudo apt install unzip
+curl -fsSL https://deno.land/install.sh | sh
+anyscribe doctor
+</code></pre>
+<p><strong>Windows (PowerShell):</strong></p>
+<pre><code class="language-powershell">winget install DenoLand.Deno
+anyscribe doctor
 </code></pre>
 <p>If you already have Node 22 or newer, nothing to install: anyscribe tells
 yt-dlp to use it. The one-line installer from <a href="/docs/getting-started">Getting Started</a>
@@ -171,7 +179,7 @@ formats often and old versions break — so this is rarely a stale-tool problem.
 Still:</p>
 <ol>
 <li>Try a different video, to confirm anyscribe itself is working.</li>
-<li>Update yt-dlp by hand: <code>pip install --upgrade yt-dlp</code></li>
+<li>Update yt-dlp by hand: <code>pip install --upgrade "yt-dlp[default]"</code></li>
 <li>If it's age-restricted, yt-dlp needs browser cookies (advanced).</li>
 </ol>
 <h3 id="instagram-rate-limit-reached-or-login-required">Instagram: <code>rate-limit reached</code> or <code>login required</code></h3>

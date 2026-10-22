@@ -20,11 +20,17 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   whichever you have (including a Deno installed by its own script, before you
   open a new terminal) and tells yt-dlp to use it. With neither, YouTube
   downloads print one warning and still run, but may miss formats or fail.
-- The installers add Deno when neither Deno 2.3+ nor Node 22+ is present
-  (macOS: Homebrew; Linux: Deno's install script into `~/.deno`, after
-  `sudo apt install unzip` if unzip is missing; Windows: winget). Declining
-  only warns.
+- The installers offer Deno when neither Deno 2.3+ nor Node 22+ is usable:
+  Homebrew on macOS, Deno's install script (into `~/.deno`) on Linux, or
+  winget on Windows when available. On apt-based Linux the installer first
+  installs unzip if it is missing. Declining only warns.
 - `anyscribe doctor` has a "JavaScript runtime" row.
+
+**Fixed**
+- yt-dlp's auto-update messages no longer appear in `--json` output; they go
+  to stderr.
+- The Linux installer installs your distribution's own Python first when no
+  Python is present (Ubuntu 24.04 has no `python3.11` package).
 
 ## 0.17.0 — 2026-10-22
 

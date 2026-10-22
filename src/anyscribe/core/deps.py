@@ -116,24 +116,35 @@ def get_command(name: str) -> list[str]:
 JS_RUNTIME_MIN = {"deno": (2, 3), "node": (22, 0)}  # yt-dlp's minimums (EJS wiki)
 
 
+# The exact banner each runtime prints for --version; anything else (a wrapper's
+# warning line, an unrelated tool with the same name) is not a version.
+_JS_VERSION_LINE = {
+    "deno": re.compile(r"^deno (\d+)\.(\d+)\.(\d+)\b"),
+    "node": re.compile(r"^v(\d+)\.(\d+)\.(\d+)$"),
+}
+
+
 def _probe_js_runtime(name: str, path: str) -> str | None:
     """Return "<name> <version>" when `path` is a usable deno or node, else None.
 
-    deno prints "deno 2.9.7 (stable, ...)", node prints "v26.9.0". An
-    unrelated binary with the same name, a failed run, or a version below
-    yt-dlp's minimum all return None so the next candidate is tried.
+    The probe must exit 0 within 10 s and print the runtime's own version
+    banner on some line; the version must meet yt-dlp's minimum. Anything
+    else returns None so the next candidate is tried.
     """
     try:
-        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+        out = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, errors="replace", timeout=10
+        )
     except (subprocess.TimeoutExpired, OSError):
         return None
-    text = (out.stdout or "") + (out.stderr or "")
     if out.returncode != 0:
         return None
-    if name == "deno" and not text.lstrip().startswith("deno "):
-        return None
-    match = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
-    if not match:
+    pattern = _JS_VERSION_LINE[name]
+    for line in (out.stdout or "").splitlines() + (out.stderr or "").splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            break
+    else:
         return None
     major, minor = int(match.group(1)), int(match.group(2))
     if (major, minor) < JS_RUNTIME_MIN[name]:

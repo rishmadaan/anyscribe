@@ -87,10 +87,11 @@ def _run_js_runtime_step(tmp_path, node_version, answer):
         if os.uname().sysname == "Darwin"
         else f'"{script}" -qec "{bash} {harness}" /dev/null'
     )
-    # The answer is fed after a pause: an immediate EOF on the pty reaches the
-    # prompt first and the step takes its "no terminal" exit instead.
+    # The answer is fed after a pause and the pipe is held open afterwards: an
+    # EOF on the pty that arrives with or before the answer makes the prompt's
+    # read fail, and the step takes its "no terminal" exit instead.
     out = subprocess.run(
-        [bash, "-c", f'(sleep 1; printf "%s\\n" "$ANSWER") | {pty}'],
+        [bash, "-c", f'(sleep 1; printf "%s\\n" "$ANSWER"; sleep 4) | {pty}'],
         env={
             **os.environ,
             "INSTALL_SH": str(SCRIPT),
@@ -124,3 +125,60 @@ def test_old_node_accept_installs_deno(tmp_path):
     out, calls = _run_js_runtime_step(tmp_path, "v18.19.1", "y")
     assert "brew install deno" in calls
     assert "step exit=0" in out
+
+
+def test_node_that_fails_its_probe_is_not_accepted(tmp_path):
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash not available")
+    harness = (
+        'eval "$(sed \'$d\' "$INSTALL_SH")"\n'
+        'ok(){ echo "ok: $*"; }; warn(){ echo "warn: $*"; }\n'
+        'command(){ return 1; }; command_exists(){ [[ "$1" == node ]]; }\n'
+        "node(){ echo v24.22.0; return 1; }\n"  # a banner that looks right, from a failing program
+        "HOME=/nonexistent\n"
+        'js_runtime_found && echo accepted || echo "not accepted"\n'
+    )
+    out = subprocess.run(
+        [bash, "-c", harness],
+        env={**os.environ, "INSTALL_SH": str(SCRIPT)},
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "not accepted" in out
+    assert "accepted\n" not in out.replace("not accepted\n", "")
+
+
+def test_check_python_asks_each_package_manager_by_its_own_names(tmp_path):
+    bash = shutil.which("bash")
+    script = shutil.which("script")
+    if not bash or not script:
+        pytest.skip("bash and script(1) needed")
+    results = {}
+    for mgr in ("apt", "pacman", "dnf"):
+        calls = tmp_path / f"calls-{mgr}"
+        harness = tmp_path / f"harness-{mgr}.sh"
+        harness.write_text(
+            'eval "$(sed \'$d\' "$INSTALL_SH")"\n'
+            'ok(){ :; }; warn(){ :; }; info(){ :; }; die(){ echo "die: $1"; }\n'
+            "resolve_python(){ return 1; }\n"
+            'install_package(){ echo "$3" >> "$CALLS"; }\n'
+            f"LINUX_PKG={mgr}; OS=linux\n"
+            "check_python\n"
+        )
+        pty = (
+            f'"{script}" -q /dev/null "{bash}" "{harness}"'
+            if os.uname().sysname == "Darwin"
+            else f'"{script}" -qec "{bash} {harness}" /dev/null'
+        )
+        subprocess.run(
+            [bash, "-c", f'(sleep 1; printf "y\\n"; sleep 4) | {pty}'],
+            env={**os.environ, "INSTALL_SH": str(SCRIPT), "CALLS": str(calls)},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        results[mgr] = calls.read_text().splitlines() if calls.exists() else []
+    assert results["apt"] == ["python3 python3-venv", "python3.11 python3.11-venv"]
+    assert results["dnf"] == ["python3", "python3.11"]
+    assert results["pacman"] == ["python3"]

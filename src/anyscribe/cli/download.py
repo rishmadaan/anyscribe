@@ -119,8 +119,10 @@ def _download_video(url: str, platform: str, tmp_dir: Path, quiet: bool) -> dict
     from anyscribe.vault.writer import slugify
 
     ensure_ytdlp_current()
-    runtime = find_js_runtime()
+    # Only YouTube sets JavaScript challenges; Instagram keeps its exact old command.
+    runtime = None
     if platform == "youtube":
+        runtime = find_js_runtime()
         warn_if_no_js_runtime(runtime)
 
     # yt-dlp can handle both YouTube and Instagram video URLs

@@ -92,7 +92,7 @@ The video is private, age-restricted, geo-blocked, or deleted.
 
 **Fix:**
 1. Try a different video to confirm anyscribe works
-2. Update yt-dlp: `pip install --upgrade yt-dlp`
+2. Update yt-dlp: `pip install --upgrade "yt-dlp[default]"`
 3. If age-restricted: yt-dlp may need browser cookies (advanced)
 
 ### "No JavaScript runtime found" (YouTube; printed on stderr)
@@ -136,7 +136,7 @@ client-side fix.
 
 The catch-all for any other yt-dlp error; the text after the colon is the start
 of yt-dlp's own output. Read it for the cause, then try updating yt-dlp
-(`pip install --upgrade yt-dlp`) or configuring `instagram.browser` as above.
+(`pip install --upgrade "yt-dlp[default]"`) or configuring `instagram.browser` as above.
 
 ### Transcription in wrong language
 

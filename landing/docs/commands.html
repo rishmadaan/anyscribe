@@ -553,7 +553,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json
 }
 </code></pre>
 <blockquote>
-<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to hide the usual progress output, then pipe to <code>jq</code>: <code>anyscribe "url" --json -q | jq '.data.file'</code>. One catch: a few startup messages can still land in that output. The common one is the automatic yt-dlp update, which runs when your yt-dlp is over 60 days old. When that happens, <code>jq</code> can't read that run's output.</p>
+<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to hide the usual progress output, then pipe to <code>jq</code>: <code>anyscribe "url" --json -q | jq '.data.file'</code>. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output.</p>
 </blockquote>
 <h3 id="speaker-diarization">Speaker Diarization</h3>
 <p>The <code>--diarize</code> flag enables multi-speaker transcription — anyscribe identifies who said what and labels each turn.</p>
@@ -1608,10 +1608,8 @@ the JSON object:</p>
 <pre><code class="language-bash">anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json --quiet | jq -r '.data.file'
 </code></pre>
 <blockquote>
-<p><strong>One catch:</strong> a few startup messages can still land in that output. The
-common one is the automatic yt-dlp update, which runs when your yt-dlp is over
-60 days old. When it happens, <code>jq</code> can't read that run's output. The example
-above assumes no such message appears.</p>
+<p><strong>Startup messages:</strong> JavaScript runtime warnings and yt-dlp update messages
+go to stderr, outside the JSON output.</p>
 </blockquote>
 <p>The result shape for a transcription is documented under
 <a href="#json-output">JSON Output</a>. Machine-readable output is also available from

@@ -156,27 +156,51 @@ function Test-Ffmpeg {
 # yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
 # 22+. Optional: a failure only warns.
 
+# Bounded probe: the program's first stdout line when it exits 0 within 10 s, else $null.
+function Get-VersionLine($exe, $argument) {
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe
+        $psi.Arguments = $argument
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $out = $p.StandardOutput.ReadToEndAsync()
+        if (-not $p.WaitForExit(10000)) { try { $p.Kill() } catch {}; return $null }
+        if ($p.ExitCode -ne 0) { return $null }
+        return (($out.Result -split "`r?`n")[0]).Trim()
+    } catch { return $null }
+}
+
 function Test-JsRuntime {
     Write-Info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
     # Optional step: any failure inside only warns and returns.
     try {
         if (Test-CommandExists 'deno') {
-            $denoVer = (& deno --version 2>$null | Out-String)
-            if ($denoVer -match 'deno (\d+)\.(\d+)') {
+            $denoVer = Get-VersionLine 'deno' '--version'
+            if ($denoVer -and $denoVer -match '^deno (\d+)\.(\d+)\.') {
                 if ([int]$Matches[1] -gt 2 -or ([int]$Matches[1] -eq 2 -and [int]$Matches[2] -ge 3)) {
                     Write-Ok "deno $($Matches[1]).$($Matches[2])"
                     return
                 }
                 Write-Warn "deno $($Matches[1]).$($Matches[2]) found, but yt-dlp needs 2.3 or newer"
+            } else {
+                Write-Warn "deno found, but its version could not be read"
             }
         }
         if (Test-CommandExists 'node') {
-            $nodeVer = (& node --version 2>$null | Out-String).Trim()
-            if ($nodeVer -match '^v?(\d+)\.' -and [int]$Matches[1] -ge 22) {
-                Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
-                return
+            $nodeVer = Get-VersionLine 'node' '--version'
+            if ($nodeVer -and $nodeVer -match '^v(\d+)\.(\d+)\.(\d+)$') {
+                if ([int]$Matches[1] -ge 22) {
+                    Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
+                    return
+                }
+                Write-Warn "node $nodeVer found, but yt-dlp needs 22 or newer"
+            } else {
+                Write-Warn "node found, but its version could not be read (yt-dlp needs 22 or newer)"
             }
-            Write-Warn "node $nodeVer found, but yt-dlp needs 22 or newer"
         }
 
         Write-Warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"

@@ -31,7 +31,16 @@ anyscribe is not reliability.
   sees it on PATH), then node. `js_runtime_args` returns
   `--js-runtimes <name>:<path>`, so yt-dlp uses exactly that binary; node is
   not enabled by yt-dlp unless named. `warn_if_no_js_runtime` prints once per
-  process. The YouTube downloader passes the flag; Instagram does not need it.
+  process. The YouTube downloader and `cli/download.py::_download_video` (YouTube
+  video downloads) pass the flag; Instagram does not need it and keeps its
+  exact old command.
+- Warnings and yt-dlp's auto-update messages go to stderr, so `--json` output
+  and the MCP stdio server stay clean; the 60-day auto-update upgrades
+  `yt-dlp[default]`, keeping `yt-dlp-ejs` in step; `/api/health` `ok` counts
+  required dependencies only.
+- The Linux installer asks for the distribution's own python3 first when no
+  Python is present (Ubuntu 24.04 has no `python3.11` package; found in Docker)
+  and only then for python3.11 by name.
 - `anyscribe doctor`: an optional "JavaScript runtime" row showing the
   detected runtime and version, or `Missing (optional)` with a description of
   the dependency. Each candidate is run with `--version` and skipped when it is

@@ -307,7 +307,7 @@ On error:
 }
 ```
 
-> **Scripting tip:** Use `--json --quiet` together to hide the usual progress output, then pipe to `jq`: `anyscribe "url" --json -q | jq '.data.file'`. One catch: a few startup messages can still land in that output. The common one is the automatic yt-dlp update, which runs when your yt-dlp is over 60 days old. When that happens, `jq` can't read that run's output.
+> **Scripting tip:** Use `--json --quiet` together to hide the usual progress output, then pipe to `jq`: `anyscribe "url" --json -q | jq '.data.file'`. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output.
 
 ### Speaker Diarization
 
@@ -1179,10 +1179,8 @@ the JSON object:
 anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.data.file'
 ```
 
-> **One catch:** a few startup messages can still land in that output. The
-> common one is the automatic yt-dlp update, which runs when your yt-dlp is over
-> 60 days old. When it happens, `jq` can't read that run's output. The example
-> above assumes no such message appears.
+> **Startup messages:** JavaScript runtime warnings and yt-dlp update messages
+> go to stderr, outside the JSON output.
 
 The result shape for a transcription is documented under
 [JSON Output](#json-output). Machine-readable output is also available from

@@ -613,7 +613,7 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 ## v0.17.1 — JavaScript runtime for YouTube
 
 - [x] `yt-dlp[default]>=2025.11.12` (first release whose `default` extra ships `yt-dlp-ejs`, the YouTube challenge solver).
-- [x] `core/deps.py`: `find_js_runtime` (deno on PATH, `~/.deno/bin/deno`, node), `js_runtime_args` (`--js-runtimes name:path`), `warn_if_no_js_runtime` (once per process), a "JavaScript runtime" doctor row (optional). `downloaders/youtube.py` passes the flag.
+- [x] `core/deps.py`: `find_js_runtime` (deno on PATH, `~/.deno/bin/deno`, node), `js_runtime_args` (`--js-runtimes name:path`), `warn_if_no_js_runtime` (once per process), a "JavaScript runtime" doctor row (optional). `downloaders/youtube.py` and `cli/download.py` (YouTube video downloads) pass the flag.
 - [x] install.sh / install.ps1: `check_js_runtime` / `Test-JsRuntime` accept Deno or Node 22+, else install Deno (brew; Deno's script with `--yes`; winget). Declining warns.
 - [x] Owner decision 2026-10-22 ("yes, let's go with C"): a runtime is installed, not merely warned about, because a warning the user cannot act on from inside anyscribe is not reliability.
 

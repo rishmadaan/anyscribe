@@ -8,7 +8,7 @@ from importlib.util import find_spec
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from anyscribe.core import service
+from anyscribe.core import service, tray
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -29,7 +29,7 @@ async def autostart_status() -> dict:
 
 
 @router.put("/autostart")
-async def set_autostart(req: AutostartRequest) -> dict:
+async def set_autostart(req: AutostartRequest, request: Request) -> dict:
     """Install or remove the tray login item (macOS, Windows, Linux)."""
     if sys.platform not in service.SUPPORTED:
         raise HTTPException(status_code=400, detail=f"Autostart is not supported on {sys.platform}")
@@ -42,7 +42,8 @@ async def set_autostart(req: AutostartRequest) -> dict:
                 detail='The menu-bar tray isn\'t installed. Run: pip install "anyscribe[tray]" first.',
             )
         try:
-            service.install_service()
+            # The login item must reopen this dashboard's port, not always 8457.
+            service.install_service(port=request.url.port or tray.DEFAULT_PORT)
         except RuntimeError as e:  # Windows: the shortcut could not be created
             raise HTTPException(status_code=500, detail=str(e)) from e
     else:

@@ -26,6 +26,8 @@ def test_autostart_enable_writes_plist(client, monkeypatch, tmp_path):
     monkeypatch.setattr(system_routes.sys, "platform", "darwin")
     monkeypatch.setattr(service, "launch_agents_dir", lambda: tmp_path)
     monkeypatch.setattr(service, "_launchctl", lambda *a: None)
+    monkeypatch.setattr(service.tray, "read_pidfile", lambda: None)
+    monkeypatch.setattr(service.tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
     monkeypatch.setattr(system_routes, "find_spec", lambda name: object())
     data = client.put("/api/autostart", json={"enabled": True}).json()
     assert data["enabled"] is True
@@ -60,3 +62,20 @@ def test_autostart_rejected_on_unknown_platform(client, monkeypatch):
     monkeypatch.setattr(system_routes.sys, "platform", "freebsd")
     assert client.put("/api/autostart", json={"enabled": True}).status_code == 400
     assert client.get("/api/autostart").json() == {"supported": False, "enabled": False}
+
+
+def test_autostart_enable_uses_dashboard_port(monkeypatch, tmp_path):
+    """A dashboard on --port 9000 must register a login item for 9000, not 8457."""
+    seen = {}
+
+    def fake_install(port):
+        seen["port"] = port
+        return tmp_path / "item"
+
+    monkeypatch.setattr(service, "install_service", fake_install)
+    monkeypatch.setattr(service, "is_installed", lambda: True)
+    monkeypatch.setattr(system_routes.sys, "platform", "darwin")
+    monkeypatch.setattr(system_routes, "find_spec", lambda name: object())
+    client = TestClient(create_app(), base_url="http://127.0.0.1:9000")
+    assert client.put("/api/autostart", json={"enabled": True}).status_code == 200
+    assert seen["port"] == 9000

@@ -595,8 +595,35 @@ def test_status_not_installed():
 def test_status_healthy(monkeypatch, tmp_manifest):
     tmp_manifest()
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
     s = desktop.status()
     assert s["installed"] is True and s["healthy"] is True and s["reason"] is None
+
+
+def test_status_without_tray_is_healthy_and_says_why(monkeypatch, tmp_manifest):
+    """Headless Linux: the bare dashboard answers, no tray icon could start."""
+    tmp_manifest()
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
+    r = CliRunner().invoke(app, ["desktop", "status", "--json"])
+    s = json.loads(r.stdout)["data"]
+    assert (s["healthy"], s["server_running"], s["tray_running"]) == (True, True, False)
+    assert s["reason"] == (
+        "Running without its tray icon (no graphical session or tray support). "
+        "The dashboard works; the tray will start at your next graphical login."
+    )
+
+
+@pytest.mark.parametrize("tray_pid", [None, 4242])
+def test_cli_install_says_when_the_tray_is_not_running(monkeypatch, calls, tray_pid):
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: True)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: tray_pid)
+    r = CliRunner().invoke(app, ["desktop", "install", "--yes"])
+    line = (
+        "Tray icon: not running (no graphical session or tray support here). The dashboard "
+        "works without it; the tray will start at your next graphical login."
+    )
+    assert r.exit_code == 0 and "Starts at login:" in r.stdout
+    assert (line in r.stdout) is (tray_pid is None)
 
 
 def test_status_installed_but_not_running_is_not_healthy(tmp_manifest):

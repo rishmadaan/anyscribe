@@ -91,6 +91,13 @@ def install(
         console.print("[dim]Click the anyscribe app to open the dashboard.[/dim]")
     else:
         console.print(f"[green]Dashboard:[/green] http://127.0.0.1:{port}")
+        if desktop.running_without_tray(port):
+            console.print(
+                "Tray icon: not running (no graphical session or tray support here). The "
+                "dashboard works without it; the tray will start at your next graphical login.",
+                soft_wrap=True,
+                markup=False,
+            )
 
 
 @desktop_app.command()
@@ -139,7 +146,8 @@ def status(
     console.print(f"Tray running:    {yes_no[s['tray_running']]}")
     console.print(f"Server running:  {yes_no[s['server_running']]} (port {s['port']})")
     if s["healthy"]:
-        console.print("Healthy:         [green]yes[/green]")
+        note = f" — {escape(s['reason'])}" if s["reason"] else ""
+        console.print(f"Healthy:         [green]yes[/green]{note}", soft_wrap=True)
     else:
         console.print(
             f"Healthy:         [yellow]no[/yellow] — {escape(s['reason'])}", soft_wrap=True

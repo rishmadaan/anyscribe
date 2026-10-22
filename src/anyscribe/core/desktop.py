@@ -72,6 +72,17 @@ class StartFailed(DesktopError):
         super().__init__(f"anyscribe did not start on port {port}. See the log: {tray.TRAY_LOG}")
 
 
+NO_TRAY_REASON = (
+    "Running without its tray icon (no graphical session or tray support). "
+    "The dashboard works; the tray will start at your next graphical login."
+)
+
+
+def running_without_tray(port: int) -> bool:
+    """The dashboard answers but no tray is alive: the bare-dashboard fallback."""
+    return tray.read_pidfile() is None and health_is_anyscribe(port)
+
+
 def read_manifest() -> Manifest | None:
     try:
         return json.loads(paths.DESKTOP_MANIFEST.read_text())
@@ -325,8 +336,12 @@ def status() -> dict:
     else:
         reason = None
     server_running = health_is_anyscribe(port)
+    tray_running = tray.read_pidfile() is not None
     if reason is None and not server_running:
         reason = "Installed but not running. Click the anyscribe app or run: anyscribe desktop open"
+    healthy = reason is None
+    if healthy and not tray_running:
+        reason = NO_TRAY_REASON  # the dashboard answers, so still healthy
     return {
         "platform": sys.platform,
         "supported": service.supported(),
@@ -335,8 +350,8 @@ def status() -> dict:
         "login_item": str(login_item),
         "python": m["python"] if m else None,
         "port": port,
-        "tray_running": tray.read_pidfile() is not None,
+        "tray_running": tray_running,
         "server_running": server_running,
-        "healthy": reason is None,
+        "healthy": healthy,
         "reason": reason,
     }

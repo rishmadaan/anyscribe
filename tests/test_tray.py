@@ -365,3 +365,17 @@ def test_stop_tray_without_tray_signals_nothing(monkeypatch, tmp_path):
     monkeypatch.setattr(tray.os, "kill", lambda pid, sig: pytest.fail("kill without a pid"))
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
     assert tray.stop_tray(8457) is False
+
+
+def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_path):
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    tray.PIDFILE.write_text("777")
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+
+    def kill(pid, sig):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(tray.os, "kill", kill)
+    assert tray.stop_tray(8457) is False
+    assert not tray.PIDFILE.exists()

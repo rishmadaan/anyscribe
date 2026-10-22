@@ -11,6 +11,7 @@ LOGS_DIR = APP_HOME / "logs"
 SESSIONS_DIR = APP_HOME / "sessions"
 TMP_DIR = APP_HOME / "tmp"
 DESKTOP_DIR = APP_HOME / "desktop"
+DESKTOP_MANIFEST = APP_HOME / "desktop.json"
 
 # Recovery / checkpoint dirs for resilience
 RECOVERY_DIR = APP_HOME / "recovery"

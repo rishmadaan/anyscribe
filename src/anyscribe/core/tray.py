@@ -45,7 +45,7 @@ def _windows_pid_alive(pid: int) -> bool:
 
 
 def _pid_alive(pid: int) -> bool:
-    """True if a process with this pid exists (signal 0 = existence probe)."""
+    """True if a process with this pid exists (POSIX: signal 0 probe; Windows: OpenProcess)."""
     if os.name == "nt":
         # os.kill(pid, 0) on Windows sends CTRL_C_EVENT, not a probe.
         return _windows_pid_alive(pid)
@@ -102,7 +102,7 @@ def stop_tray(port: int) -> bool:
         try:
             os.kill(pid, signal.SIGTERM)
             signalled = True
-        except ProcessLookupError:
-            pass  # exited between the pidfile read and the kill
+        except OSError:
+            pass  # exited since the pidfile read, or not ours to signal; drop the pidfile anyway
     remove_pidfile()
     return signalled

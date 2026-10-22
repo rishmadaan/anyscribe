@@ -11,6 +11,50 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.18.0 — 2026-10-22
+
+**Added**
+- **Desktop mode.** `anyscribe desktop install` adds an **anyscribe** app
+  (Applications on macOS, the Start menu on Windows, the app menu on Linux),
+  starts anyscribe in your menu bar or system tray at every login, starts it
+  now, and opens the dashboard. Click the app to open the dashboard; closing
+  the browser tab leaves it running; Quit in the tray menu stops it. Nothing
+  is downloaded or signed: the app is built on your own machine from the
+  anyscribe you installed, so there is no security prompt.
+- `anyscribe desktop status` says whether the app is installed, running and
+  healthy, and names the fix when it isn't. `anyscribe desktop uninstall`
+  stops anyscribe and removes the app, the login item and the icons; your
+  transcripts, settings and API keys stay. `anyscribe desktop open` is what
+  the app icon runs. All four take `--json` for agents.
+- The one-line installers finish by setting up desktop mode. Skip it with
+  `--no-desktop` (macOS / Linux: `... | bash -s -- --no-desktop`) or
+  `-NoDesktop` (Windows:
+  `& ([scriptblock]::Create((irm <installer url>))) -NoDesktop`). If that
+  step fails, the installer warns and finishes the normal install.
+- **Settings → Startup → Start at login** now appears on macOS, Windows and
+  Linux (it was macOS only, labelled "Open at login").
+
+**Fixed**
+- A tray started at login now finds ffmpeg and Deno. Login items used to get
+  a minimal PATH, so transcriptions started from the tray could fail with
+  "ffmpeg not found" while the terminal worked.
+- `anyscribe tray` runs on Windows (it used to crash on start).
+- Starting a second `anyscribe tray` while one is running now exits
+  successfully instead of with an error, so a login item doesn't keep
+  retrying it.
+
+**Changed**
+- `anyscribe install-service` and `uninstall-service` work on Windows and
+  Linux as well as macOS. `install-service` refuses until the tray extra is
+  installed (`pip install "anyscribe[tray]"`). Removing the login item never
+  stops a tray that is already running; quit it from its menu, or run
+  `anyscribe desktop uninstall`.
+
+**Upgrading:** after `pip install --upgrade "anyscribe[tray]"`, run
+`anyscribe desktop install` once to get the app and the new login item.
+Already using start-at-login from an older version? Running it replaces the
+old login item with the fixed one.
+
 ## 0.17.1 — 2026-10-22
 
 **Changed**

@@ -14,6 +14,18 @@ tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct st
   3.11+. The installer's candidate list is now `python3.14 python3.13
   python3.12 python3.11 python3`.
 - `starlette>=1.3.1` is a direct dependency, with `fastapi>=0.133`.
+- Installers, shaped by three review rounds: install.sh asks each package
+  manager for 3.11 by its own name (apt: `python3.11 python3.11-venv`, dnf:
+  `python3.11`), tolerates a failed package install so its own message speaks,
+  installs with `pip install --upgrade` or, on the pipx route, `pipx uninstall`
+  of an existing anyscribe followed by `pipx install --force --python <checked
+  python>` (pipx 1.0.0 otherwise keeps the old venv and its old Python, even
+  under `--force`; both reproduced on Ubuntu 22.04), and verifies the copy it installed rather
+  than whichever `anyscribe` PATH finds first. install.ps1 also tries the `py`
+  launcher, stores the checked interpreter's `sys.executable` because
+  Refresh-Path can re-point `python` at an older install, and makes the same
+  installed-copy check. Ubuntu 22.04's `python3.11` apt package is 3.11.0rc1;
+  pip's requires-python check compares `sys.version_info[:3]`, so it counts.
 
 ## Why
 

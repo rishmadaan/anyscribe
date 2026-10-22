@@ -174,10 +174,18 @@ function Install-Anyscribe {
     Write-Info "Installing anyscribe..."
     & $script:PythonCmd -m pip install --quiet --upgrade "anyscribe[tray]"
 
-    # Verify
+    # Verify. The command the user will type must be the copy just installed,
+    # not an older anyscribe.exe from another Python earlier on PATH.
+    $installedVer = (& $script:PythonCmd -m anyscribe --version 2>$null | Out-String).Trim()
     Refresh-Path
     if (Test-CommandExists 'anyscribe') {
-        Write-Ok "anyscribe installed"
+        $foundVer = (anyscribe --version 2>$null | Out-String).Trim()
+        if ($installedVer -and $foundVer -ne $installedVer) {
+            Write-Warn "An older anyscribe ($foundVer) is first on PATH: $((Get-Command anyscribe).Source). The new one is $installedVer."
+            Write-Host "    Remove it, or run the new one as: & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Yellow
+        } else {
+            Write-Ok "anyscribe installed ($foundVer)"
+        }
     } else {
         Write-Ok "anyscribe package installed"
         Fix-Path

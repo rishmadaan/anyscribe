@@ -269,7 +269,7 @@ python --version       # Windows
 <p><strong>Linux (Ubuntu/Debian):</strong></p>
 <pre><code class="language-bash">sudo apt install python3 python3-pip python3-venv
 </code></pre>
-<p>Then run <code>python3 --version</code> again. If it still shows 3.10 or older (Ubuntu 22.04 does), the simplest fix is the one-line installer in Step 1: it installs Python 3.11 alongside the old one and uses it. To do it by hand, run <code>sudo apt install python3.11 python3.11-venv pipx</code>, then in step 3 below use <code>pipx install --python python3.11 "anyscribe[tray]"</code> instead of <code>pip install</code> (plain <code>pip</code> still belongs to the old Python and quietly installs an older anyscribe), then <code>pipx ensurepath</code> and open a new terminal. Debian 11 has no Python 3.11 package; upgrade to Debian 12, which ships it.</p>
+<p>Then run <code>python3 --version</code> again. If it still shows 3.10 or older (Ubuntu 22.04 does), install a newer Python alongside it: <code>sudo apt install python3.11 python3.11-venv</code>. It does not change which Python <code>pip</code> uses, so step 3 below uses pipx on Linux. Debian 11 has no Python 3.11 package; upgrade to Debian 12 first. The simplest route on any Linux is still the one-line installer at the top of this guide, which does all of this for you.</p>
 <p><strong>Windows:</strong>
 Download from <a href="https://www.python.org/downloads/">python.org/downloads</a> and run the installer. <strong>Check "Add Python to PATH"</strong> during installation.</p>
 <blockquote>
@@ -280,16 +280,22 @@ Download from <a href="https://www.python.org/downloads/">python.org/downloads</
 <pre><code class="language-bash">brew install ffmpeg yt-dlp
 </code></pre>
 <p><strong>Linux (Ubuntu/Debian):</strong></p>
-<pre><code class="language-bash">sudo apt install ffmpeg
-pip install yt-dlp
+<pre><code class="language-bash">sudo apt install ffmpeg pipx
 </code></pre>
+<p>No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3.</p>
 <p><strong>Windows:</strong></p>
 <pre><code class="language-powershell">winget install ffmpeg
 pip install yt-dlp
 </code></pre>
 <p><strong>3. anyscribe itself.</strong></p>
+<p><strong>macOS / Windows:</strong></p>
 <pre><code class="language-bash">pip install &quot;anyscribe[tray]&quot;
 </code></pre>
+<p><strong>Linux:</strong></p>
+<pre><code class="language-bash">pipx install --python /usr/bin/python3.11 &quot;anyscribe[tray]&quot;
+pipx ensurepath
+</code></pre>
+<p>Then open a new terminal. Use the Python from step 1: on Ubuntu 22.04 that is <code>/usr/bin/python3.11</code>; on Debian 12 and Ubuntu 24.04 plain <code>pipx install "anyscribe[tray]"</code> is enough. Plain <code>pip install</code> is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.</p>
 <p>Verify:</p>
 <p><strong>macOS / Linux:</strong></p>
 <pre><code class="language-bash">anyscribe --version

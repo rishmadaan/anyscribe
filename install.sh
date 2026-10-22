@@ -235,7 +235,7 @@ check_python() {
             dnf) py_pkg="python3.11" ;;
         esac
         install_package "Python" "python@3.12" "$py_pkg" "" || true
-        resolve_python || die "Python 3.11+ still not found on PATH. Your system's python3 is missing or older (Ubuntu 22.04 ships 3.10). Install Python 3.11 or newer from https://python.org or your package manager, open a new terminal, and re-run the installer."
+        resolve_python || die "Python 3.11+ still not found on PATH. Install Python 3.11 or newer with your package manager (macOS: brew install python@3.12; Ubuntu 22.04: sudo apt install python3.11 python3.11-venv; Debian 11 has none, upgrade to Debian 12), open a new terminal, and re-run the installer."
     else
         die "Python 3.11+ is required. Install from https://python.org and try again."
     fi
@@ -295,8 +295,12 @@ install_with_pipx() {
         fi
     fi
     # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one
-    # that passed the check. --force so an older pipx venv is rebuilt on this Python
-    # instead of pipx keeping it and exiting 0.
+    # that passed the check. An existing anyscribe venv keeps its old Python even
+    # under --force (pipx 1.0.0 only reinstalls the package), so remove it first.
+    if pipx list 2>/dev/null | grep -q "package anyscribe "; then
+        info "Replacing the existing pipx anyscribe so it runs on $PY..."
+        pipx uninstall anyscribe >/dev/null 2>&1 || true
+    fi
     pipx install --force --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
     USED_PIPX=true
@@ -335,9 +339,26 @@ install_anyscribe() {
         fi
     fi
 
-    # Verify
+    # Verify. The command the user will type must be the copy just installed,
+    # not an older anyscribe from another Python that sits earlier on PATH.
+    local installed_ver="" found_ver=""
+    if [[ "$USED_PIPX" == true ]]; then
+        installed_ver="$("$(pipx_bin_dir)/anyscribe" --version 2>/dev/null | awk '{print $2}')"
+    else
+        installed_ver="$("$PY" -m anyscribe --version 2>/dev/null | awk '{print $2}')"
+    fi
     if command_exists anyscribe; then
-        ok "anyscribe $(anyscribe --version 2>/dev/null | awk '{print $2}' || echo 'installed')"
+        found_ver="$(anyscribe --version 2>/dev/null | awk '{print $2}')"
+        if [[ -n "$installed_ver" && "$found_ver" != "$installed_ver" ]]; then
+            warn "An older anyscribe (${found_ver:-unknown version}, $(command -v anyscribe)) is first on PATH; the new one is $installed_ver."
+            if [[ "$USED_PIPX" == true ]]; then
+                echo "    Remove the old one, or run the new one as: $(pipx_bin_dir)/anyscribe"
+            else
+                echo "    Remove the old one, or run the new one as: $PY -m anyscribe"
+            fi
+        else
+            ok "anyscribe ${found_ver:-installed}"
+        fi
     elif [[ "$USED_PIPX" == true ]]; then
         warn "anyscribe installed via pipx. Restart your terminal or run: pipx ensurepath"
     else
@@ -362,16 +383,17 @@ for d in (sysconfig.get_path("scripts"), sysconfig.get_path("scripts", sysconfig
     fi
 }
 
+# pipx's bin dir, which is usually not on this shell's PATH yet (ensurepath
+# only edits the profile).
+pipx_bin_dir() { pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin"; }
+
 # ── Run post-install action (opt-in) ─────────────────────────
 run_post_install() {
     [[ "$RUN_UI" == true || "$RUN_ONBOARD" == true ]] || return 0
+    # Launch the copy just installed, never whichever anyscribe PATH finds first.
     local cmd
-    if command_exists anyscribe; then
-        cmd=(anyscribe)
-    elif [[ "$USED_PIPX" == true ]]; then
-        # pipx's bin dir is usually not on this shell's PATH yet (ensurepath
-        # only edits the profile), and $PY never received anyscribe.
-        cmd=("$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/anyscribe")
+    if [[ "$USED_PIPX" == true ]]; then
+        cmd=("$(pipx_bin_dir)/anyscribe")
         if [[ ! -x "${cmd[0]}" ]]; then
             warn "Automatic launch skipped: the anyscribe executable could not be found. Run \`pipx list\` to inspect the installation."
             echo "    (looked for ${cmd[0]})"

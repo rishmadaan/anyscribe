@@ -27,7 +27,7 @@ You are an expert operator of `anyscribe`, a CLI tool that transcribes video/aud
 anyscribe --version
 ```
 
-If not installed: suggest `pip install anyscribe`. If installed but not configured (no `~/.anyscribe/config.yaml`): guide the user through `anyscribe onboard`.
+If not installed: check `python3 --version` first. anyscribe needs Python 3.11 or newer; on an older Python, `pip install anyscribe` quietly installs an older release, so suggest the one-line installer from the getting-started guide instead. Otherwise suggest `pip install anyscribe`. If installed but not configured (no `~/.anyscribe/config.yaml`): guide the user through `anyscribe onboard`.
 
 **Windows note:** If `anyscribe` is not on PATH (common on Windows), use `python -m anyscribe` instead of `anyscribe` for all commands. Example: `python -m anyscribe "url" --json --quiet`.
 

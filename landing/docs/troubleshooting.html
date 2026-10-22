@@ -112,6 +112,20 @@ themselves:</p>
 anyscribe migrate              # do it
 </code></pre>
 <p>Safe to run twice: a second run just reports there's nothing left to do.</p>
+<h3 id="anyscribe-update-says-up-to-date-but-newer-releases-exist"><code>anyscribe update</code> says up to date, but newer releases exist</h3>
+<p>Current anyscribe needs Python 3.11 or newer. On Python 3.10, pip and
+<code>anyscribe update</code> stop at the last release that supported it and report it as
+up to date, so nothing looks wrong.</p>
+<p><strong>Fix</strong> — check which Python you have:</p>
+<pre><code class="language-bash">python3 --version      # macOS / Linux
+python --version       # Windows
+</code></pre>
+<p>If it says 3.10 or older, re-run the one-line installer from
+<a href="/docs/getting-started">Getting Started</a>: it finds or installs Python 3.11 or
+newer and installs anyscribe with it. Then run <code>anyscribe --version</code>. If it
+still shows the old version, an older copy comes first on your PATH: remove it
+with <code>python3.10 -m pip uninstall anyscribe</code> (Windows: <code>py -3.10 -m pip
+uninstall anyscribe</code>) and open a new terminal.</p>
 <h3 id="permission-denied">"Permission denied"</h3>
 <p>Usually the app folder is owned by root, from an install run with <code>sudo</code>.</p>
 <pre><code class="language-bash">ls -la ~/.anyscribe/                      # check the owner

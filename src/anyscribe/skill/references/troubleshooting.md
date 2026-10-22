@@ -49,6 +49,19 @@ anyscribe migrate              # do it
 ```
 It is safe to run more than once; a second run reports there is nothing to do.
 
+### "anyscribe update says up to date, but newer releases exist"
+
+Current anyscribe needs Python 3.11 or newer. On Python 3.10, pip and
+`anyscribe update` stop at the last release that supported it and report it as
+up to date.
+
+**Fix:** check with `python3 --version`. To move up, re-run the one-line
+installer from the getting-started guide: it finds or installs Python 3.11 or
+newer and installs anyscribe with it. Then `anyscribe --version`; if it still
+shows the old version, an older copy comes first on PATH. Remove it with
+`python3.10 -m pip uninstall anyscribe` (Windows: `py -3.10 -m pip uninstall
+anyscribe`) and open a new terminal.
+
 ### "No matches found" when pasting a URL
 
 The shell is interpreting `?` as a glob character (common in zsh).

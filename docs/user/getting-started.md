@@ -299,7 +299,7 @@ brew install python@3.12
 sudo apt install python3 python3-pip python3-venv
 ```
 
-Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04 does), the simplest fix is the one-line installer in Step 1: it installs Python 3.11 alongside the old one and uses it. To do it by hand, run `sudo apt install python3.11 python3.11-venv pipx`, then in step 3 below use `pipx install --python python3.11 "anyscribe[tray]"` instead of `pip install` (plain `pip` still belongs to the old Python and quietly installs an older anyscribe), then `pipx ensurepath` and open a new terminal. Debian 11 has no Python 3.11 package; upgrade to Debian 12, which ships it.
+Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04 does), install a newer Python alongside it: `sudo apt install python3.11 python3.11-venv`. It does not change which Python `pip` uses, so step 3 below uses pipx on Linux. Debian 11 has no Python 3.11 package; upgrade to Debian 12 first. The simplest route on any Linux is still the one-line installer at the top of this guide, which does all of this for you.
 
 **Windows:**
 Download from [python.org/downloads](https://www.python.org/downloads/) and run the installer. **Check "Add Python to PATH"** during installation.
@@ -315,9 +315,10 @@ brew install ffmpeg yt-dlp
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo apt install ffmpeg
-pip install yt-dlp
+sudo apt install ffmpeg pipx
 ```
+
+No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3.
 
 **Windows:**
 ```powershell
@@ -327,9 +328,18 @@ pip install yt-dlp
 
 **3. anyscribe itself.**
 
+**macOS / Windows:**
 ```bash
 pip install "anyscribe[tray]"
 ```
+
+**Linux:**
+```bash
+pipx install --python /usr/bin/python3.11 "anyscribe[tray]"
+pipx ensurepath
+```
+
+Then open a new terminal. Use the Python from step 1: on Ubuntu 22.04 that is `/usr/bin/python3.11`; on Debian 12 and Ubuntu 24.04 plain `pipx install "anyscribe[tray]"` is enough. Plain `pip install` is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.
 
 Verify:
 

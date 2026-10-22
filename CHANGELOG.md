@@ -18,11 +18,16 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   in October 2026). If you installed with pip or the one-line installer,
   nothing breaks on 3.10: `anyscribe update` and `pip install --upgrade
   anyscribe` keep you on 0.16.5 and report it as up to date. To move to
-  0.17.0, install Python 3.11 or newer, then install anyscribe with it: re-run
-  the one-line installer from the getting-started guide (it now installs or
-  upgrades with the newest Python it finds, and rebuilds a pipx install on
-  it), or run `python3.11 -m pip install --upgrade "anyscribe[tray]"`. Your
-  settings and transcripts stay where they are.
+  0.17.0, re-run the one-line installer from the getting-started guide: it
+  finds or installs Python 3.11 or newer and installs anyscribe with it. Then
+  run `anyscribe --version`. If it still says 0.16.5, an older copy comes
+  first on your PATH: remove it with `python3.10 -m pip uninstall anyscribe`
+  (Windows: `py -3.10 -m pip uninstall anyscribe`) and open a new terminal.
+  Your settings and transcripts stay where they are. Optional add-ons stay
+  with the old Python: if you use offline transcription, run
+  `anyscribe local setup --model <size> --yes` again (downloaded models stay
+  on disk); if you use the MCP server, install `anyscribe[mcp]` again with
+  the new Python.
 
 **Changed**
 - anyscribe now requires Starlette 1.3.1 or newer (the web framework under
@@ -42,8 +47,8 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 **Fixed**
 - The bundled Claude Code skill was corrected against the CLI: wrong flags,
   JSON shapes, provider routing and chunk sizes, dozens of corrections. After
-  upgrading, the next anyscribe command you run (for example `anyscribe ui`)
-  updates the skill Claude Code uses; `anyscribe --version` and `--help` alone
+  upgrading, running a normal command such as `anyscribe ui` updates the
+  skill Claude Code uses; `anyscribe --version`, `--help` and `migrate` alone
   do not. To update it straight away, run `anyscribe install-skill --force`.
 - The CLI's own help and error text: `anyscribe model info` names the right
   repository for the turbo model; the Groq and OpenAI "no speaker labels"

@@ -56,6 +56,16 @@ class PortInUseError(DesktopError):
         )
 
 
+class PortMismatch(DesktopError):
+    def __init__(self, installed: int, requested: int) -> None:
+        self.installed, self.requested = installed, requested
+        super().__init__(
+            f"anyscribe is installed on port {installed}. Run `anyscribe desktop open` "
+            f"(no --port) to open it, or `anyscribe desktop install --port {requested}` "
+            "to move it."
+        )
+
+
 class StartFailed(DesktopError):
     def __init__(self, port: int) -> None:
         self.port = port
@@ -110,6 +120,20 @@ def _wait_until(done: Callable[[], bool], timeout: float, interval: float = 0.25
     return True
 
 
+def _login_item_port() -> int | None:
+    """The port the macOS login item starts the tray on (its last argument), or None."""
+    try:
+        return int(plistlib.loads(service.plist_path().read_bytes())["ProgramArguments"][-1])
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+def installed_port() -> int | None:
+    """The port desktop mode is installed on: the manifest's, else the login item's."""
+    m = read_manifest()
+    return m["port"] if m else _login_item_port()
+
+
 def _kickstart(port: int) -> bool:
     """Start the tray under launchd, so KeepAlive restarts it after a crash.
 
@@ -117,12 +141,8 @@ def _kickstart(port: int) -> bool:
     already respawning waits out its ThrottleInterval and then kills it again.
     False if there is no login item for this port or launchctl refused.
     """
-    try:
-        args = plistlib.loads(service.plist_path().read_bytes())["ProgramArguments"]
-    except (OSError, ValueError, KeyError):
-        return False
-    if args[-1:] != [str(port)]:
-        return False  # the login item serves another port
+    if _login_item_port() != port:
+        return False  # no login item, or it serves another port
     target = f"gui/{os.getuid()}/{service.LABEL}"
     try:
         r = subprocess.run(
@@ -192,6 +212,10 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
             raise PortInUseError(port)
         proc = None  # a tray already running (e.g. launchd's) brings its server up
         pid = tray.read_pidfile()
+        installed = installed_port() if pid is not None else None
+        if installed is not None and installed != port:
+            # Its tray serves another port: signalling or stopping it would take that one down.
+            raise PortMismatch(installed, port)
         if pid is None:
             proc = _start_tray(port)
         elif not _wait_until(lambda: tray.port_responding(port), ORPHAN_GRACE):
@@ -227,6 +251,8 @@ def install(port: int = tray.DEFAULT_PORT, launch: bool = True) -> Manifest:
         old_port = old["port"] if old else port
         tray.stop_tray(old_port)
         service.uninstall_service()
+        # The old install is gone: its port must not refuse this install's own open.
+        paths.DESKTOP_MANIFEST.unlink(missing_ok=True)
         _wait_until(lambda: not tray.port_responding(old_port), 10)
     if tray.port_responding(port) and not health_is_anyscribe(port):
         raise PortInUseError(port)

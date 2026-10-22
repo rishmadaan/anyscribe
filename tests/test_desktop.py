@@ -33,6 +33,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
     # launchctl acts on the real user's job whatever HOME says: never run it here.
     monkeypatch.setattr(desktop, "_kickstart", lambda port: False)
+    # The real ~/Library/LaunchAgents plist names the live install's port.
+    monkeypatch.setattr(desktop.service, "plist_path", lambda: tmp_path / "no-login-item.plist")
     monkeypatch.setattr(desktop.service, "is_installed", lambda: False)
     monkeypatch.setattr(desktop, "ORPHAN_GRACE", 0)
     monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: False)
@@ -341,6 +343,54 @@ def test_open_falls_back_to_stop_and_start_when_restart_fails(
     assert order == ["stop", "start"]
     assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
     assert fake_browser.opened == [url]
+
+
+def test_open_other_port_refuses_without_touching_running_instance(
+    monkeypatch, tmp_manifest, kills, fake_browser
+):
+    """`desktop open --port 9000` beside an install on 8457 must not take 8457 down."""
+    tmp_manifest(port=8457)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("stopped the tray"))
+    monkeypatch.setattr(desktop, "spawn_detached", lambda *a, **k: pytest.fail("spawned"))
+    monkeypatch.setattr(desktop, "_start_tray", lambda port: pytest.fail("started a tray"))
+    with pytest.raises(desktop.PortMismatch) as e:
+        desktop.open_dashboard(9000, timeout=0.5)
+    assert str(e.value) == (
+        "anyscribe is installed on port 8457. Run `anyscribe desktop open` (no --port) "
+        "to open it, or `anyscribe desktop install --port 9000` to move it."
+    )
+    assert kills == [] and fake_browser.opened == []
+    r = CliRunner().invoke(app, ["desktop", "open", "--port", "9000"])
+    assert r.exit_code == 1 and "installed on port 8457" in r.output
+    assert kills == []
+
+
+def test_installed_port_falls_back_to_login_item(monkeypatch, tmp_path):
+    assert desktop.installed_port() is None
+    _login_item(tmp_path, monkeypatch, port=9100)
+    assert desktop.installed_port() == 9100
+
+
+def test_reinstall_on_new_port_opens_without_port_mismatch(
+    monkeypatch, fake_platform_darwin, calls, tmp_manifest, fake_browser, tmp_path
+):
+    """Moving 8500 -> 9000 on macOS: launchd's new tray is alive before the manifest is rewritten."""
+    tmp_manifest(port=8500)
+    plist = tmp_path / "com.anyscribe.tray.plist"
+    monkeypatch.setattr(desktop.service, "plist_path", lambda: plist)
+
+    def install_service(port=8457):
+        plist.write_text(desktop.service.render_plist(python="/usr/bin/python3", port=port))
+        return plist
+
+    monkeypatch.setattr(desktop.service, "install_service", install_service)
+    _recording_real_open(monkeypatch, calls)
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)  # launchd's new tray
+    health = iter([False, False])
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: next(health, True))
+    m = desktop.install(port=9000, launch=True)
+    assert m["port"] == 9000 and fake_browser.opened == ["http://127.0.0.1:9000"]
 
 
 def _login_item(tmp_path, monkeypatch, port=8457):

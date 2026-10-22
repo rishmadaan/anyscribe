@@ -337,6 +337,51 @@ def test_tray_missing_extra(monkeypatch):
     assert "anyscribe[tray]" in result.output
 
 
+CANNOT_START = (
+    'The tray could not start (RuntimeError: Bad display name ""). The dashboard runs '
+    "without it; the tray will try again at your next graphical login."
+)
+
+
+@pytest.mark.parametrize("stage", ["import", "run"])
+def test_tray_that_cannot_start_prints_one_line(monkeypatch, tmp_path, stage):
+    """Headless Linux: Xlib fails at `import pystray`; a backend can also fail in icon.run."""
+    import builtins
+
+    log = tmp_path / "logs" / "tray.log"
+    monkeypatch.setattr(tray, "TRAY_LOG", log)
+    boom = RuntimeError('Bad display name ""\nsecond line')
+    if stage == "import":
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "pystray":
+                raise boom
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+    else:
+        monkeypatch.setitem(sys.modules, "pystray", types.ModuleType("pystray"))
+        monkeypatch.setitem(sys.modules, "PIL", types.ModuleType("PIL"))
+        sys.modules["PIL"].Image = object
+        monkeypatch.setattr(tray_cmd, "_run_tray", lambda port: (_ for _ in ()).throw(boom))
+    r = runner.invoke(app, ["tray", "--port", str(_free_port())])
+    assert r.exit_code == 1 and r.stderr == CANNOT_START + "\n"
+    assert "Traceback" not in r.output and "Traceback" not in r.stderr
+    assert log.read_text() == CANNOT_START + "\n"
+
+
+def test_failure_line_is_not_written_twice_when_stderr_is_the_log(monkeypatch, tmp_path):
+    """Spawned by `desktop open` or launchd, the tray's stderr already is tray.log."""
+    import io
+
+    log = tmp_path / "tray.log"
+    monkeypatch.setattr(tray, "TRAY_LOG", log)
+    with open(log, "a") as f:
+        assert tray_cmd._is_tray_log(f) is True
+    assert tray_cmd._is_tray_log(io.StringIO()) is False
+
+
 def test_install_service_unsupported_platform_cli(monkeypatch):
     monkeypatch.setattr(service.sys, "platform", "freebsd")
     monkeypatch.setattr("platform.system", lambda: "FreeBSD")

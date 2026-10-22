@@ -14,6 +14,7 @@ import threading
 import time
 import webbrowser
 from collections.abc import Callable
+from typing import NoReturn
 
 import typer
 from rich.console import Console
@@ -156,9 +157,36 @@ def tray(
     except ImportError:
         err_console.print(_MISSING_EXTRA, style="red", markup=False)
         raise typer.Exit(code=1)
+    except Exception as e:  # e.g. Xlib's "Bad display name" on a box with no desktop
+        _cannot_start(e)
 
-    _run_tray(port)
+    try:
+        _run_tray(port)
+    except Exception as e:
+        _cannot_start(e)
     lock.close()
+
+
+def _is_tray_log(stream) -> bool:  # noqa: ANN001
+    try:
+        return os.path.samestat(os.fstat(stream.fileno()), os.stat(core.TRAY_LOG))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _cannot_start(e: Exception) -> NoReturn:
+    """One line, not a traceback; exit 1 so `desktop open` starts the bare dashboard."""
+    first = (str(e).splitlines() or [""])[0]
+    msg = (
+        f"The tray could not start ({type(e).__name__}: {first}). The dashboard runs "
+        "without it; the tray will try again at your next graphical login."
+    )
+    print(msg, file=sys.stderr, flush=True)
+    if not _is_tray_log(sys.stderr):  # the Linux login entry's stderr is not tray.log
+        core.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(core.TRAY_LOG, "a", encoding="utf-8") as log:
+            log.write(msg + "\n")
+    raise typer.Exit(code=1)
 
 
 def _run_tray(port: int) -> None:

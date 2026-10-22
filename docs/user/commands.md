@@ -901,7 +901,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 
 | Subcommand | What it does |
 |-----------|--------------|
-| `install` | Makes the app icons, adds the **anyscribe** app, starts the tray and opens the dashboard (unless `--no-launch`), then adds the login item and records what it set up in `~/.anyscribe/desktop.json`. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new. |
+| `install` | Makes the app icons, adds the **anyscribe** app and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records what it set up in `~/.anyscribe/desktop.json`. On macOS the login item is added first and macOS starts the tray from it, so a crash is restarted right away, not only after your next login. On Windows and Linux anyscribe starts the tray itself and the login item takes effect from your next login. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new. |
 | `uninstall` | Stops the tray and its server, then removes the app, the login item, the icons and `~/.anyscribe/desktop.json`. Never touches your transcripts (`~/anyscribe/`), config or API keys. |
 | `status` | Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. Changes nothing. |
 | `open` | Opens the dashboard in your browser, starting anyscribe first if nothing is running. This is what the app icon runs. |
@@ -922,7 +922,7 @@ What gets written where:
 
 Icons go in `~/.anyscribe/desktop/` (and, on Linux, `~/.local/share/icons/hicolor/512x512/apps/anyscribe.png`). The tray's output goes to `~/.anyscribe/logs/tray.log` whenever there's no terminal to show it in: when the app icon starts it, and on macOS when it starts at login. `desktop open` writes its own errors there too.
 
-> **macOS:** loading the login item starts the tray straight away, so `--no-launch` still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute). Quitting it from its menu is not a crash, so it stays quit until your next login.
+> **macOS:** loading the login item starts the tray straight away, so `--no-launch` still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute), from the moment you install. Quitting it from its menu is not a crash, so it stays quit until your next login.
 
 > **Status says "Partly installed"?** An app or login item exists without the record in `~/.anyscribe/desktop.json` — usually from an `install-service` run, or an interrupted install. Run `anyscribe desktop install` to finish it.
 

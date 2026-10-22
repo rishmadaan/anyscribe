@@ -1341,7 +1341,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 <tbody>
 <tr>
 <td><code>install</code></td>
-<td>Makes the app icons, adds the <strong>anyscribe</strong> app, starts the tray and opens the dashboard (unless <code>--no-launch</code>), then adds the login item and records what it set up in <code>~/.anyscribe/desktop.json</code>. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new.</td>
+<td>Makes the app icons, adds the <strong>anyscribe</strong> app and the login item, starts the tray and opens the dashboard (unless <code>--no-launch</code>), and records what it set up in <code>~/.anyscribe/desktop.json</code>. On macOS the login item is added first and macOS starts the tray from it, so a crash is restarted right away, not only after your next login. On Windows and Linux anyscribe starts the tray itself and the login item takes effect from your next login. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new.</td>
 </tr>
 <tr>
 <td><code>uninstall</code></td>
@@ -1389,7 +1389,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 </table>
 <p>Icons go in <code>~/.anyscribe/desktop/</code> (and, on Linux, <code>~/.local/share/icons/hicolor/512x512/apps/anyscribe.png</code>). The tray's output goes to <code>~/.anyscribe/logs/tray.log</code> whenever there's no terminal to show it in: when the app icon starts it, and on macOS when it starts at login. <code>desktop open</code> writes its own errors there too.</p>
 <blockquote>
-<p><strong>macOS:</strong> loading the login item starts the tray straight away, so <code>--no-launch</code> still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute). Quitting it from its menu is not a crash, so it stays quit until your next login.</p>
+<p><strong>macOS:</strong> loading the login item starts the tray straight away, so <code>--no-launch</code> still starts it (it just doesn't open the browser). If the tray crashes, macOS restarts it (at most once a minute), from the moment you install. Quitting it from its menu is not a crash, so it stays quit until your next login.</p>
 <p><strong>Status says "Partly installed"?</strong> An app or login item exists without the record in <code>~/.anyscribe/desktop.json</code> — usually from an <code>install-service</code> run, or an interrupted install. Run <code>anyscribe desktop install</code> to finish it.</p>
 </blockquote>
 <h3 id="flags_9">Flags</h3>

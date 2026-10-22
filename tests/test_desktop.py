@@ -133,14 +133,49 @@ def fake_browser(monkeypatch):
 # ---- install -------------------------------------------------------------
 
 
-def test_install_writes_manifest_and_launches(fake_platform_darwin, calls):
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_install_writes_manifest_and_launches(monkeypatch, calls, platform):
+    monkeypatch.setattr(desktop.sys, "platform", platform)
+    monkeypatch.setattr(desktop.sys, "executable", "python")
     m = desktop.install(port=9000, launch=True)
     assert m["port"] == 9000 and Path(m["launcher"]).name == "anyscribe.app"
     assert calls["install_launcher"] == [("python", 9000)] and calls["install_service"] == [9000]
     assert calls["open_dashboard"] == [9000]
-    # tray first, then the login item: launchd's RunAtLoad copy must find a live pidfile
+    # These login items only act at the next login, so the tray is started directly first.
     assert calls["order"].index("open_dashboard") < calls["order"].index("install_service")
     assert desktop.read_manifest() == m
+
+
+def _recording_real_open(monkeypatch, calls):
+    def open_(port, **k):
+        calls["order"].append("open_dashboard")
+        return REAL_OPEN(port, **k)
+
+    monkeypatch.setattr(desktop, "open_dashboard", open_)
+
+
+def test_install_macos_lets_launchd_start_the_tray(
+    monkeypatch, fake_platform_darwin, calls, fake_spawn, fake_browser
+):
+    """launchd's RunAtLoad tray is the one KeepAlive restarts; we must not spawn our own."""
+    _recording_real_open(monkeypatch, calls)
+    health = iter([False, False])  # launchd's tray comes up during the wait
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: next(health, True))
+    m = desktop.install(port=9000, launch=True)
+    assert calls["order"].index("install_service") < calls["order"].index("open_dashboard")
+    assert fake_spawn.args == []
+    assert fake_browser.opened == ["http://127.0.0.1:9000"] and desktop.read_manifest() == m
+
+
+def test_install_macos_spawns_when_launchd_does_not_start(
+    monkeypatch, fake_platform_darwin, calls, fake_spawn, fake_browser
+):
+    _recording_real_open(monkeypatch, calls)
+    monkeypatch.setattr(desktop, "EXTERNAL_WAIT", 0)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(fake_spawn.args))
+    desktop.install(port=9000, launch=True)
+    assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
+    assert fake_browser.opened == ["http://127.0.0.1:9000"]
 
 
 def test_install_no_launch_does_not_open(calls):

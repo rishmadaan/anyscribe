@@ -85,6 +85,11 @@ processes too, so the key is not cosmetic. The plist now carries
   recorded Python), open (health probe, foreign-port refusal, detached tray
   with a bare-`ui` fallback, URL on stderr when no browser). Exit codes 0 / 1
   refused or failed / 2 unsupported platform; `status` always 0.
+  Install-order fix (same day): on macOS the login item now comes before the
+  start, and `open_dashboard(expect_external=True)` waits up to 10 s for
+  launchd's RunAtLoad tray before spawning one; a tray we spawned sat outside
+  launchd, so `launchctl unload` missed it and KeepAlive crash restart only
+  applied after the next login. Windows and Linux keep start → login item.
 - `core/tray.py`: Windows guards for `pthread_sigmask`, `sigwait` and
   `preexec_fn`; a second tray exits 0 (a non-zero exit under `KeepAlive`
   would relaunch every minute); `stop_tray(port)`.

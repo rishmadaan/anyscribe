@@ -108,6 +108,9 @@ def spawn_detached(args: list[str], log: Path) -> subprocess.Popen:
         )
 
 
+EXTERNAL_WAIT = 10.0  # seconds open_dashboard waits for launchd's tray before spawning one
+
+
 def _wait_until(done: Callable[[], bool], timeout: float, interval: float = 0.25) -> bool:
     deadline = time.monotonic() + timeout
     while not done():
@@ -139,9 +142,17 @@ def _start(args: list[str] | None, port: int, timeout: float) -> str:
     return result
 
 
-def open_dashboard(port: int, timeout: float = 15.0) -> str:
-    """Make sure anyscribe is serving on ``port``, then open the dashboard."""
+def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = False) -> str:
+    """Make sure anyscribe is serving on ``port``, then open the dashboard.
+
+    ``expect_external``: a tray is being started by someone else (launchd's
+    RunAtLoad); give it ``EXTERNAL_WAIT`` seconds to show up before spawning one.
+    """
     url = f"http://127.0.0.1:{port}"
+    if expect_external:
+        _wait_until(
+            lambda: tray.read_pidfile() is not None or health_is_anyscribe(port), EXTERNAL_WAIT
+        )
     if not health_is_anyscribe(port):
         if tray.port_responding(port):
             raise PortInUseError(port)
@@ -177,11 +188,17 @@ def install(port: int = tray.DEFAULT_PORT, launch: bool = True) -> Manifest:
 
     icons = launcher.render_icons(paths.DESKTOP_DIR)
     launcher_p = launcher.install_launcher(sys.executable, port, icons)
-    if launch:
-        # Before the login item: launchd's RunAtLoad copy then finds this tray's
-        # pidfile and exits, instead of two trays racing for the port.
-        open_dashboard(port)
-    login_item = service.install_service(port)
+    if sys.platform == "darwin":
+        # Login item first: launchd's RunAtLoad starts the tray it supervises, so
+        # KeepAlive restarts it after a crash. A tray we spawned would be outside launchd.
+        login_item = service.install_service(port)
+        if launch:
+            open_dashboard(port, expect_external=True)
+    else:
+        # These login items do nothing until the next login: start the tray ourselves.
+        if launch:
+            open_dashboard(port)
+        login_item = service.install_service(port)
     m: Manifest = {
         "version": __version__,
         "python": sys.executable,

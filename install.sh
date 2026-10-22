@@ -11,7 +11,7 @@
 # What it does:
 #   1. Checks your OS (macOS or Linux)
 #   2. Checks for Python 3.11+, installs if missing
-#   3. Checks for yt-dlp and ffmpeg, installs if missing
+#   3. Checks for yt-dlp, ffmpeg and a JavaScript runtime (Deno or Node 22+), installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
 #   5. Tells you to run `anyscribe ui`
 # ──────────────────────────────────────────────────────────────
@@ -225,16 +225,18 @@ check_python() {
     read -rp "    Install Python? [Y/n] " answer </dev/tty
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
-        # Ubuntu 22.04 and Debian 11 ship python3 at 3.10 or older, so the bare
-        # python3 package would install nothing new; ask for 3.11 by name, with
-        # each package manager's own names. || true: where the package does not
-        # exist (Debian 11) the honest die below should speak, not apt's raw error.
-        local py_pkg="python3"
-        case "$LINUX_PKG" in
-            apt) py_pkg="python3.11 python3.11-venv" ;;
-            dnf) py_pkg="python3.11" ;;
-        esac
-        install_package "Python" "python@3.12" "$py_pkg" "" || true
+        # First the distro's own python3 (3.12 on Ubuntu 24.04, 3.11 on Debian
+        # 12, and the only name that exists everywhere). Where that is still too
+        # old (Ubuntu 22.04 ships 3.10), ask for 3.11 by name with the package
+        # manager's own spelling. || true: where a package does not exist the
+        # honest die below should speak, not the package manager's raw error.
+        install_package "Python" "python@3.12" "python3 python3-venv" "" || true
+        if ! resolve_python; then
+            case "$LINUX_PKG" in
+                apt) install_package "Python" "python@3.12" "python3.11 python3.11-venv" "" || true ;;
+                dnf) install_package "Python" "python@3.12" "python3.11" "" || true ;;
+            esac
+        fi
         resolve_python || die "Python 3.11+ still not found on PATH. Install Python 3.11 or newer with your package manager (macOS: brew install python@3.12; Ubuntu 22.04: sudo apt install python3.11 python3.11-venv; Debian 11 has none, upgrade to Debian 12), open a new terminal, and re-run the installer."
     else
         die "Python 3.11+ is required. Install from https://python.org and try again."
@@ -313,19 +315,30 @@ install_with_pipx() {
 # yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
 # 22+. Without one, downloads warn and may miss formats. Optional: a refusal
 # only warns.
+# Prints "major minor" of the first version-looking number in $1, or nothing.
+semver_major_minor() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1 | tr '.' ' '; }
+
 js_runtime_found() {
-    if command_exists deno || [[ -x "$HOME/.deno/bin/deno" ]]; then
-        local d; d="$(command -v deno 2>/dev/null || echo "$HOME/.deno/bin/deno")"
-        ok "deno $("$d" --version 2>/dev/null | head -1 | awk '{print $2}' || echo '(version unknown)')"
-        return 0
-    fi
-    if command_exists node; then
-        local major; major="$(node --version 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
-        if [[ "${major:-0}" -ge 22 ]]; then
-            ok "node $(node --version) (yt-dlp will use it for YouTube)"
+    local d v major minor
+    for d in "$(command -v deno 2>/dev/null || true)" "$HOME/.deno/bin/deno"; do
+        [[ -n "$d" && -x "$d" ]] || continue
+        v="$("$d" --version 2>/dev/null | head -1 || true)"
+        [[ "$v" == deno\ * ]] || continue  # a same-named unrelated binary
+        read -r major minor <<<"$(semver_major_minor "$v")"
+        if [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] && (( major > 2 || (major == 2 && minor >= 3) )); then
+            ok "deno $major.$minor"
             return 0
         fi
-        warn "node $(node --version) found, but yt-dlp needs 22 or newer"
+        warn "$v found at $d, but yt-dlp needs Deno 2.3 or newer"
+    done
+    if command_exists node; then
+        v="$(node --version 2>/dev/null | head -1 || true)"
+        read -r major minor <<<"$(semver_major_minor "$v")"
+        if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 22 )); then
+            ok "node $v (yt-dlp will use it for YouTube)"
+            return 0
+        fi
+        warn "node ${v:-(version unknown)} found, but yt-dlp needs 22 or newer"
     fi
     return 1
 }
@@ -333,8 +346,12 @@ js_runtime_found() {
 check_js_runtime() {
     info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
     js_runtime_found && return 0
-    warn "No JavaScript runtime found; YouTube downloads would miss formats or fail"
-    read -rp "    Install Deno? [Y/n] " answer </dev/tty
+    warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"
+    # This step is optional: an unreadable prompt (no terminal) skips it, never aborts.
+    if ! read -rp "    Install Deno? [Y/n] " answer </dev/tty; then
+        warn "No terminal to ask on. Skipping; install Deno later and run: anyscribe doctor"
+        return 0
+    fi
     answer="${answer:-Y}"
     if [[ ! "$answer" =~ ^[Yy] ]]; then
         warn "Skipping. Install Deno later and run: anyscribe doctor"
@@ -361,7 +378,7 @@ check_js_runtime() {
     if [[ "$DRY_RUN" == true ]]; then
         return 0
     fi
-    js_runtime_found || warn "Deno did not install. Install it by hand (https://docs.deno.com/runtime/getting_started/installation/) and run: anyscribe doctor"
+    js_runtime_found || warn "Deno did not install (its installer needs unzip or 7z). Install it by hand (https://docs.deno.com/runtime/getting_started/installation/) and run: anyscribe doctor"
 }
 
 # ── Install anyscribe ────────────────────────────────────────

@@ -1086,7 +1086,7 @@ anyscribe doctor
 ```
 
 **What it checks:**
-1. System dependencies (Python, yt-dlp, ffmpeg, ffprobe)
+1. System dependencies (Python, yt-dlp, a JavaScript runtime for YouTube, ffmpeg, ffprobe)
 2. Configuration (app directory, config.yaml, .env, workspace vault, workspace index)
 3. Installation info (version, install type, repo path)
 4. Claude Code skill (installed, version, current or outdated)

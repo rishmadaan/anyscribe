@@ -95,12 +95,13 @@ The video is private, age-restricted, geo-blocked, or deleted.
 2. Update yt-dlp: `pip install --upgrade yt-dlp`
 3. If age-restricted: yt-dlp may need browser cookies (advanced)
 
-### "No JavaScript runtime found" (YouTube)
+### "No JavaScript runtime found" (YouTube; printed on stderr)
 
 yt-dlp needs Deno (or Node 22+) to solve YouTube's JavaScript challenges.
 Without one, YouTube downloads warn, may miss formats, or fail.
 
 **Fix:** install Deno and re-check: macOS `brew install deno`; Linux
+`sudo apt install unzip` (or 7z on other distros) then
 `curl -fsSL https://deno.land/install.sh | sh`; Windows `winget install
 DenoLand.Deno`; then `anyscribe doctor` (the "JavaScript runtime" row should
 say Found). With Node 22+ already present, nothing to install.

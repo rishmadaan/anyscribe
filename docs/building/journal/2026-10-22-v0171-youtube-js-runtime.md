@@ -32,8 +32,10 @@ anyscribe is not reliability.
   `--js-runtimes <name>:<path>`, so yt-dlp uses exactly that binary; node is
   not enabled by yt-dlp unless named. `warn_if_no_js_runtime` prints once per
   process. The YouTube downloader passes the flag; Instagram does not need it.
-- `anyscribe doctor`: an optional "JavaScript runtime" row (deno 2.9.7, node
-  v26.9.0, or Missing (optional) with the Deno page).
+- `anyscribe doctor`: an optional "JavaScript runtime" row showing the
+  detected runtime and version, or `Missing (optional)` with a description of
+  the dependency. Each candidate is run with `--version` and skipped when it is
+  not what its name says or is below yt-dlp's minimum (Deno 2.3, Node 22).
 - Installers: accept Deno or Node 22+ (Node is already on many machines, so no
   second runtime is forced); otherwise offer Deno via Homebrew, Deno's script
   with `--yes` (installs to `~/.deno`, needs unzip), or winget. Declining only

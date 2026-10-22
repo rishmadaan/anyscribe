@@ -38,7 +38,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 
 ## Install
 
-**macOS / Linux** — installs Python, ffmpeg, yt-dlp, and anyscribe with the menu-bar app:
+**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe with the menu-bar app:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash
@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-**Already have Python 3.11 or newer, ffmpeg, and yt-dlp?**
+**Already have Python 3.11 or newer, ffmpeg, yt-dlp, and Deno or Node 22+?**
 
 ```bash
 pip install "anyscribe[tray]"

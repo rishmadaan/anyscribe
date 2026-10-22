@@ -157,7 +157,7 @@ it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
 warn, may miss formats, and can fail outright when YouTube changes the puzzle.</p>
 <p><strong>Fix</strong> — install Deno, then check:</p>
 <pre><code class="language-bash">brew install deno                                  # macOS
-curl -fsSL https://deno.land/install.sh | sh       # Linux
+sudo apt install unzip &amp;&amp; curl -fsSL https://deno.land/install.sh | sh   # Linux (Ubuntu/Debian; other distros: install unzip or 7z first)
 winget install DenoLand.Deno                       # Windows (PowerShell)
 anyscribe doctor                                   # the &quot;JavaScript runtime&quot; row should say Found
 </code></pre>

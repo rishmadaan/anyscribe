@@ -164,7 +164,7 @@ warn, may miss formats, and can fail outright when YouTube changes the puzzle.
 
 ```bash
 brew install deno                                  # macOS
-curl -fsSL https://deno.land/install.sh | sh       # Linux
+sudo apt install unzip && curl -fsSL https://deno.land/install.sh | sh   # Linux (Ubuntu/Debian; other distros: install unzip or 7z first)
 winget install DenoLand.Deno                       # Windows (PowerShell)
 anyscribe doctor                                   # the "JavaScript runtime" row should say Found
 ```

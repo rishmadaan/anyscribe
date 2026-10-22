@@ -76,7 +76,7 @@
 </blockquote>
 <h2 id="what-you-need">What you need</h2>
 <ul>
-<li><strong>A computer running macOS, Linux, or Windows</strong> (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, and yt-dlp.</li>
+<li><strong>A computer running macOS, Linux, or Windows</strong> (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, yt-dlp, and Deno for YouTube.</li>
 <li><strong>Then pick one engine:</strong></li>
 <li><strong>Free, offline</strong> — the <strong>local</strong> provider. No API key, no internet, runs Whisper on your machine. Downloads a model once during setup.</li>
 <li><strong>Or an API key</strong> from one provider — OpenAI is the default. Get one at <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a>; transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. Six cloud providers are supported alongside local — see <a href="/docs/providers">providers.md</a> for the comparison.</li>
@@ -103,7 +103,7 @@
 <p><strong>Already have Python 3.11 or newer and just want the package?</strong></p>
 <pre><code class="language-bash">pip install &quot;anyscribe[tray]&quot;
 </code></pre>
-<p>The <code>[tray]</code> extra is what gives you the menu-bar icon and open-at-login (see <a href="#keep-it-running">Keep it running</a>). Plain <code>pip install anyscribe</code> works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run <code>anyscribe doctor</code>, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
+<p>The <code>[tray]</code> extra is what gives you the menu-bar icon and open-at-login (see <a href="#keep-it-running">Keep it running</a>). Plain <code>pip install anyscribe</code> works too, and you can add the extra later. With pip you install ffmpeg, yt-dlp and, for YouTube, Deno yourself (<code>brew install deno</code>, or <a href="https://docs.deno.com/runtime/getting_started/installation/">deno.com</a>); Node 22+ also works if you already have it. Or just run <code>anyscribe doctor</code>, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
 <blockquote>
 <p><strong>Want to install Python and the dependencies by hand?</strong> See the <a href="#appendix-manual-install">Appendix: manual install</a> at the bottom.</p>
 <p><strong><code>command not found: anyscribe</code> on Windows?</strong> Use <code>python -m anyscribe</code> as a drop-in replacement — it always works. See <a href="#troubleshooting">Troubleshooting</a>.</p>

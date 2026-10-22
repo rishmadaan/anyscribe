@@ -158,37 +158,45 @@ function Test-Ffmpeg {
 
 function Test-JsRuntime {
     Write-Info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
-
-    if (Test-CommandExists 'deno') {
-        Write-Ok "deno found"
-        return
-    }
-    if (Test-CommandExists 'node') {
-        $nodeVer = (& node --version 2>$null | Out-String).Trim()
-        $major = 0
-        try { $major = [int]($nodeVer.TrimStart('v').Split('.')[0]) } catch {}
-        if ($major -ge 22) {
-            Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
-            return
-        }
-        Write-Warn "node $nodeVer found, but yt-dlp needs 22 or newer"
-    }
-
-    Write-Warn "No JavaScript runtime found; YouTube downloads would miss formats or fail"
-    if (Test-CommandExists 'winget') {
-        Write-Host "    Install Deno via winget? [Y/n] " -NoNewline
-        $answer = Read-Host
-        if ($answer -eq '' -or $answer -match '^[Yy]') {
-            Write-Info "Installing Deno via winget..."
-            winget install DenoLand.Deno --accept-package-agreements --accept-source-agreements
-            Refresh-Path
-            if (Test-CommandExists 'deno') {
-                Write-Ok "deno installed"
-                return
+    # Optional step: any failure inside only warns and returns.
+    try {
+        if (Test-CommandExists 'deno') {
+            $denoVer = (& deno --version 2>$null | Out-String)
+            if ($denoVer -match 'deno (\d+)\.(\d+)') {
+                if ([int]$Matches[1] -gt 2 -or ([int]$Matches[1] -eq 2 -and [int]$Matches[2] -ge 3)) {
+                    Write-Ok "deno $($Matches[1]).$($Matches[2])"
+                    return
+                }
+                Write-Warn "deno $($Matches[1]).$($Matches[2]) found, but yt-dlp needs 2.3 or newer"
             }
         }
+        if (Test-CommandExists 'node') {
+            $nodeVer = (& node --version 2>$null | Out-String).Trim()
+            if ($nodeVer -match '^v?(\d+)\.' -and [int]$Matches[1] -ge 22) {
+                Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
+                return
+            }
+            Write-Warn "node $nodeVer found, but yt-dlp needs 22 or newer"
+        }
+
+        Write-Warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"
+        if (Test-CommandExists 'winget') {
+            Write-Host "    Install Deno via winget? [Y/n] " -NoNewline
+            $answer = Read-Host
+            if ($answer -eq '' -or $answer -match '^[Yy]') {
+                Write-Info "Installing Deno via winget..."
+                winget install DenoLand.Deno --accept-package-agreements --accept-source-agreements
+                Refresh-Path
+                if (Test-CommandExists 'deno') {
+                    Write-Ok "deno installed"
+                    return
+                }
+            }
+        }
+        Write-Warn "Deno not installed. Install it from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
+    } catch {
+        Write-Warn "Could not check or install a JavaScript runtime ($_). Install Deno from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
     }
-    Write-Warn "Deno not installed. Install it from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
 }
 
 # ── Check yt-dlp ──────────────────────────────────────────────

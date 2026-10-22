@@ -376,6 +376,18 @@ anyscribe tray --port 9000
 
 `uninstall-service` removes the login item; a tray that is already running keeps running until you Quit it from its menu (or run `anyscribe desktop uninstall`, which stops it). Neither service command uninstalls anyscribe.
 
+### "ffmpeg not found" but only from the app / after login
+
+The tray started from the app icon or at login runs with the PATH recorded when the desktop app was installed. If ffmpeg or Deno was installed (or moved) later, that copy can't find it, while `anyscribe` in a terminal can.
+
+**Fix:** run `anyscribe desktop install --yes` again. It rewrites the login item with the current PATH and restarts the tray. The same fix applies after upgrading or reinstalling Python (`anyscribe desktop status --json` then reports `healthy: false` with a reason naming the Python path).
+
+### No tray icon on GNOME (Linux)
+
+Stock GNOME hides tray icons unless the AppIndicator extension is installed. The server still runs. **Fix:** open the dashboard with the **anyscribe** icon in the app menu (or `anyscribe desktop open`); stop it with `anyscribe desktop uninstall` or by installing the AppIndicator extension to get the Quit menu.
+
+The skill and the MCP server never need the desktop app running: they transcribe in-process, and the dashboard picks up their transcripts the next time it opens.
+
 ### Permission denied errors
 
 **Fix:** Check file ownership:

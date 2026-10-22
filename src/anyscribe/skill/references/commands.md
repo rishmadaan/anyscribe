@@ -372,6 +372,53 @@ Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (o
 
 ---
 
+## anyscribe desktop
+
+Desktop mode in one command: an **anyscribe** app icon (Applications on macOS, the Start menu on Windows, the app menu on Linux), the menu-bar tray started at login, and the dashboard opened now. **Needs the `[tray]` extra**: `pip install -U "anyscribe[tray]"`. The skill and the MCP server never need the desktop app running.
+
+```bash
+anyscribe desktop install --yes --json            # icon + login item + start now + open dashboard
+anyscribe desktop install --yes --no-launch --json
+anyscribe desktop install --port 9000 --yes --json
+anyscribe desktop status --json
+anyscribe desktop uninstall --yes --json
+anyscribe desktop open                            # what the app icon runs
+```
+
+| Subcommand | What it does |
+|-----------|--------------|
+| `install` | Renders the icons into `~/.anyscribe/desktop/`, writes the app launcher and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records everything in `~/.anyscribe/desktop.json`. Running it again is a clean reinstall: it stops the old tray and replaces both files (this is also the fix after upgrading Python or for a stale PATH). |
+| `uninstall` | Stops the tray and its server, removes the launcher, login item, icons and manifest. Any transcription in progress is cancelled and resumes from its checkpoint next run. Never touches `~/anyscribe/`, config or keys. |
+| `status` | Reports what is installed, whether the tray and server are running, and `healthy` with a `reason` when not. Read-only. |
+| `open` | Opens the dashboard, starting the tray first if nothing is serving (falls back to a bare `anyscribe ui --no-open` when the tray cannot run, e.g. no display). |
+
+Launcher and login item per OS:
+
+| OS | App launcher | Login item |
+|----|--------------|------------|
+| macOS | `~/Applications/anyscribe.app` | `~/Library/LaunchAgents/com.anyscribe.tray.plist` (loading it starts the tray at once, even with `--no-launch`) |
+| Windows | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\anyscribe.lnk` | `...\Start Menu\Programs\Startup\anyscribe tray.lnk` |
+| Linux | `~/.local/share/applications/anyscribe.desktop` | `~/.config/autostart/anyscribe-tray.desktop` |
+
+### Flags
+
+| Flag | On | Description | Default |
+|------|----|-------------|---------|
+| `--port` / `-p` | `install`, `open` | Dashboard port, stored in the manifest and used by the launcher and login item (`open` defaults to the installed port) | `8457` |
+| `--no-launch` | `install` | Install only; don't start the tray or open the browser now | Off |
+| `--yes` / `-y` | `install`, `uninstall` | Skip confirmation. Required in non-TTY (agent) contexts unless `--json` is given | Off |
+| `--json` / `-j` | `install`, `uninstall`, `status` | `{"success", "data", "error"}` envelope | Off |
+
+JSON `data`:
+
+- `install`: the manifest, `{"version", "python", "port", "launcher", "login_item", "installed_at"}`.
+- `uninstall`: `{"stopped": bool, "launcher": bool, "login_item": bool}` (each `true` if it was there).
+- `status`: `{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}`. `reason` is `null` when healthy, otherwise a sentence ending in the fix (e.g. the recorded Python no longer exists → `anyscribe desktop install`).
+
+Exit codes: `0` ok; `1` refused or failed (tray extra missing, port in use by another program, the server did not start); `2` unsupported platform. A port held by another program fails with `Port N is in use by another program. Run: anyscribe desktop install --port <free port>`. `open` also appends its errors to `~/.anyscribe/logs/tray.log`, since from the app icon there is no terminal.
+
+---
+
 ## anyscribe install-service / anyscribe uninstall-service
 
 Auto-start `anyscribe tray` at login on macOS, Windows and Linux. Other platforms get a clean "not supported" error, not a crash. `install-service` refuses (exit 1) until the tray extra is installed: `pip install "anyscribe[tray]"`.

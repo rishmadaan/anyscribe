@@ -209,6 +209,7 @@ from anyscribe.cli.local_cmd import local_app  # noqa: E402
 from anyscribe.cli.models_cmd import models_app  # noqa: E402
 from anyscribe.cli.tray_cmd import tray  # noqa: E402
 from anyscribe.cli.service_cmd import install_service, uninstall_service  # noqa: E402
+from anyscribe.cli.desktop_cmd import desktop_app  # noqa: E402
 
 app.command()(onboard)
 app.command()(transcribe)
@@ -225,6 +226,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(providers_app, name="providers")
 app.add_typer(local_app, name="local")
 app.add_typer(models_app, name="model")
+app.add_typer(desktop_app, name="desktop")
 
 
 @app.command()

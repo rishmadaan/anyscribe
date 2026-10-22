@@ -670,6 +670,41 @@ def test_alias_tray_is_recognised_and_keeps_its_login_item_job(fake_agents, monk
         child.wait()
 
 
+def test_linux_reads_the_untruncated_proc_cmdline(monkeypatch):
+    """procps ps cuts a tty-less line at 80 columns; /proc/<pid>/cmdline is whole."""
+    line = b"/home/someone/.local/share/pipx/venvs/anyscribe/bin/python3.12\0" * 2
+    line += b"/x/bin/scribe\0tray\0--port\08457"
+    assert len(line) > 80
+    read = {}
+    monkeypatch.setattr(tray.sys, "platform", "linux")
+    monkeypatch.setattr(tray.Path, "read_bytes", lambda self: read.setdefault(str(self), line))
+    assert tray.pid_is_anyscribe(4242, "tray") is True
+    assert list(read) == [str(Path("/proc/4242/cmdline"))]
+    assert tray.pid_is_anyscribe(4242, "ui") is False
+
+
+def test_linux_missing_proc_entry_is_not_anyscribe(monkeypatch):
+    def gone(self):
+        raise FileNotFoundError(self)
+
+    monkeypatch.setattr(tray.sys, "platform", "linux")
+    monkeypatch.setattr(tray.Path, "read_bytes", gone)
+    assert tray.pid_is_anyscribe(4242, "tray") is False
+
+
+def test_long_command_line_is_read_in_full():
+    """A real tray line past 200 chars (deep pipx/uv path) is still recognised."""
+    script = "import time; print('ready', flush=True); time.sleep(30)  # " + "x" * 200
+    args = [sys.executable, "-c", script, str(Path("/x/bin/scribe")), "tray", "--port", "8457"]
+    child = subprocess.Popen(args, stdout=subprocess.PIPE)
+    try:
+        assert child.stdout.readline().strip() == b"ready"
+        assert tray.pid_is_anyscribe(child.pid, "tray") is True
+    finally:
+        child.kill()
+        child.wait()
+
+
 def _sleeper() -> list[str]:
     """A long-running process whose command line does not mention anyscribe."""
     return ["ping", "-n", "30", "127.0.0.1"] if os.name == "nt" else ["sleep", "30"]

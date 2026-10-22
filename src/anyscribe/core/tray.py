@@ -150,11 +150,18 @@ def pid_is_anyscribe(pid: int, role: str) -> bool:
     """
     if pid <= 0:
         return False
+    if sys.platform.startswith("linux"):
+        # procps ps cuts the line at 80 columns without a tty; /proc never truncates
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except OSError:
+            return False
+        return command_line_is(cmdline.replace(b"\0", b" ").decode(errors="replace"), role)
     if os.name == "nt":
         query = f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine'
         args = ["powershell", "-NoProfile", "-NonInteractive", "-Command", query]
     else:
-        args = ["ps", "-o", "command=", "-p", str(pid)]
+        args = ["ps", "-ww", "-o", "command=", "-p", str(pid)]  # -ww: never truncate
     try:
         out = subprocess.run(args, capture_output=True, text=True, timeout=15).stdout
     except (OSError, subprocess.SubprocessError):

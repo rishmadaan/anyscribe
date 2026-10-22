@@ -298,3 +298,32 @@ def test_failed_desktop_install_does_not_claim_desktop_mode(tmp_path):
     assert "Desktop mode was not set up (see above)" in out
     assert "running in your" not in out  # no desktop-mode claim
     assert "Next step:" in out and "anyscribe ui" in out
+
+
+def test_ui_flag_does_not_launch_ui_when_desktop_runs(tmp_path):
+    out = run_installer_dry(tmp_path, "--ui")
+    assert "desktop install --yes" in out
+    assert not [ln for ln in out.splitlines() if "[dry-run]" in ln and ln.rstrip().endswith(" ui")]
+
+
+def test_onboard_runs_before_desktop(tmp_path):
+    lines = run_installer_dry(tmp_path, "--onboard").splitlines()
+    onboard = next(
+        i for i, ln in enumerate(lines) if "[dry-run]" in ln and "onboard --skip-deps" in ln
+    )
+    desktop = next(
+        i for i, ln in enumerate(lines) if "[dry-run]" in ln and "desktop install --yes" in ln
+    )
+    assert onboard < desktop
+
+
+def test_pipx_hint_shows_after_default_desktop_run(tmp_path):
+    # The pipx PATH hint must not depend on which banner printed.
+    exe = tmp_path / "anyscribe"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    setup = f'install_anyscribe(){{ USED_PIPX=true; }}; pipx(){{ echo "{tmp_path}"; }}\n'
+    out = run_installer_dry(tmp_path, setup=setup)
+    assert "[dry-run]" in out and "desktop install --yes" in out
+    assert "anyscribe is ready!" in out
+    assert "pipx ensurepath" in out

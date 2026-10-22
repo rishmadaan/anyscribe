@@ -640,11 +640,11 @@ main() {
             echo ""
             warn "anyscribe was installed, but the launch you asked for did not run (see above)."
         fi
-        if [[ "$USED_PIPX" == true ]]; then
-            echo ""
-            warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
-            echo "    or run: pipx ensurepath"
-        fi
+    fi
+    if [[ "$USED_PIPX" == true ]]; then
+        echo ""
+        warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
+        echo "    or run: pipx ensurepath"
     fi
     echo ""
 }

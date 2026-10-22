@@ -1,7 +1,7 @@
 ---
 type: decision
 tags: [release, python, dependencies, security, starlette, fastapi]
-tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct starlette>=1.3.1 floor with fastapi>=0.136, closing two of the four owner decisions from the 2026-10-21 staleness audit; the yt-dlp JavaScript runtime stays open."
+tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct starlette>=1.3.1 floor with fastapi>=0.133; this settles three of the four questions put to the owner after the 2026-10-21 audit (cut a release, drop 3.10, add the floor); the yt-dlp JavaScript runtime stays open."
 ---
 
 # v0.17.0: Python 3.11 floor and Starlette floor
@@ -13,7 +13,7 @@ tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct st
   install.ps1, `anyscribe doctor`, README, getting-started, landing) says
   3.11+. The installer's candidate list is now `python3.13 python3.12
   python3.11 python3`.
-- `starlette>=1.3.1` is a direct dependency, with `fastapi>=0.136`.
+- `starlette>=1.3.1` is a direct dependency, with `fastapi>=0.133`.
 
 ## Why
 
@@ -24,11 +24,13 @@ that cannot run.
 
 The PR #16 review established that raising the FastAPI floor does not fix the
 Starlette advisories: fastapi 0.110 pins `starlette<0.37`, 0.115 pins `<0.39`,
-0.130 still pins `<1.0.0`, and OSV lists advisories against every Starlette in
-those ranges. The first FastAPI release with an open-ended Starlette pin is
-0.136.0 (2026-04-16), so the floor pair is `fastapi>=0.136` plus
-`starlette>=1.3.1` (released 2026-06-12, Python >=3.10). Checked against the
-PyPI JSON for each version on 2026-10-22.
+0.132 still pins `<1.0.0`, and OSV lists advisories against every Starlette in
+those ranges. FastAPI's current pin (`starlette>=0.46.0`) still permits those
+versions; only a direct floor excludes them. The first FastAPI release whose
+pin admits 1.3.1 is 0.133.0, so the floor pair is `fastapi>=0.133` plus
+`starlette>=1.3.1` (released 2026-06-12, Python >=3.10; OSV lists two
+advisories against 1.3.0 and none against 1.3.1). Checked against the PyPI
+JSON and the OSV API for each version on 2026-10-22.
 
 ## Decided by the owner, 2026-10-22
 

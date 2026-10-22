@@ -77,11 +77,24 @@ function Test-Python {
             Write-Info "Installing Python via winget..."
             winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
             Refresh-Path
-            if (Test-CommandExists 'python') {
-                $script:PythonCmd = 'python'
-                Write-Ok "Python installed"
-                return
+            # Re-check the version: an older all-users Python earlier on PATH
+            # still answers to `python` after a per-user winget install.
+            foreach ($cmd in @('python', 'python3')) {
+                if (Test-CommandExists $cmd) {
+                    try {
+                        $ver = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+                        $parts = $ver.Split('.')
+                        if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 11) {
+                            Write-Ok "Python $ver ($cmd)"
+                            $script:PythonCmd = $cmd
+                            return
+                        }
+                    } catch {
+                        # Not a valid Python
+                    }
+                }
             }
+            Write-Warn "Python 3.11+ still not found after the winget step (an older Python may be first on PATH, or winget failed). Open a new terminal and re-run, or remove the old Python from PATH."
         }
     }
 

@@ -299,6 +299,8 @@ brew install python@3.12
 sudo apt install python3 python3-pip python3-venv
 ```
 
+Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04, Debian 11), install a newer Python alongside it: `sudo apt install python3.11 python3.11-venv` on Ubuntu 22.04, or use the installer from [python.org](https://www.python.org/downloads/).
+
 **Windows:**
 Download from [python.org/downloads](https://www.python.org/downloads/) and run the installer. **Check "Add Python to PATH"** during installation.
 

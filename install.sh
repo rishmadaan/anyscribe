@@ -51,7 +51,7 @@ command_exists() { command -v "$1" &>/dev/null; }
 # the old system one).
 resolve_python() {
     local cand
-    for cand in python3.13 python3.12 python3.11 python3; do
+    for cand in python3.14 python3.13 python3.12 python3.11 python3; do
         if command_exists "$cand" && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
             PY="$cand"
             return 0
@@ -173,7 +173,8 @@ install_package() {
                 if [[ "$DRY_RUN" == true ]]; then
                     echo "    [dry-run] sudo apt install -y $apt_pkg"
                 else
-                    sudo apt update -qq && sudo apt install -y "$apt_pkg"
+                    # shellcheck disable=SC2086  # apt_pkg may name several packages
+                    sudo apt update -qq && sudo apt install -y $apt_pkg
                 fi
                 return
                 ;;
@@ -224,8 +225,10 @@ check_python() {
     read -rp "    Install Python? [Y/n] " answer </dev/tty
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
-        install_package "Python" "python@3.12" "python3" ""
-        resolve_python || die "Python installed but no python3.11+ found on PATH. Open a new terminal and re-run the installer."
+        # Ubuntu 22.04 and Debian 11 ship python3 at 3.10 or older, so the bare
+        # python3 package would install nothing new; ask apt for 3.11 by name.
+        install_package "Python" "python@3.12" "python3.11 python3.11-venv" ""
+        resolve_python || die "Python 3.11+ still not found on PATH. Your system's python3 is older (Ubuntu 22.04 ships 3.10). Install Python 3.11 or newer from https://python.org or your package manager, open a new terminal, and re-run the installer."
     else
         die "Python 3.11+ is required. Install from https://python.org and try again."
     fi
@@ -284,7 +287,8 @@ install_with_pipx() {
             esac
         fi
     fi
-    pipx install "$1"
+    # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one that passed the check
+    pipx install --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
     USED_PIPX=true
 }

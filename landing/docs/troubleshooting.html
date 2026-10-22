@@ -459,6 +459,26 @@ install your distribution's AppIndicator extension
 (<code>gnome-shell-extension-appindicator</code> on Fedora and Debian). On Fedora and Debian
 you may also need to switch it on in the <strong>Extensions</strong> app. Then log out and
 back in. To stop anyscribe without the icon: <code>anyscribe desktop uninstall</code>.</p>
+<h3 id="i-installed-over-ssh-on-a-machine-with-no-desktop-and-the-tray-isnt-there">I installed over SSH / on a machine with no desktop and the tray isn't there</h3>
+<p>That's expected. The tray icon needs a graphical session (a desktop you are
+logged in to), and an SSH session or a server has none. anyscribe still runs:
+<code>anyscribe desktop install</code> starts the dashboard without its tray icon and tells
+you so:</p>
+<pre><code>Tray icon: not running (no graphical session or tray support here). The dashboard works without it; the tray will start at your next graphical login.
+</code></pre>
+<p>Check it any time:</p>
+<pre><code class="language-bash">anyscribe desktop status
+</code></pre>
+<p>It shows <code>Tray running: no</code> and <code>Healthy: yes</code> with the reason
+<code>Running without its tray icon (no graphical session or tray support).</code> The
+dashboard answers at <code>http://127.0.0.1:8457</code>; the tray starts by itself the next
+time you log in to a desktop on that machine. The tray's log
+(<code>~/.anyscribe/logs/tray.log</code>) has one line saying why it could not start.</p>
+<blockquote>
+<p><strong>Tip:</strong> the one-line installer already skips desktop mode on a Linux machine
+with no graphical session, so you only see this if you ran
+<code>anyscribe desktop install</code> yourself.</p>
+</blockquote>
 <h3 id="windows-didnt-show-a-security-warning-when-i-installed">Windows didn't show a security warning when I installed</h3>
 <p>That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is
 for apps downloaded through a web browser. Desktop mode doesn't download an app:

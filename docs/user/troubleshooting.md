@@ -592,6 +592,33 @@ install your distribution's AppIndicator extension
 you may also need to switch it on in the **Extensions** app. Then log out and
 back in. To stop anyscribe without the icon: `anyscribe desktop uninstall`.
 
+### I installed over SSH / on a machine with no desktop and the tray isn't there
+
+That's expected. The tray icon needs a graphical session (a desktop you are
+logged in to), and an SSH session or a server has none. anyscribe still runs:
+`anyscribe desktop install` starts the dashboard without its tray icon and tells
+you so:
+
+```
+Tray icon: not running (no graphical session or tray support here). The dashboard works without it; the tray will start at your next graphical login.
+```
+
+Check it any time:
+
+```bash
+anyscribe desktop status
+```
+
+It shows `Tray running: no` and `Healthy: yes` with the reason
+`Running without its tray icon (no graphical session or tray support).` The
+dashboard answers at `http://127.0.0.1:8457`; the tray starts by itself the next
+time you log in to a desktop on that machine. The tray's log
+(`~/.anyscribe/logs/tray.log`) has one line saying why it could not start.
+
+> **Tip:** the one-line installer already skips desktop mode on a Linux machine
+> with no graphical session, so you only see this if you ran
+> `anyscribe desktop install` yourself.
+
 ### Windows didn't show a security warning when I installed
 
 That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is

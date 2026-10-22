@@ -386,6 +386,10 @@ The tray started from the app icon or at login runs with the PATH recorded when 
 
 Stock GNOME hides tray icons unless the AppIndicator extension is installed. The server still runs. **Fix:** open the dashboard with the **anyscribe** icon in the app menu (or `anyscribe desktop open`); stop it with `anyscribe desktop uninstall` or by installing the AppIndicator extension to get the Quit menu.
 
+### Installed over SSH / no desktop: no tray icon
+
+Expected: with no graphical session the tray cannot start, so the dashboard runs without it (install prints a `Tray icon: not running` line; `anyscribe desktop status --json` shows `tray_running: false`, `healthy: true` and a reason saying so) and the tray starts at the next graphical login; the one-line installer already skips desktop mode on a headless Linux box.
+
 The skill and the MCP server never need the desktop app running: they transcribe in-process, and the dashboard picks up their transcripts the next time it opens.
 
 ### Permission denied errors

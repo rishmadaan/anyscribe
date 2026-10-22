@@ -902,8 +902,8 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 | Subcommand | What it does |
 |-----------|--------------|
 | `install` | Makes the app icons, adds the **anyscribe** app and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records what it set up in `~/.anyscribe/desktop.json`. On macOS the login item is added first and macOS starts the tray from it, so a crash is restarted right away, not only after your next login. On Windows and Linux anyscribe starts the tray itself and the login item takes effect from your next login. Running it again is a clean reinstall: it stops the old copy and rewrites everything. That is also the fix after upgrading anyscribe, reinstalling Python, or installing ffmpeg/Deno somewhere new. |
-| `uninstall` | Stops the tray and its server, then removes the app, the login item, the icons and `~/.anyscribe/desktop.json`. Never touches your transcripts (`~/anyscribe/`), config or API keys. |
-| `status` | Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. `healthy` is true only when the app is installed and its dashboard answers. Changes nothing. |
+| `uninstall` | Stops the tray and its server, then removes the app, the login item, the icons, `~/.anyscribe/desktop.json` and `~/.anyscribe/tray.lock`. Never touches your transcripts (`~/anyscribe/`), config or API keys. |
+| `status` | Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. `healthy` is true only when the app is installed and its dashboard answers. If the dashboard answers but the tray icon could not start (no graphical session), `healthy` stays true and the reason says so. Changes nothing. |
 | `open` | Opens the dashboard in your browser, starting anyscribe first if nothing is running. This is what the app icon runs. |
 
 When `uninstall` stops a running copy, it prints:
@@ -957,7 +957,7 @@ With `--json`, `install`, `uninstall` and `status` print one `{"success": ..., "
 
 - `install` → `data` is the record it saved: `{"version", "python", "port", "launcher", "login_item", "installed_at"}`
 - `uninstall` → `{"stopped": true|false, "launcher": true|false, "login_item": true|false}` (each `true` if it was there)
-- `status` → `{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}`; `reason` is `null` when healthy, otherwise a sentence ending in the fix
+- `status` → `{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}`; `reason` is `null` when healthy (or, while healthy, says the dashboard is running without its tray icon), otherwise a sentence ending in the fix
 
 **Exit codes:** `0` success · `1` refused or failed (the tray extra is missing, another program is using the port, or anyscribe didn't start) · `2` not supported on this operating system. `status` always exits `0`, even on an unsupported system; it says so instead.
 

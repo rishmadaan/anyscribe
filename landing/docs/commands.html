@@ -1345,11 +1345,11 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 </tr>
 <tr>
 <td><code>uninstall</code></td>
-<td>Stops the tray and its server, then removes the app, the login item, the icons and <code>~/.anyscribe/desktop.json</code>. Never touches your transcripts (<code>~/anyscribe/</code>), config or API keys.</td>
+<td>Stops the tray and its server, then removes the app, the login item, the icons, <code>~/.anyscribe/desktop.json</code> and <code>~/.anyscribe/tray.lock</code>. Never touches your transcripts (<code>~/anyscribe/</code>), config or API keys.</td>
 </tr>
 <tr>
 <td><code>status</code></td>
-<td>Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. <code>healthy</code> is true only when the app is installed and its dashboard answers. Changes nothing.</td>
+<td>Reports what is installed, whether the tray and the server are running, and whether everything is healthy, with the reason and fix when it isn't. <code>healthy</code> is true only when the app is installed and its dashboard answers. If the dashboard answers but the tray icon could not start (no graphical session), <code>healthy</code> stays true and the reason says so. Changes nothing.</td>
 </tr>
 <tr>
 <td><code>open</code></td>
@@ -1453,7 +1453,7 @@ anyscribe desktop uninstall --yes --json
 <ul>
 <li><code>install</code> → <code>data</code> is the record it saved: <code>{"version", "python", "port", "launcher", "login_item", "installed_at"}</code></li>
 <li><code>uninstall</code> → <code>{"stopped": true|false, "launcher": true|false, "login_item": true|false}</code> (each <code>true</code> if it was there)</li>
-<li><code>status</code> → <code>{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}</code>; <code>reason</code> is <code>null</code> when healthy, otherwise a sentence ending in the fix</li>
+<li><code>status</code> → <code>{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}</code>; <code>reason</code> is <code>null</code> when healthy (or, while healthy, says the dashboard is running without its tray icon), otherwise a sentence ending in the fix</li>
 </ul>
 <p><strong>Exit codes:</strong> <code>0</code> success · <code>1</code> refused or failed (the tray extra is missing, another program is using the port, or anyscribe didn't start) · <code>2</code> not supported on this operating system. <code>status</code> always exits <code>0</code>, even on an unsupported system; it says so instead.</p>
 <blockquote>

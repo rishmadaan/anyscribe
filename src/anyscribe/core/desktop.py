@@ -191,6 +191,9 @@ def install(port: int = tray.DEFAULT_PORT, launch: bool = True) -> Manifest:
     if sys.platform == "darwin":
         # Login item first: launchd's RunAtLoad starts the tray it supervises, so
         # KeepAlive restarts it after a crash. A tray we spawned would be outside launchd.
+        if service.is_installed():
+            # A job still loaded (e.g. no manifest) makes load a no-op and RunAtLoad never fires.
+            service.uninstall_service()
         login_item = service.install_service(port)
         if launch:
             open_dashboard(port, expect_external=True)

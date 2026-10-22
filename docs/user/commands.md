@@ -963,7 +963,7 @@ With `--json`, `install`, `uninstall` and `status` print one `{"success": ..., "
 
 > **`Port 8457 is in use by another program.`** Some other program (not anyscribe) is listening on that port. The message ends with the fix: `Run: anyscribe desktop install --port <free port>`. Pick any free number, e.g. `9000`.
 
-> **No browser available** (over SSH, or a machine with no desktop)? `desktop open` prints the dashboard's address instead of opening it, on stderr, so a `--json` result on stdout stays clean.
+> **No browser available** (over SSH, or a machine with no desktop)? `desktop open` prints the dashboard's address instead of opening it, on stderr, so stdout stays clean for scripts.
 
 ---
 

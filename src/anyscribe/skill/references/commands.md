@@ -374,7 +374,7 @@ Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (o
 
 ## anyscribe desktop
 
-Desktop mode in one command: an **anyscribe** app icon (Applications on macOS, the Start menu on Windows, the app menu on Linux), the menu-bar tray started at login, and the dashboard opened now. **Needs the `[tray]` extra**: `pip install -U "anyscribe[tray]"`. The skill and the MCP server never need the desktop app running.
+Desktop mode in one command: an **anyscribe** app icon (`~/Applications` on macOS, the Start menu on Windows, the app menu on Linux), the menu-bar tray started at login, and the dashboard opened now. **Needs the `[tray]` extra**: `pip install -U "anyscribe[tray]"`. The skill and the MCP server never need the desktop app running.
 
 ```bash
 anyscribe desktop install --yes --json            # icon + login item + start now + open dashboard

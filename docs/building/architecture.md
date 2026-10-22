@@ -120,6 +120,16 @@ dependency. The chain is **launcher → `desktop open` → tray → ui**:
   (output to `~/.anyscribe/logs/tray.log`), falls back to a detached
   `anyscribe ui --no-open` if the tray process dies (no display), waits for
   health, then opens the browser or prints the URL to stderr.
+- **`desktop install`** (`core/desktop.py::install`) orders the steps by OS. On
+  macOS it writes the login item first (`launchctl load`, whose `RunAtLoad`
+  starts the tray launchd supervises, so `KeepAlive` restarts it after a crash),
+  then `open_dashboard(expect_external=True)` waits up to 10 s for that tray
+  before falling back to spawning one. On Windows and Linux the login item only
+  takes effect at the next login, so the tray is spawned detached first and the
+  login item written after. A reinstall (manifest present) runs `stop_tray`,
+  which waits for the old tray to exit and its port to free, then unloads and
+  reloads the login item; on macOS an existing plist with no manifest is also
+  unloaded first, since `load` on a still-loaded job is a no-op.
 - The **tray** supervises the **ui** server as before.
 - The **login item** (`core/service.py`) starts the tray at login: a launchd
   LaunchAgent (`com.anyscribe.tray.plist`: `EnvironmentVariables.PATH` from

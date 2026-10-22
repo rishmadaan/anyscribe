@@ -26,7 +26,7 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   healthy, and names the fix when it isn't. `anyscribe desktop uninstall`
   stops anyscribe and removes the app, the login item and the icons; your
   transcripts, settings and API keys stay. `anyscribe desktop open` is what
-  the app icon runs. All four take `--json` for agents.
+  the app icon runs. `install`, `uninstall` and `status` take `--json` for agents.
 - The one-line installers finish by setting up desktop mode. Skip it with
   `--no-desktop` (macOS / Linux: `... | bash -s -- --no-desktop`) or
   `-NoDesktop` (Windows:

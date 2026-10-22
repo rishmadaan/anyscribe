@@ -59,6 +59,7 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(
         desktop.service, "uninstall_service", lambda: record("uninstall_service", None, True)
     )
+    monkeypatch.setattr(desktop.service, "is_installed", lambda: False)  # not the real plist
     monkeypatch.setattr(
         desktop, "open_dashboard", lambda port, **k: record("open_dashboard", port, "url")
     )
@@ -176,6 +177,16 @@ def test_install_macos_spawns_when_launchd_does_not_start(
     desktop.install(port=9000, launch=True)
     assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
     assert fake_browser.opened == ["http://127.0.0.1:9000"]
+
+
+def test_install_macos_reloads_existing_login_item_without_manifest(
+    monkeypatch, fake_platform_darwin, calls
+):
+    """A loaded job with no manifest: load alone is a no-op, so unload it first."""
+    monkeypatch.setattr(desktop.service, "is_installed", lambda: True)
+    desktop.install(port=9000, launch=True)
+    order = calls["order"]
+    assert order.index("uninstall_service") < order.index("install_service")
 
 
 def test_install_no_launch_does_not_open(calls):

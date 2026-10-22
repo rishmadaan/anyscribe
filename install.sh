@@ -588,7 +588,7 @@ run_onboard() {
 # Where desktop mode put anyscribe, in this OS's words.
 desktop_where() {
     if [[ "$OS" == "macos" ]]; then
-        echo "anyscribe is in your Applications folder and running in your menu bar"
+        echo "anyscribe is in the Applications folder inside your home folder (~/Applications) and running in your menu bar"
     else
         echo "anyscribe is in your app menu and running in your system tray"
     fi

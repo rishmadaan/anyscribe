@@ -1458,7 +1458,7 @@ anyscribe desktop uninstall --yes --json
 <p><strong>Exit codes:</strong> <code>0</code> success · <code>1</code> refused or failed (the tray extra is missing, another program is using the port, or anyscribe didn't start) · <code>2</code> not supported on this operating system. <code>status</code> always exits <code>0</code>, even on an unsupported system; it says so instead.</p>
 <blockquote>
 <p><strong><code>Port 8457 is in use by another program.</code></strong> Some other program (not anyscribe) is listening on that port. The message ends with the fix: <code>Run: anyscribe desktop install --port &lt;free port&gt;</code>. Pick any free number, e.g. <code>9000</code>.</p>
-<p><strong>No browser available</strong> (over SSH, or a machine with no desktop)? <code>desktop open</code> prints the dashboard's address instead of opening it, on stderr, so a <code>--json</code> result on stdout stays clean.</p>
+<p><strong>No browser available</strong> (over SSH, or a machine with no desktop)? <code>desktop open</code> prints the dashboard's address instead of opening it, on stderr, so stdout stays clean for scripts.</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-tray">anyscribe tray</h2>

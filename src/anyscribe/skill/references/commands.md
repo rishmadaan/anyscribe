@@ -374,12 +374,18 @@ Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (o
 
 ## anyscribe install-service / anyscribe uninstall-service
 
-Auto-start `anyscribe tray` at login. **macOS only for now** — other platforms get a clean "not supported yet" error, not a crash.
+Auto-start `anyscribe tray` at login on macOS, Windows and Linux. Other platforms get a clean "not supported" error, not a crash. `install-service` refuses (exit 1) until the tray extra is installed: `pip install "anyscribe[tray]"`.
 
 ```bash
-anyscribe install-service --yes --json     # writes + loads ~/Library/LaunchAgents/com.anyscribe.tray.plist
-anyscribe uninstall-service --yes --json   # unloads + deletes it
+anyscribe install-service --yes --json     # writes the login item for this OS
+anyscribe uninstall-service --yes --json   # removes it
 ```
+
+| OS | Login item |
+|----|-----------|
+| macOS | `~/Library/LaunchAgents/com.anyscribe.tray.plist` (loaded immediately; restarts the tray after a crash) |
+| Windows | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\anyscribe tray.lnk` (runs at next login; no crash restart) |
+| Linux | `~/.config/autostart/anyscribe-tray.desktop` (or `$XDG_CONFIG_HOME/autostart/`; runs at next login) |
 
 ### Flags
 
@@ -388,7 +394,7 @@ anyscribe uninstall-service --yes --json   # unloads + deletes it
 | `--yes` | `-y` | Skip confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json` | `-j` | Output result as JSON: `{"success": true, "data": {...}, "error": null}` |
 
-`install-service` returns `{"plist": "<path>"}`; `uninstall-service` returns `{"removed": true|false}`. Installation loads the LaunchAgent and can start the tray immediately as well as at login. Removal unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither command uninstalls anyscribe.
+`install-service` returns `{"path": "<login item>", "plist": "<same path>"}` (`plist` is kept for older agents); `uninstall-service` returns `{"removed": true|false}`. On macOS, installation loads the LaunchAgent and can start the tray immediately as well as at login, and removal unloads it and can stop a tray it manages, including the server that tray started. On Windows and Linux, removal only deletes the file; a running tray keeps running until quit. A manually launched tray must be quit separately. Neither command uninstalls anyscribe.
 
 ---
 

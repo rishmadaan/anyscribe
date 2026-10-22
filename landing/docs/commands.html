@@ -210,13 +210,13 @@ CLI-only.</p>
 </tr>
 <tr>
 <td><code>anyscribe install-service</code></td>
-<td>Auto-start the tray at login (macOS only)</td>
-<td>Settings → Startup (macOS)</td>
+<td>Auto-start the tray at login (macOS, Windows, Linux)</td>
+<td>Settings → Startup</td>
 </tr>
 <tr>
 <td><code>anyscribe uninstall-service</code></td>
 <td>Remove the login auto-start</td>
-<td>Settings → Startup (macOS)</td>
+<td>Settings → Startup</td>
 </tr>
 <tr>
 <td><code>anyscribe install-skill</code></td>
@@ -1352,11 +1352,37 @@ anyscribe tray --port 9000
 <h2 id="anyscribe-install-service">anyscribe install-service</h2>
 <p>Register <code>anyscribe tray</code> to start automatically every time you log in — so the menu-bar icon is just always there, no manual launch.</p>
 <blockquote>
-<p><strong>macOS only for now.</strong> Other platforms print a friendly "not supported yet" error.</p>
+<p><strong>Works on macOS, Windows and Linux.</strong> It needs the tray extra first: <code>pip install "anyscribe[tray]"</code>. Without it the command stops with that instruction instead of installing a login item that can't run.</p>
 </blockquote>
 <pre><code class="language-bash">anyscribe install-service
 </code></pre>
-<p>Writes a launchd <code>LaunchAgent</code> (<code>~/Library/LaunchAgents/com.anyscribe.tray.plist</code>) with <code>RunAtLoad</code> set, and loads it immediately — so the tray starts now <em>and</em> at every future login.</p>
+<p>What it writes depends on your computer:</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>File it creates</th>
+<th>When the tray starts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/LaunchAgents/com.anyscribe.tray.plist</code> (a launchd "LaunchAgent")</td>
+<td>Now <em>and</em> at every future login; restarted after a crash</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>anyscribe tray.lnk</code> in your Startup folder (<code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup</code>)</td>
+<td>At every future login</td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>~/.config/autostart/anyscribe-tray.desktop</code></td>
+<td>At every future login</td>
+</tr>
+</tbody>
+</table>
 <h3 id="flags_10">Flags</h3>
 <table>
 <thead>
@@ -1382,17 +1408,14 @@ anyscribe tray --port 9000
 <h3 id="examples_9">Examples</h3>
 <pre><code class="language-bash">anyscribe install-service              # prompts for confirmation
 anyscribe install-service --yes        # no prompt
-anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&quot;: {&quot;plist&quot;: &quot;...&quot;}, &quot;error&quot;: null}
+anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&quot;: {&quot;path&quot;: &quot;...&quot;, &quot;plist&quot;: &quot;...&quot;}, &quot;error&quot;: null}
 </code></pre>
 <hr />
 <h2 id="anyscribe-uninstall-service">anyscribe uninstall-service</h2>
 <p>Remove the login auto-start registered by <code>anyscribe install-service</code>.</p>
-<blockquote>
-<p><strong>macOS only for now.</strong> Other platforms print a friendly "not supported yet" error.</p>
-</blockquote>
 <pre><code class="language-bash">anyscribe uninstall-service
 </code></pre>
-<p>Unloads and deletes the LaunchAgent plist (the file that starts the tray at login). If that login item started the tray you're running now, this also stops that tray and any server it started. A tray you started yourself with <code>anyscribe tray</code> keeps running until you quit it. anyscribe itself stays installed.</p>
+<p>Deletes the login item that <code>install-service</code> created (the file that starts the tray at login). On macOS it also unloads the LaunchAgent: if that login item started the tray you're running now, this stops that tray and any server it started. On Windows and Linux a running tray keeps going until you quit it. A tray you started yourself with <code>anyscribe tray</code> keeps running until you quit it. anyscribe itself stays installed.</p>
 <h3 id="flags_11">Flags</h3>
 <table>
 <thead>
@@ -1420,7 +1443,7 @@ anyscribe install-service --json       # {&quot;success&quot;: true, &quot;data&
 anyscribe uninstall-service --yes      # no prompt
 </code></pre>
 <blockquote>
-<p><strong>Fully removing the tray?</strong> <code>anyscribe uninstall-service</code> stops it from starting at login, and stops a tray that was started that way. A tray you started yourself keeps running: quit it from its menu (or Ctrl+C the terminal it's running in).</p>
+<p><strong>Fully removing the tray?</strong> <code>anyscribe uninstall-service</code> stops it from starting at login, and on macOS stops a tray that was started that way. Any other running tray keeps running: quit it from its menu (or Ctrl+C the terminal it's running in).</p>
 </blockquote>
 <hr />
 <h2 id="anyscribe-install-skill">anyscribe install-skill</h2>

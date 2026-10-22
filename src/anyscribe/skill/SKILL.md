@@ -78,7 +78,7 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Migrate from the old `anyscribecli` install | `anyscribe migrate` (`--dry-run` to preview, `--json` for machine output) |
 | Use the web UI | `anyscribe ui` (opens browser dashboard at 127.0.0.1:8457) |
 | Keep anyscribe available in the menu bar / always running | `anyscribe tray` (needs `pip install "anyscribe[tray]"` first) |
-| Auto-start the menu bar at login (macOS) | `anyscribe install-service --yes --json` |
+| Auto-start the menu bar at login (macOS, Windows, Linux; needs the tray extra) | `anyscribe install-service --yes --json` |
 | Remove menu-bar auto-start | `anyscribe uninstall-service --yes --json` |
 | Diagnose problems | `anyscribe doctor` |
 | Reinstall or refresh this skill | `anyscribe install-skill --force` |

@@ -371,10 +371,10 @@ anyscribe tray --port 9000
 ### Fully removing the tray / menu-bar auto-start
 
 1. Quit the tray if it's running (menu → Quit).
-2. Remove login auto-start (macOS): `anyscribe uninstall-service --yes`
+2. Remove login auto-start: `anyscribe uninstall-service --yes`
 3. Optionally uninstall the extra: `pip uninstall pystray Pillow`
 
-`uninstall-service` unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither service command uninstalls anyscribe.
+On macOS `uninstall-service` unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither service command uninstalls anyscribe.
 
 ### Permission denied errors
 

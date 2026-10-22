@@ -63,13 +63,13 @@ You should see `anyscribe` followed by a version number.
 
 > **`scribe` and `ascli` are shorter aliases.** Every `anyscribe` command in this guide also works typed as `scribe` or `ascli` — same tool, fewer letters. Use whichever you like.
 
-**Already have Python and just want the package?**
+**Already have Python 3.11 or newer and just want the package?**
 
 ```bash
 pip install "anyscribe[tray]"
 ```
 
-The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run `anyscribe doctor`, which tells you what's missing.
+The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run `anyscribe doctor`, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
 
 > **Want to install Python and the dependencies by hand?** See the [Appendix: manual install](#appendix-manual-install) at the bottom.
 
@@ -299,7 +299,7 @@ brew install python@3.12
 sudo apt install python3 python3-pip python3-venv
 ```
 
-Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04, Debian 11), install a newer Python alongside it: `sudo apt install python3.11 python3.11-venv` on Ubuntu 22.04, or use the installer from [python.org](https://www.python.org/downloads/).
+Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04 does), the simplest fix is the one-line installer in Step 1: it installs Python 3.11 alongside the old one and uses it. To do it by hand, run `sudo apt install python3.11 python3.11-venv pipx`, then in step 3 below use `pipx install --python python3.11 "anyscribe[tray]"` instead of `pip install` (plain `pip` still belongs to the old Python and quietly installs an older anyscribe), then `pipx ensurepath` and open a new terminal. Debian 11 has no Python 3.11 package; upgrade to Debian 12, which ships it.
 
 **Windows:**
 Download from [python.org/downloads](https://www.python.org/downloads/) and run the installer. **Check "Add Python to PATH"** during installation.

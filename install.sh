@@ -226,9 +226,16 @@ check_python() {
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
         # Ubuntu 22.04 and Debian 11 ship python3 at 3.10 or older, so the bare
-        # python3 package would install nothing new; ask apt for 3.11 by name.
-        install_package "Python" "python@3.12" "python3.11 python3.11-venv" ""
-        resolve_python || die "Python 3.11+ still not found on PATH. Your system's python3 is older (Ubuntu 22.04 ships 3.10). Install Python 3.11 or newer from https://python.org or your package manager, open a new terminal, and re-run the installer."
+        # python3 package would install nothing new; ask for 3.11 by name, with
+        # each package manager's own names. || true: where the package does not
+        # exist (Debian 11) the honest die below should speak, not apt's raw error.
+        local py_pkg="python3"
+        case "$LINUX_PKG" in
+            apt) py_pkg="python3.11 python3.11-venv" ;;
+            dnf) py_pkg="python3.11" ;;
+        esac
+        install_package "Python" "python@3.12" "$py_pkg" "" || true
+        resolve_python || die "Python 3.11+ still not found on PATH. Your system's python3 is missing or older (Ubuntu 22.04 ships 3.10). Install Python 3.11 or newer from https://python.org or your package manager, open a new terminal, and re-run the installer."
     else
         die "Python 3.11+ is required. Install from https://python.org and try again."
     fi
@@ -287,8 +294,10 @@ install_with_pipx() {
             esac
         fi
     fi
-    # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one that passed the check
-    pipx install --python "$(command -v "$PY")" "$1"
+    # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one
+    # that passed the check. --force so an older pipx venv is rebuilt on this Python
+    # instead of pipx keeping it and exiting 0.
+    pipx install --force --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
     USED_PIPX=true
 }
@@ -306,7 +315,7 @@ install_anyscribe() {
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
-        echo "    [dry-run] $PY -m pip install $pip_cmd"
+        echo "    [dry-run] $PY -m pip install --upgrade $pip_cmd"
     else
         # Try pip first; fall back to pipx if this Python has no pip or is
         # externally managed.
@@ -314,7 +323,7 @@ install_anyscribe() {
         if ! "$PY" -m pip --version >/dev/null 2>&1; then
             warn "$PY has no pip. Using pipx instead..."
             install_with_pipx "$pip_cmd"
-        elif pip_output=$("$PY" -m pip install "$pip_cmd" 2>&1); then
+        elif pip_output=$("$PY" -m pip install --upgrade "$pip_cmd" 2>&1); then
             : # Success
         elif echo "$pip_output" | grep -qi "externally-managed"; then
             warn "System Python is externally managed. Using pipx instead..."

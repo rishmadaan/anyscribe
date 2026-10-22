@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-**Already have Python, ffmpeg, and yt-dlp?**
+**Already have Python 3.11 or newer, ffmpeg, and yt-dlp?**
 
 ```bash
 pip install "anyscribe[tray]"

@@ -47,8 +47,9 @@ function Refresh-Path {
 function Test-Python {
     Write-Info "Checking Python..."
 
-    # Windows uses 'python' (not 'python3') when installed from python.org
-    foreach ($cmd in @('python', 'python3')) {
+    # Windows uses 'python' (not 'python3') when installed from python.org;
+    # 'py' is the python.org launcher, which picks the newest installed Python.
+    foreach ($cmd in @('python', 'python3', 'py')) {
         if (Test-CommandExists $cmd) {
             try {
                 $ver = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
@@ -57,7 +58,10 @@ function Test-Python {
                 $minor = [int]$parts[1]
                 if ($major -ge 3 -and $minor -ge 11) {
                     Write-Ok "Python $ver ($cmd)"
-                    $script:PythonCmd = $cmd
+                    # Keep the exact interpreter, not the name: Refresh-Path later
+                    # rebuilds PATH with machine entries first, which can re-point
+                    # `python` at an older install.
+                    $script:PythonCmd = (& $cmd -c "import sys; print(sys.executable)" 2>$null).Trim()
                     return
                 } else {
                     Write-Warn "Python $ver found, but 3.11+ is required"
@@ -79,14 +83,14 @@ function Test-Python {
             Refresh-Path
             # Re-check the version: an older all-users Python earlier on PATH
             # still answers to `python` after a per-user winget install.
-            foreach ($cmd in @('python', 'python3')) {
+            foreach ($cmd in @('python', 'python3', 'py')) {
                 if (Test-CommandExists $cmd) {
                     try {
                         $ver = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
                         $parts = $ver.Split('.')
                         if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 11) {
                             Write-Ok "Python $ver ($cmd)"
-                            $script:PythonCmd = $cmd
+                            $script:PythonCmd = (& $cmd -c "import sys; print(sys.executable)" 2>$null).Trim()
                             return
                         }
                     } catch {
@@ -168,7 +172,7 @@ function Test-YtDlp {
 
 function Install-Anyscribe {
     Write-Info "Installing anyscribe..."
-    & $script:PythonCmd -m pip install --quiet "anyscribe[tray]"
+    & $script:PythonCmd -m pip install --quiet --upgrade "anyscribe[tray]"
 
     # Verify
     Refresh-Path
@@ -234,7 +238,7 @@ try {
 
     if (-not (Test-CommandExists 'anyscribe')) {
         Write-Warn "If 'anyscribe' is not recognized, use:"
-        Write-Host "    $script:PythonCmd -m anyscribe ui" -ForegroundColor Cyan
+        Write-Host "    & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Cyan
         Write-Host ""
     }
 } catch {

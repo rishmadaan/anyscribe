@@ -15,22 +15,24 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 **Breaking**
 - anyscribe now needs Python 3.11 or newer (Python 3.10 reached end of life
-  in October 2026). Nothing breaks on 3.10: `anyscribe update` and
-  `pip install --upgrade anyscribe` keep you on 0.16.5 and report it as up to
-  date. To get 0.17.0, install Python 3.11 or newer, then install anyscribe
-  again with it (the one-line installer from the getting-started guide does
-  this for you). Your settings and transcripts stay where they are. The
-  installers now check for 3.11+.
+  in October 2026). If you installed with pip or the one-line installer,
+  nothing breaks on 3.10: `anyscribe update` and `pip install --upgrade
+  anyscribe` keep you on 0.16.5 and report it as up to date. To move to
+  0.17.0, install Python 3.11 or newer, then install anyscribe with it: re-run
+  the one-line installer from the getting-started guide (it now installs or
+  upgrades with the newest Python it finds, and rebuilds a pipx install on
+  it), or run `python3.11 -m pip install --upgrade "anyscribe[tray]"`. Your
+  settings and transcripts stay where they are.
 
 **Changed**
 - anyscribe now requires Starlette 1.3.1 or newer (the web framework under
   the web UI), the first version clear of its published security advisories,
   and FastAPI 0.133 or newer so the two install together. Fresh installs
   already got these; upgrading brings older installs up to them.
-- Installers say `anyscribe` everywhere (they still said `scribe`), route a
-  Python that has no pip through pipx using that same Python, ask Python for
-  the real scripts folder in the PATH hint, and no longer print "ready" when
-  the post-install step was skipped.
+- Installers say `anyscribe` everywhere (they still said `scribe`) and no
+  longer print "ready" when the post-install step was skipped. The macOS and
+  Linux installer routes a Python that has no pip through pipx, using that
+  same Python, and asks Python for the real scripts folder in the PATH hint.
 - Dependency pins: beaupy is capped below 4 (4.0 makes Ctrl+C in onboarding
   raise instead of taking the default); python-multipart's floor is 0.0.31.
   Python 3.14 is now supported and tested.
@@ -40,9 +42,9 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 **Fixed**
 - The bundled Claude Code skill was corrected against the CLI: wrong flags,
   JSON shapes, provider routing and chunk sizes, dozens of corrections. After
-  upgrading, normal commands such as `anyscribe ui` refresh the installed
-  skill when its recorded version differs; top-level `--version` and `--help`
-  do not. Run `anyscribe install-skill --force` to refresh it explicitly.
+  upgrading, the next anyscribe command you run (for example `anyscribe ui`)
+  updates the skill Claude Code uses; `anyscribe --version` and `--help` alone
+  do not. To update it straight away, run `anyscribe install-skill --force`.
 - The CLI's own help and error text: `anyscribe model info` names the right
   repository for the turbo model; the Groq and OpenAI "no speaker labels"
   errors say exactly how to retry; the hint to paste a URL interactively now

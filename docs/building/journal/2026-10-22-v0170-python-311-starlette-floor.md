@@ -11,8 +11,8 @@ tldr: "v0.17.0 drops Python 3.10 (end of life October 2026) and adds a direct st
 - `requires-python` is `>=3.11`. The 3.10 classifier is gone, CI tests 3.11,
   3.12 and 3.14, and every place that told a user "3.10+" (install.sh,
   install.ps1, `anyscribe doctor`, README, getting-started, landing) says
-  3.11+. The installer's candidate list is now `python3.13 python3.12
-  python3.11 python3`.
+  3.11+. The installer's candidate list is now `python3.14 python3.13
+  python3.12 python3.11 python3`.
 - `starlette>=1.3.1` is a direct dependency, with `fastapi>=0.133`.
 
 ## Why

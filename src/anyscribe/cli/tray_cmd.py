@@ -73,12 +73,7 @@ def _shutdown_server(proc, port: int) -> None:
     """
     if proc is None:
         return
-    try:
-        import httpx
-
-        httpx.post(f"http://127.0.0.1:{port}/api/shutdown", timeout=2.0)
-    except Exception:
-        pass
+    core._post_shutdown(port)
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -87,6 +82,37 @@ def _shutdown_server(proc, port: int) -> None:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def _child_kwargs() -> dict:
+    """Popen kwargs for the server child, per platform."""
+    if os.name == "nt":
+        # No console window flashing up for a tray started without one.
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    # The tray blocks SIGTERM/SIGINT (see _watch_signals_in_thread) and the
+    # mask is inherited across exec — unblock in the child so uvicorn still
+    # responds to signals.
+    return {"preexec_fn": lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, _SIGNALS)}
+
+
+def _watch_signals_in_thread(state: dict, port: int) -> None:
+    """Route SIGTERM/SIGINT to the same teardown as menu Quit (POSIX only).
+
+    A plain signal.signal handler never fires here: the Cocoa event loop
+    blocks in ObjC, so Python bytecode (where handlers run) may never
+    execute. Block the signals and catch them in a sigwait thread. Windows
+    has neither call; there the finally around icon.run() does the teardown.
+    """
+    if os.name == "nt":
+        return
+    signal.pthread_sigmask(signal.SIG_BLOCK, _SIGNALS)
+
+    def _watch() -> None:
+        signal.sigwait(_SIGNALS)
+        _teardown(state, port)
+        os._exit(0)  # Cocoa loop can't be trusted to unwind from a signal
+
+    threading.Thread(target=_watch, daemon=True).start()
 
 
 def _teardown(state: dict, port: int) -> None:
@@ -111,8 +137,9 @@ def tray(
 
     # Already-running instance? Bail instead of colliding on the port.
     if core.read_pidfile() is not None:
+        # Exit 0: the login item relaunches any non-zero exit, forever.
         err_console.print("[yellow]An anyscribe tray is already running.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=0)
 
     _run_tray(port)
 
@@ -132,10 +159,7 @@ def _run_tray(port: int) -> None:
             return  # attach to an externally-started server (we don't own it)
         state["proc"] = subprocess.Popen(
             [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
-            # The tray blocks SIGTERM/SIGINT (see _watch_signals) and the mask
-            # is inherited across exec — unblock in the child so uvicorn still
-            # responds to signals.
-            preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, _SIGNALS),
+            **_child_kwargs(),
         )
 
     def on_open(icon, item) -> None:  # noqa: ANN001
@@ -156,18 +180,7 @@ def _run_tray(port: int) -> None:
         _teardown(state, port)
         icon.stop()
 
-    # SIGTERM (launchctl unload / logout) and SIGINT must run the same teardown
-    # as menu Quit. A plain signal.signal handler never fires here: the Cocoa
-    # event loop blocks in ObjC, so Python bytecode (where handlers run) may
-    # never execute. Block the signals and catch them in a sigwait thread.
-    signal.pthread_sigmask(signal.SIG_BLOCK, _SIGNALS)
-
-    def _watch_signals() -> None:
-        signal.sigwait(_SIGNALS)
-        _teardown(state, port)
-        os._exit(0)  # Cocoa loop can't be trusted to unwind from a signal
-
-    threading.Thread(target=_watch_signals, daemon=True).start()
+    _watch_signals_in_thread(state, port)
 
     menu = pystray.Menu(
         pystray.MenuItem("Open UI", on_open, default=True),

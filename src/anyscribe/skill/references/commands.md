@@ -360,7 +360,8 @@ anyscribe tray --port 9000    # supervise a server on a different port
 Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (opens the GitHub releases page), Quit.
 
 - If a server is already listening on the port, `anyscribe tray` attaches to it instead of starting a second one.
-- If a tray is already running (pidfile at `~/.anyscribe/tray.pid`), a second `anyscribe tray` refuses to start rather than colliding.
+- If a tray is already running (pidfile at `~/.anyscribe/tray.pid`), a second `anyscribe tray` prints *already running* and exits 0 rather than colliding.
+- Works on Windows and Linux too, not only macOS.
 - Quit / SIGTERM / SIGINT all run the same teardown: stop the server *if the tray started it*, remove the pidfile.
 
 ### Flags

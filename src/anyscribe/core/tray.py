@@ -9,6 +9,7 @@ tray-free.
 from __future__ import annotations
 
 import os
+import signal
 import socket
 
 from anyscribe.config.paths import APP_HOME, LOGS_DIR
@@ -60,3 +61,28 @@ def remove_pidfile() -> None:
         PIDFILE.unlink()
     except FileNotFoundError:
         pass
+
+
+def _post_shutdown(port: int) -> None:
+    """Ask the web server on this port to stop; ignore any failure."""
+    try:
+        import httpx
+
+        httpx.post(f"http://127.0.0.1:{port}/api/shutdown", timeout=2.0)
+    except Exception:
+        pass
+
+
+def stop_tray(port: int) -> bool:
+    """Stop a running tray and its server from outside. True if a tray pid was signalled."""
+    _post_shutdown(port)
+    pid = read_pidfile()
+    signalled = False
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            signalled = True
+        except ProcessLookupError:
+            pass  # exited between the pidfile read and the kill
+    remove_pidfile()
+    return signalled

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from anyscribe.cli import tray_cmd
+from anyscribe.cli.main import app
 from anyscribe.core import service, tray
 
 runner = CliRunner()
@@ -108,6 +112,7 @@ def fake_agents(monkeypatch, tmp_path):
     monkeypatch.setattr(service, "launch_agents_dir", lambda: agents)
     calls = []
     monkeypatch.setattr(service, "_launchctl", lambda *a: calls.append(a))
+    monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
     return agents, calls
 
 
@@ -117,6 +122,7 @@ def test_install_writes_plist_and_loads(fake_agents):
     assert path.exists()
     assert path.read_text().startswith("<?xml")
     assert ("load", str(path)) in calls
+    assert tray.TRAY_LOG.parent.exists()
 
 
 def test_uninstall_removes_and_unloads(fake_agents):
@@ -224,3 +230,54 @@ def test_setup_callback_makes_icon_visible():
     icon = FakeIcon()
     _mark_template(icon)
     assert icon.visible is True
+
+
+# ---- desktop mode: second tray, Windows, stop_tray ------------------------
+
+
+def test_tray_exits_zero_when_already_running(monkeypatch):
+    # A login item relaunches any non-zero exit, so a duplicate must exit 0.
+    monkeypatch.setattr(tray_cmd.core, "read_pidfile", lambda: 4242)
+    monkeypatch.setitem(sys.modules, "pystray", types.ModuleType("pystray"))
+    monkeypatch.setitem(sys.modules, "PIL", types.ModuleType("PIL"))
+    sys.modules["PIL"].Image = object
+    result = CliRunner().invoke(app, ["tray"])
+    assert result.exit_code == 0
+    assert "already running" in result.output
+
+
+def test_signal_watch_is_skipped_on_windows(monkeypatch):
+    monkeypatch.setattr(tray_cmd.os, "name", "nt")
+    monkeypatch.setattr(
+        tray_cmd.signal,
+        "pthread_sigmask",
+        lambda *a: pytest.fail("pthread_sigmask called on nt"),
+        raising=False,
+    )
+    tray_cmd._watch_signals_in_thread({"proc": None}, 8457)
+
+
+def test_child_kwargs_per_platform(monkeypatch):
+    assert set(tray_cmd._child_kwargs()) == {"preexec_fn"}
+    monkeypatch.setattr(tray_cmd.os, "name", "nt")
+    monkeypatch.setattr(tray_cmd.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    assert tray_cmd._child_kwargs() == {"creationflags": 0x08000000}
+
+
+def test_stop_tray_shuts_down_and_kills(monkeypatch, tmp_path):
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    tray.PIDFILE.write_text("777")
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
+    killed, posted = [], []
+    monkeypatch.setattr(tray.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: posted.append(port))
+    assert tray.stop_tray(8457) is True
+    assert killed == [(777, signal.SIGTERM)] and posted == [8457]
+    assert not tray.PIDFILE.exists()
+
+
+def test_stop_tray_without_tray_signals_nothing(monkeypatch, tmp_path):
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray.os, "kill", lambda pid, sig: pytest.fail("kill without a pid"))
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    assert tray.stop_tray(8457) is False

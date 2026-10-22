@@ -657,6 +657,16 @@ def test_uninstall_removes_everything(calls, tmp_manifest):
     assert not paths.DESKTOP_DIR.exists() and desktop.read_manifest() is None
 
 
+def test_uninstall_removes_tray_lock_only_when_no_tray_holds_it(calls, tmp_manifest):
+    tmp_manifest()
+    held = tray.acquire_instance_lock()  # a tray still alive
+    desktop.uninstall()
+    assert tray.LOCKFILE.exists()
+    held.close()
+    desktop.uninstall()
+    assert not tray.LOCKFILE.exists()
+
+
 def test_uninstall_without_install_leaves_hand_started_server(monkeypatch, calls):
     monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: True)
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("must not stop"))

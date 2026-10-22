@@ -20,3 +20,7 @@ Size L (PR merge gate). Target frozen per round. Run folder (outside git):
 
 CI on 4a0b060 (run 39825494353): all seven jobs success (python 3.11/3.12/3.14, frontend, docs, desktop-platforms macos-latest and windows-latest).
 Verdict at the cap: fit GOOD TO GO (round 4); correctness NOT YET on one residual (round 4) which the post-cap wave fixed, together with the Linux headless findings; those post-cap commits (0382449..4a0b060) have no reviewer verdict. The lead reproduced each post-cap fix live (Mac and the Linux test machine).
+| 5 (scoped re-check of the post-cap wave) | correctness | gpt-6.1-sol, high | 0382449..c2ae046 | NOT YET | items 1, 2, 4, 5, 6 FIXED; item 3 PARTLY: unlinking tray.lock after releasing it lets two trays lock different inodes (C1 should-fix, traced). Fix: keep the zero-byte lock file; drop the cleanup promise |
+| 6 (scoped re-check of the round-5 fix) | correctness | gpt-6.1-sol, high | c2ae046..666c53b | GOOD TO GO | round-5 C1 FIXED (uninstall never touches tray.lock; one lock file, one inode; test asserts inode identity); no new defects |
+
+CI on 666c53b (run 39838164608): all seven jobs success. Final state: GOOD TO GO at round 6; awaiting the owner's merge.

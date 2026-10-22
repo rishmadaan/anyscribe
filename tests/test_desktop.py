@@ -319,7 +319,16 @@ def test_open_signals_live_tray_to_restart_server(monkeypatch, kills, fake_spawn
     assert fake_browser.opened == [url]
 
 
-@pytest.mark.parametrize("os_name", ["posix", "nt"])
+@pytest.mark.parametrize(
+    "os_name",
+    [
+        pytest.param(
+            "posix",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="SIGUSR1 is POSIX only"),
+        ),
+        "nt",
+    ],
+)
 def test_open_falls_back_to_stop_and_start_when_restart_fails(
     monkeypatch, kills, fake_spawn, fake_browser, os_name
 ):
@@ -338,8 +347,7 @@ def test_open_falls_back_to_stop_and_start_when_restart_fails(
     monkeypatch.setattr(desktop, "spawn_detached", spawn)
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: "start" in order)
     url = desktop.open_dashboard(8457, timeout=0.5)
-    # getattr: on a Windows runner signal has no SIGUSR1, even for the posix case.
-    assert kills == ([] if os_name == "nt" else [(4242, getattr(signal, "SIGUSR1", None))])
+    assert kills == ([] if os_name == "nt" else [(4242, signal.SIGUSR1)])
     assert order == ["stop", "start"]
     assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
     assert fake_browser.opened == [url]

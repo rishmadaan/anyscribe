@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from anyscribe.cli import tray_cmd
 from anyscribe.cli.main import app
-from anyscribe.core import service, tray
+from anyscribe.core import launcher, service, tray
 
 runner = CliRunner()
 
@@ -125,6 +125,7 @@ def test_plist_has_throttle_interval():
 @pytest.fixture
 def fake_agents(monkeypatch, tmp_path):
     agents = tmp_path / "LaunchAgents"
+    monkeypatch.setattr(service.sys, "platform", "darwin")
     monkeypatch.setattr(service, "launch_agents_dir", lambda: agents)
     calls = []
     monkeypatch.setattr(service, "_launchctl", lambda *a: calls.append(a))
@@ -151,6 +152,52 @@ def test_uninstall_removes_and_unloads(fake_agents):
 
 def test_uninstall_when_absent(fake_agents):
     assert service.uninstall_service() is False
+
+
+def test_linux_autostart_exec_quotes_path(tmp_path):
+    py = str(tmp_path / "Rish O'Brien" / "py env" / "python3")
+    txt = service.render_autostart_entry(py, 8457, "/a:/b c")
+    exec_line = (
+        f"Exec=env {launcher.desktop_quote('PATH=/a:/b c')} {launcher.desktop_quote(py)}"
+        " -m anyscribe tray --port 8457"
+    )
+    assert exec_line in txt
+    assert f'"{py}"' in txt and "\\'" not in txt
+    for line in ("Type=Application", "Name=anyscribe tray", "Terminal=false", "NoDisplay=true"):
+        assert line in txt
+    assert "X-GNOME-Autostart-enabled=true" in txt
+
+
+def test_install_service_linux_writes_autostart(monkeypatch, tmp_path):
+    monkeypatch.setattr(service.sys, "platform", "linux")
+    monkeypatch.setattr(service, "autostart_dir", lambda: tmp_path / "autostart")
+    path = service.install_service(port=9000)
+    assert path == tmp_path / "autostart" / "anyscribe-tray.desktop"
+    assert "--port 9000" in path.read_text() and service.is_installed()
+    assert service.uninstall_service() is True and not path.exists()
+    assert service.uninstall_service() is False
+
+
+def test_install_service_windows_creates_startup_shortcut(monkeypatch, tmp_path):
+    monkeypatch.setattr(service.sys, "platform", "win32")
+    monkeypatch.setattr(service, "startup_dir", lambda: tmp_path / "Startup")
+    calls = []
+    monkeypatch.setattr(service.launcher, "create_shortcut", lambda *a, **k: calls.append((a, k)))
+    path = service.install_service()
+    assert path == tmp_path / "Startup" / "anyscribe tray.lnk"
+    assert calls == [
+        ((path, launcher.pythonw(), "-m anyscribe tray --port 8457", None, "anyscribe tray"), {})
+    ]
+    path.parent.mkdir()
+    path.write_text("")  # stand-in for the .lnk PowerShell would have written
+    assert service.uninstall_service() is True and not path.exists()
+
+
+def test_install_service_unsupported_platform(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "freebsd")
+    assert service.supported() is False
+    with pytest.raises(NotImplementedError):
+        service.install_service()
 
 
 # ---- teardown (signal / quit / exception path) ----------------------------
@@ -223,13 +270,23 @@ def test_tray_missing_extra(monkeypatch):
     assert "anyscribe[tray]" in result.output
 
 
-def test_install_service_non_macos(monkeypatch):
-    from anyscribe.cli.main import app
-
-    monkeypatch.setattr("platform.system", lambda: "Linux")
+def test_install_service_unsupported_platform_cli(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "freebsd")
+    monkeypatch.setattr("platform.system", lambda: "FreeBSD")
     result = runner.invoke(app, ["install-service", "--yes"])
     assert result.exit_code == 1
-    assert "macOS" in result.output
+    assert "not supported on FreeBSD" in result.output
+
+
+def test_install_service_refused_without_tray(monkeypatch, fake_agents):
+    from anyscribe.cli import service_cmd
+
+    agents, calls = fake_agents
+    monkeypatch.setattr(service_cmd, "find_spec", lambda name: None)
+    result = runner.invoke(app, ["install-service", "--yes", "--json"])
+    assert result.exit_code == 1
+    assert 'pip install \\"anyscribe[tray]\\" first.' in result.output  # JSON-escaped
+    assert not agents.exists() and calls == []
 
 
 def test_setup_callback_makes_icon_visible():

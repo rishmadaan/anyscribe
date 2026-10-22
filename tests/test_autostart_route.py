@@ -1,4 +1,4 @@
-"""Autostart route — macOS-only launchd toggle, honest 400 elsewhere."""
+"""Autostart route — login-item toggle on macOS/Windows/Linux, honest 400 elsewhere."""
 
 from __future__ import annotations
 
@@ -48,7 +48,15 @@ def test_autostart_enable_refused_without_tray(client, monkeypatch, tmp_path):
     assert not (tmp_path / "com.anyscribe.tray.plist").exists()
 
 
-def test_autostart_rejected_off_macos(client, monkeypatch):
-    monkeypatch.setattr(system_routes.sys, "platform", "linux")
+@pytest.mark.parametrize("plat", ["linux", "win32"])
+def test_autostart_supported_on_linux_and_windows(client, monkeypatch, tmp_path, plat):
+    monkeypatch.setattr(system_routes.sys, "platform", plat)
+    monkeypatch.setattr(service, "autostart_dir", lambda: tmp_path)
+    monkeypatch.setattr(service, "startup_dir", lambda: tmp_path)
+    assert client.get("/api/autostart").json() == {"supported": True, "enabled": False}
+
+
+def test_autostart_rejected_on_unknown_platform(client, monkeypatch):
+    monkeypatch.setattr(system_routes.sys, "platform", "freebsd")
     assert client.put("/api/autostart", json={"enabled": True}).status_code == 400
     assert client.get("/api/autostart").json() == {"supported": False, "enabled": False}

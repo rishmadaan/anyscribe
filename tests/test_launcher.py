@@ -30,6 +30,12 @@ def test_renders_quote_paths_with_space_and_apostrophe(home):
     assert "Rish O''Brien" in ps and "$s.Save()" in ps
 
 
+def test_ps_quote_doubles_curly_apostrophes():
+    ps = launcher.render_shortcut_script(Path("C:/Rish O\u2019Brien/a.lnk"), "py", "", None, "x")
+    assert "Rish O\u2019\u2019Brien" in ps
+    assert launcher._ps_quote("\u2018\u201a\u201b") == "'\u2018\u2018\u201a\u201a\u201b\u201b'"
+
+
 def test_app_script_execs_desktop_open():
     assert launcher.render_app_script("/usr/bin/python3", 8457) == (
         "#!/bin/sh\nexec /usr/bin/python3 -m anyscribe desktop open --port 8457\n"
@@ -109,6 +115,7 @@ def test_install_launcher_windows_calls_create_shortcut(home, monkeypatch):
     monkeypatch.setattr(launcher, "start_menu_dir", lambda: home / "Programs")
     seen = {}
     monkeypatch.setattr(launcher, "create_shortcut", lambda *a: seen.update(args=a))
+    (home / "a.ico").write_bytes(b"ico")
 
     lnk = launcher.install_launcher(str(python), 8457, {"ico": home / "a.ico"})
 
@@ -120,6 +127,28 @@ def test_install_launcher_windows_calls_create_shortcut(home, monkeypatch):
         home / "a.ico",
         "anyscribe",
     )
+
+
+def test_install_launcher_windows_skips_missing_icon(home, monkeypatch):
+    monkeypatch.setattr(launcher.sys, "platform", "win32")
+    monkeypatch.setattr(launcher, "start_menu_dir", lambda: home / "Programs")
+    seen = {}
+    monkeypatch.setattr(launcher, "create_shortcut", lambda *a: seen.update(args=a))
+    launcher.install_launcher("python", 8457, {"ico": home / "missing.ico"})
+    assert seen["args"][3] is None
+
+
+def test_create_shortcut_passes_timeout_and_wraps_missing_powershell(tmp_path, monkeypatch):
+    seen = {}
+
+    def run(*a, **kw):
+        seen.update(kw)
+        raise FileNotFoundError("powershell")
+
+    monkeypatch.setattr(launcher.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="powershell"):
+        launcher.create_shortcut(tmp_path / "a.lnk", "python", "", None, "x")
+    assert seen["timeout"] == 60
 
 
 def test_create_shortcut_raises_on_failure(tmp_path, monkeypatch):

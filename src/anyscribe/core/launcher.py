@@ -85,9 +85,13 @@ def render_desktop_entry(python: str, port: int, icon: str = APP_NAME) -> str:
     )
 
 
+# PowerShell also ends a single-quoted string at the curly/low-9 apostrophes.
+_PS_QUOTES = str.maketrans({c: c * 2 for c in "'\u2018\u2019\u201a\u201b"})
+
+
 def _ps_quote(value: object) -> str:
-    """PowerShell single-quoted literal: no expansion; a ' is written ''."""
-    return "'" + str(value).replace("'", "''") + "'"
+    """PowerShell single-quoted literal: no expansion; each quote char is doubled."""
+    return "'" + str(value).translate(_PS_QUOTES) + "'"
 
 
 def render_shortcut_script(
@@ -160,11 +164,15 @@ def create_shortcut(
 ) -> None:
     lnk.parent.mkdir(parents=True, exist_ok=True)
     script = render_shortcut_script(lnk, target, arguments, icon, description)
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        raise RuntimeError(f"Could not create shortcut {lnk}: {e}") from e
     if result.returncode != 0:
         raise RuntimeError(f"Could not create shortcut {lnk}: {result.stderr.strip()}")
 
@@ -215,11 +223,12 @@ def install_launcher(python: str, port: int, icons: dict[str, Path]) -> Path:
             shutil.copyfile(icns, contents / "Resources" / f"{APP_NAME}.icns")
         os.utime(path)  # Finder/Dock re-read the icon only when the bundle mtime moves
     elif sys.platform == "win32":
+        ico = icons.get("ico")
         create_shortcut(
             path,
             pythonw(python),
             f"-m anyscribe desktop open --port {port}",
-            icons.get("ico"),
+            ico if ico and ico.exists() else None,
             APP_NAME,
         )
     else:

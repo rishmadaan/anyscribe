@@ -1,7 +1,7 @@
-"""Autostart service (macOS launchd LaunchAgent).
+"""Start-at-login for the tray companion, per OS.
 
-macOS only for now. Registers `anyscribe tray` as a per-user LaunchAgent so the
-tray companion starts at login.
+macOS: a launchd LaunchAgent plist. Windows: a shortcut in the Startup folder.
+Linux: an XDG autostart ``.desktop`` entry.
 
 Uses ``{python} -m anyscribe tray`` rather than the ``scribe`` binary path:
 the module path is stable within a given Python install, so it survives PATH
@@ -17,9 +17,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from anyscribe.core import tray
+from anyscribe.core import launcher, tray
 
 LABEL = "com.anyscribe.tray"
+SUPPORTED = frozenset({"darwin", "win32", "linux"})
+
+
+def supported() -> bool:
+    return sys.platform in SUPPORTED
 
 
 def launch_agents_dir() -> Path:
@@ -28,6 +33,27 @@ def launch_agents_dir() -> Path:
 
 def plist_path() -> Path:
     return launch_agents_dir() / f"{LABEL}.plist"
+
+
+def startup_dir() -> Path:
+    return launcher.start_menu_dir() / "Startup"
+
+
+def autostart_dir() -> Path:
+    config = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(config) / "autostart"
+
+
+def login_item_path() -> Path:
+    if sys.platform == "win32":
+        return startup_dir() / "anyscribe tray.lnk"
+    if sys.platform == "linux":
+        return autostart_dir() / "anyscribe-tray.desktop"
+    return plist_path()
+
+
+def is_installed() -> bool:
+    return login_item_path().exists()
 
 
 def service_path(environ: Mapping[str, str] | None = None, home: Path | None = None) -> str:
@@ -105,22 +131,50 @@ def _launchctl(*args: str) -> None:
     subprocess.run(["launchctl", *args], check=False)
 
 
-def install_service() -> Path:
-    """Write the LaunchAgent plist and load it. Returns the plist path."""
-    path = plist_path()
+def render_autostart_entry(python: str, port: int, path_env: str) -> str:
+    """XDG autostart entry; ``env`` carries the PATH (a login session lacks ffmpeg etc.)."""
+    q = launcher.desktop_quote
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=anyscribe tray\n"
+        f"Exec=env {q('PATH=' + path_env)} {q(python)} -m anyscribe tray --port {port}\n"
+        "Terminal=false\n"
+        "NoDisplay=true\n"
+        "X-GNOME-Autostart-enabled=true\n"
+    )
+
+
+def install_service(port: int = tray.DEFAULT_PORT) -> Path:
+    """Register the tray to start at login. Returns the login item's path."""
+    if not supported():
+        raise NotImplementedError(f"Autostart is not supported on {sys.platform}")
+    path = login_item_path()
+    if sys.platform == "win32":
+        # No restart-on-crash on Windows: the Startup folder just runs it once.
+        launcher.create_shortcut(
+            path, launcher.pythonw(), f"-m anyscribe tray --port {port}", None, "anyscribe tray"
+        )
+        return path
     path.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "linux":
+        path.write_text(render_autostart_entry(sys.executable, port, service_path()))
+        return path
     # launchd won't create the log's folder; a missing one stops the agent starting.
     tray.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_plist(port=8457, path_env=service_path(), log=tray.TRAY_LOG))
+    path.write_text(render_plist(port=port, path_env=service_path(), log=tray.TRAY_LOG))
     _launchctl("load", str(path))
     return path
 
 
 def uninstall_service() -> bool:
-    """Unload and remove the LaunchAgent plist. Returns True if it existed."""
-    path = plist_path()
+    """Remove the login item (unloading it on macOS). Returns True if it existed."""
+    if not supported():
+        raise NotImplementedError(f"Autostart is not supported on {sys.platform}")
+    path = login_item_path()
     existed = path.exists()
     if existed:
-        _launchctl("unload", str(path))
+        if sys.platform == "darwin":
+            _launchctl("unload", str(path))
         path.unlink()
     return existed

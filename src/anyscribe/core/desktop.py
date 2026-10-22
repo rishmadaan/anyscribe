@@ -81,7 +81,9 @@ def health_is_anyscribe(port: int) -> bool:
     try:
         import httpx
 
-        r = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=1.0)
+        # A login-started server runs throttled: health took 3.5-8 s there on macOS
+        # (0.4 s from a terminal). Too short a timeout reads our own server as foreign.
+        r = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=10.0)
         body = r.json()
     except Exception:
         return False

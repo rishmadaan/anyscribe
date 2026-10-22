@@ -15,6 +15,8 @@ from anyscribe.cli.main import app
 from anyscribe.config import paths
 from anyscribe.core import desktop, tray
 
+REAL_HEALTH = desktop.health_is_anyscribe  # before the autouse fixture stubs it
+
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
@@ -240,6 +242,25 @@ def test_open_prints_url_when_no_browser(monkeypatch, fake_browser, capsys):
     fake_browser.result = False
     desktop.open_dashboard(8457)
     assert "http://127.0.0.1:8457" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "status, body, expected",
+    [(200, {"ok": True, "version": "1"}, True), (200, {"ok": True}, False), (404, {}, False)],
+)
+def test_health_is_anyscribe(monkeypatch, status, body, expected):
+    import httpx
+
+    seen = {}
+
+    def get(url, timeout):
+        seen["timeout"] = timeout
+        return httpx.Response(status, json=body)
+
+    monkeypatch.setattr(httpx, "get", get)
+    assert REAL_HEALTH(8457) is expected
+    # A launchd-started server answered in 3.5-8 s; a short timeout reads it as foreign.
+    assert seen["timeout"] >= 10
 
 
 def test_spawn_detached_sets_full_path(monkeypatch, tmp_path):

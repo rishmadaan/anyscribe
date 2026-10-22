@@ -551,6 +551,12 @@ def test_health_identity_requires_app_field(health_server):
     assert tray.health_is_anyscribe(health_server.port) is True
 
 
+def test_health_identity_accepts_pre_0_18_shape(health_server):
+    """A 0.17 server (pip upgrade, desktop install not yet re-run) is still anyscribe."""
+    health_server.body = {"ok": True, "version": "0.17.1", "dependencies": {"ffmpeg": True}}
+    assert tray.health_is_anyscribe(health_server.port) is True
+
+
 def test_post_shutdown_leaves_foreign_server_alone(health_server):
     tray._post_shutdown(health_server.port)
     assert health_server.posts == []

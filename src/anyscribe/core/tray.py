@@ -71,7 +71,11 @@ def health_is_anyscribe(port: int) -> bool:
         body = r.json()
     except Exception:
         return False
-    return r.status_code == 200 and isinstance(body, dict) and body.get("app") == "anyscribe"
+    if r.status_code != 200 or not isinstance(body, dict):
+        return False
+    # Before 0.18 there was no "app" field: a pip-upgraded user's running server is still ours.
+    legacy = "version" in body and "dependencies" in body
+    return body.get("app") == "anyscribe" or legacy
 
 
 def ensure_streams() -> None:

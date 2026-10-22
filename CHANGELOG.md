@@ -11,6 +11,42 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.17.0 — 2026-10-22
+
+**Breaking**
+- anyscribe needs Python 3.11 or newer. Python 3.10 reached end of life in
+  October 2026. On a 3.10 machine `pip install --upgrade anyscribe` stays on
+  0.16.5 instead of installing a version that cannot run there; install Python
+  3.11 or newer and reinstall to move forward. The installers check for 3.11+.
+
+**Changed**
+- The web UI's HTTP library (Starlette) now has a 1.3.1 floor, clear of its
+  published security advisories, and FastAPI moves to 0.136 or newer so the
+  two resolve together. Fresh installs already got these versions; existing
+  installs get them on upgrade.
+- Installers say `anyscribe` everywhere (they still said `scribe`), route a
+  Python that has no pip through pipx, ask Python for the real scripts folder
+  in the PATH hint, and no longer print "ready" when the post-install step
+  was skipped.
+- Dependency pins: beaupy is capped below 4 (4.0 makes Ctrl+C in onboarding
+  raise instead of taking the default), python-multipart's floor is 0.0.31.
+  CI now also tests Python 3.14.
+- Web UI bundle rebuilt with refreshed frontend dependencies (0 open npm
+  advisories, was 11).
+
+**Fixed**
+- The bundled Claude Code skill was corrected against the CLI: wrong flags,
+  JSON shapes, provider routing and chunk sizes (about 40 statements). The
+  CLI refreshes the installed copy on its next run, so Claude Code stops
+  giving you outdated commands.
+- The CLI's own help and error text: `anyscribe model info` names the right
+  repository for the turbo model; the Groq and OpenAI "no speaker labels"
+  errors say exactly how to retry; `anyscribe transcribe` hints no longer
+  name the old command.
+- README, user guide and landing page: about 40 corrections (version strings,
+  the `--json` output shape, `anyscribe --clipboard`, local setup flags,
+  Sarvam's 28 s chunks, Deepgram's chunking, ElevenLabs' segment timestamps).
+
 ## 0.16.5 — 2026-09-13
 
 - anyscribe now uses GNU AGPLv3 or later. Modified versions offered over a network

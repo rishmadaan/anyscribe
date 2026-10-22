@@ -11,7 +11,7 @@ root license; `tests/test_skill_license.py` checks both consistency and installa
 
 ## Build from source
 
-Use Python 3.10+ and Node.js 22.12+ (the release workflow uses Node 22).
+Use Python 3.11+ and Node.js 22.12+ (the release workflow uses Node 22).
 Create and activate a virtual environment, then run from the repository root:
 
 ```sh

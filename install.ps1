@@ -5,7 +5,7 @@
 #   irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 #
 # What it does:
-#   1. Checks for Python 3.10+, offers to install via winget
+#   1. Checks for Python 3.11+, offers to install via winget
 #   2. Checks for ffmpeg, offers to install via winget/choco
 #   3. Installs yt-dlp via pip
 #   4. Installs anyscribe (with menu-bar tray) via pip
@@ -55,12 +55,12 @@ function Test-Python {
                 $parts = $ver.Split('.')
                 $major = [int]$parts[0]
                 $minor = [int]$parts[1]
-                if ($major -ge 3 -and $minor -ge 10) {
+                if ($major -ge 3 -and $minor -ge 11) {
                     Write-Ok "Python $ver ($cmd)"
                     $script:PythonCmd = $cmd
                     return
                 } else {
-                    Write-Warn "Python $ver found, but 3.10+ is required"
+                    Write-Warn "Python $ver found, but 3.11+ is required"
                 }
             } catch {
                 # Not a valid Python
@@ -68,7 +68,7 @@ function Test-Python {
         }
     }
 
-    Write-Warn "Python 3.10+ not found"
+    Write-Warn "Python 3.11+ not found"
 
     if (Test-CommandExists 'winget') {
         Write-Host "    Install Python 3.12 via winget? [Y/n] " -NoNewline
@@ -85,7 +85,7 @@ function Test-Python {
         }
     }
 
-    Write-Fail "Python 3.10+ is required. Install from https://python.org"
+    Write-Fail "Python 3.11+ is required. Install from https://python.org"
     throw "Python not found"
 }
 
@@ -228,7 +228,7 @@ try {
     Write-Fail "Installation failed: $_"
     Write-Host ""
     Write-Host "  Manual install:" -ForegroundColor Yellow
-    Write-Host "    1. Install Python 3.10+ from https://python.org" -ForegroundColor Yellow
+    Write-Host "    1. Install Python 3.11+ from https://python.org" -ForegroundColor Yellow
     Write-Host "    2. pip install anyscribe" -ForegroundColor Yellow
     Write-Host "    3. Install ffmpeg from https://www.gyan.dev/ffmpeg/builds/" -ForegroundColor Yellow
     Write-Host ""

@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-The installer checks for Python 3.10+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
+The installer checks for Python 3.11+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
 
 Verify it worked:
 
@@ -280,14 +280,14 @@ The one worth knowing up front: if `anyscribe` isn't recognized, `python -m anys
 
 Prefer to install each piece yourself? The one-line installer in Step 1 does all of this for you — this path is for people who'd rather see every step.
 
-**1. Python 3.10 or newer.** Check what you have:
+**1. Python 3.11 or newer.** Check what you have:
 
 ```bash
 python3 --version      # macOS / Linux
 python --version       # Windows
 ```
 
-You should see something like `Python 3.12.x`. If you get an error or a version below 3.10:
+You should see something like `Python 3.12.x`. If you get an error or a version below 3.11:
 
 **macOS:**
 ```bash

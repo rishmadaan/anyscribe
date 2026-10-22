@@ -10,7 +10,7 @@
 #
 # What it does:
 #   1. Checks your OS (macOS or Linux)
-#   2. Checks for Python 3.10+, installs if missing
+#   2. Checks for Python 3.11+, installs if missing
 #   3. Checks for yt-dlp and ffmpeg, installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
 #   5. Tells you to run `anyscribe ui`
@@ -46,13 +46,13 @@ die()   { fail "$1"; exit 1; }
 
 command_exists() { command -v "$1" &>/dev/null; }
 
-# Find a Python >= 3.10, preferring version-suffixed binaries (a brew
+# Find a Python >= 3.11, preferring version-suffixed binaries (a brew
 # python@3.12 install provides python3.12; the bare python3 may still be
 # the old system one).
 resolve_python() {
     local cand
-    for cand in python3.12 python3.11 python3.10 python3; do
-        if command_exists "$cand" && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+    for cand in python3.13 python3.12 python3.11 python3; do
+        if command_exists "$cand" && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
             PY="$cand"
             return 0
         fi
@@ -220,14 +220,14 @@ check_python() {
         ok "Python $("$PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")') ($PY)"
         return 0
     fi
-    warn "Python 3.10+ not found"
+    warn "Python 3.11+ not found"
     read -rp "    Install Python? [Y/n] " answer </dev/tty
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
         install_package "Python" "python@3.12" "python3" ""
-        resolve_python || die "Python installed but no python3.10+ found on PATH. Open a new terminal and re-run the installer."
+        resolve_python || die "Python installed but no python3.11+ found on PATH. Open a new terminal and re-run the installer."
     else
-        die "Python 3.10+ is required. Install from https://python.org and try again."
+        die "Python 3.11+ is required. Install from https://python.org and try again."
     fi
 }
 

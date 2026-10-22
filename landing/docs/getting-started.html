@@ -92,7 +92,7 @@
 <p><strong>Windows (PowerShell):</strong></p>
 <pre><code class="language-powershell">irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 </code></pre>
-<p>The installer checks for Python 3.10+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so <code>anyscribe</code> works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).</p>
+<p>The installer checks for Python 3.11+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so <code>anyscribe</code> works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).</p>
 <p>Verify it worked:</p>
 <pre><code class="language-bash">anyscribe --version
 </code></pre>
@@ -258,11 +258,11 @@ and can be removed.</p>
 <p>The one worth knowing up front: if <code>anyscribe</code> isn't recognized, <code>python -m anyscribe</code> is a drop-in replacement that always works (<code>python -m anyscribe onboard</code>, <code>python -m anyscribe transcribe "..."</code>).</p>
 <h2 id="appendix-manual-install">Appendix: manual install</h2>
 <p>Prefer to install each piece yourself? The one-line installer in Step 1 does all of this for you — this path is for people who'd rather see every step.</p>
-<p><strong>1. Python 3.10 or newer.</strong> Check what you have:</p>
+<p><strong>1. Python 3.11 or newer.</strong> Check what you have:</p>
 <pre><code class="language-bash">python3 --version      # macOS / Linux
 python --version       # Windows
 </code></pre>
-<p>You should see something like <code>Python 3.12.x</code>. If you get an error or a version below 3.10:</p>
+<p>You should see something like <code>Python 3.12.x</code>. If you get an error or a version below 3.11:</p>
 <p><strong>macOS:</strong></p>
 <pre><code class="language-bash">brew install python@3.12
 </code></pre>

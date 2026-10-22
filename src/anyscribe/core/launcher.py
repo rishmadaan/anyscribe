@@ -81,7 +81,7 @@ def render_desktop_entry(python: str, port: int, icon: str = APP_NAME) -> str:
         f"Exec={desktop_quote(python)} -m anyscribe desktop open --port {port}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"
-        "Categories=AudioVideo;Utility;\n"
+        "Categories=AudioVideo;Audio;\n"
     )
 
 

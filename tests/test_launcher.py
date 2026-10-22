@@ -69,6 +69,8 @@ def test_info_plist_is_background_launcher():
 def test_desktop_entry_fields():
     txt = launcher.render_desktop_entry("/usr/bin/python3", 8457)
     assert "Terminal=false" in txt and "Icon=anyscribe" in txt and "--port 8457" in txt
+    # One main category plus an additional one, or some menus list the app twice.
+    assert "\nCategories=AudioVideo;Audio;\n" in txt
 
 
 def test_install_launcher_macos_writes_app_tree(home, monkeypatch):

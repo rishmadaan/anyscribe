@@ -21,7 +21,9 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   now, and opens the dashboard. Click the app to open the dashboard; closing
   the browser tab leaves it running; Quit in the tray menu stops it. Nothing
   is downloaded or signed: the app is built on your own machine from the
-  anyscribe you installed, so there is no security prompt.
+  anyscribe you installed. The launcher is generated locally and needs no
+  separately signed app download. It avoided Gatekeeper prompts in our Mac
+  test; Windows click-through remains unverified.
 - `anyscribe desktop status` says whether the app is installed, running and
   healthy, and names the fix when it isn't. `anyscribe desktop uninstall`
   stops anyscribe and removes the app, the login item and the icons; your

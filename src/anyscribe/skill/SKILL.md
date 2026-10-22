@@ -77,7 +77,7 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Initial setup (headless, agent or script) | `anyscribe onboard --provider X --api-key $KEY --yes --json` *(see rule below)* |
 | Migrate from the old `anyscribecli` install | `anyscribe migrate` (`--dry-run` to preview, `--json` for machine output) |
 | Use the web UI | `anyscribe ui` (opens browser dashboard at 127.0.0.1:8457) |
-| Install the desktop app (app icon, menu-bar tray, start at login; needs `pip install "anyscribe[tray]"`) | `anyscribe desktop install --yes --json` (`--no-launch` to not start it now) |
+| Install the desktop app (app icon, menu-bar tray, start at login; needs `pip install "anyscribe[tray]"`) | `anyscribe desktop install --yes --json` (`--no-launch`: Do not open the dashboard now. On macOS, registering the login item still starts the tray; on Windows and Linux this also skips starting it now.) |
 | Is the desktop app installed / running / healthy? | `anyscribe desktop status --json` |
 | Remove the desktop app (stops it; keeps transcripts, config, keys) | `anyscribe desktop uninstall --yes --json` |
 | Run the menu-bar tray once, without installing the app | `anyscribe tray` (prefer `desktop install`; needs the tray extra) |

@@ -19,7 +19,7 @@ from anyscribe.core import desktop, launcher, service, tray
 
 desktop_app = typer.Typer(
     name="desktop",
-    help="The [bold]desktop app[/bold]: app icon, start at login, menu-bar tray.",
+    help="The [bold]desktop app[/bold]: app icon, start at login, tray icon.",
     no_args_is_help=True,
 )
 
@@ -60,7 +60,14 @@ def install(
     port: int = typer.Option(
         tray.DEFAULT_PORT, "--port", "-p", min=1, max=65535, help="Port for the dashboard."
     ),
-    no_launch: bool = typer.Option(False, "--no-launch", help="Don't start it or open it now."),
+    no_launch: bool = typer.Option(
+        False,
+        "--no-launch",
+        help=(
+            "Do not open the dashboard now. On macOS, registering the login item still starts "
+            "the tray; on Windows and Linux this also skips starting it now."
+        ),
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output result as JSON."),
 ) -> None:
@@ -79,7 +86,7 @@ def install(
         _emit(m)
         return
     console.print(f"[green]Installed:[/green] {escape(m['launcher'])}", soft_wrap=True)
-    console.print(f"[green]Starts at login:[/green] {escape(m['login_item'])}", soft_wrap=True)
+    console.print("[green]Starts at login:[/green] yes")
     if no_launch:
         console.print("[dim]Click the anyscribe app to open the dashboard.[/dim]")
     else:

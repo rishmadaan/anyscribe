@@ -464,7 +464,7 @@ back in. To stop anyscribe without the icon: <code>anyscribe desktop uninstall</
 <p>That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is
 for apps downloaded through a web browser. Desktop mode doesn't download an app:
 it builds the small launcher on your own machine from the anyscribe you just
-installed, so there is nothing for those checks to flag.</p>
+installed. The launcher is generated locally and needs no separately signed app download. It avoided Gatekeeper prompts in our Mac test; Windows click-through remains unverified.</p>
 <h3 id="port-already-in-use"><code>port already in use</code></h3>
 <p><strong><code>anyscribe ui</code> handles this itself.</strong> If the port is taken it looks at the next
 ten, starts on the first free one, and tells you which:</p>

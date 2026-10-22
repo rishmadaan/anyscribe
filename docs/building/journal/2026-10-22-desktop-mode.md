@@ -1,7 +1,7 @@
 ---
 type: feature
 tags: [desktop, tray, installers, launchd, windows, linux]
-tldr: "v0.18.0 adds desktop mode: `anyscribe desktop install` writes an app launcher and a login item with each OS's own plain files, starts the tray and opens the dashboard; the one-line installers run it by default. No signed downloadable app: a locally built .app carries no quarantine attribute, so no Gatekeeper or SmartScreen prompt and no certificate. The launchd login item runs as ProcessType Interactive after measuring a plain job throttling /api/health to 5-13 s."
+tldr: "v0.18.0 adds desktop mode: `anyscribe desktop install` writes an app launcher and a login item with each OS's own plain files, starts the tray and opens the dashboard; the one-line installers run it by default. No signed downloadable app and no certificate. The launcher is generated locally and needs no separately signed app download. It avoided Gatekeeper prompts in our Mac test; Windows click-through remains unverified. The launchd login item runs as ProcessType Interactive after measuring a plain job throttling /api/health to 5-13 s."
 ---
 
 # v0.18.0: desktop mode

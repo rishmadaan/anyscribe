@@ -340,7 +340,7 @@ export default function SettingsPage() {
               />
             </SettingRow>
             <p className="text-xs text-text-muted mt-1">
-              Starts anyscribe in the menu bar (macOS) or system tray (Windows, Linux) when you log in.
+              Starts anyscribe in the background when you log in.
             </p>
           </div>
         </section>

@@ -405,7 +405,7 @@ Launcher and login item per OS:
 | Flag | On | Description | Default |
 |------|----|-------------|---------|
 | `--port` / `-p` | `install`, `open` | Dashboard port, stored in the manifest and used by the launcher and login item (`open` defaults to the installed port) | `8457` |
-| `--no-launch` | `install` | Install only; don't start the tray or open the browser now | Off |
+| `--no-launch` | `install` | Do not open the dashboard now. On macOS, registering the login item still starts the tray; on Windows and Linux this also skips starting it now. | Off |
 | `--yes` / `-y` | `install`, `uninstall` | Skip confirmation. Required in non-TTY (agent) contexts unless `--json` is given | Off |
 | `--json` / `-j` | `install`, `uninstall`, `status` | `{"success", "data", "error"}` envelope | Off |
 

@@ -119,6 +119,7 @@
 <h2 id="step-2-first-run">Step 2 — First run</h2>
 <p>You can set up anyscribe either way — both paths save the same config, so pick whichever feels natural.</p>
 <h3 id="option-a-recommended-web-ui">Option A (recommended): Web UI</h3>
+<p><strong>Used the one-line installer?</strong> The dashboard is already open in your browser with the setup wizard; skip the command below and go straight to step 1. Run <code>anyscribe ui</code> only in CLI mode (installer with <code>--no-desktop</code>, or plain pip).</p>
 <pre><code class="language-bash">anyscribe ui
 </code></pre>
 <p>Opens a local dashboard at <code>http://127.0.0.1:8457</code>. A <strong>setup wizard pops up on first launch</strong>:</p>
@@ -129,7 +130,7 @@
 <li><strong>Confirm your workspace</strong> — where your transcripts live, default <code>~/anyscribe/</code>.</li>
 </ol>
 <p>Click around — no commands to memorize.</p>
-<p>Close the tab when you're finished; to stop the server, hit Ctrl+C in the terminal or click <strong>Shutdown</strong> in the sidebar.</p>
+<p>Close the tab when you're finished. In CLI mode, stop the server with Ctrl+C in the terminal or <strong>Shutdown</strong> in the sidebar; in desktop mode leave it running (Quit from the tray icon stops it).</p>
 <h3 id="option-b-terminal-interactive">Option B: Terminal (interactive)</h3>
 <pre><code class="language-bash">anyscribe onboard                   # macOS / Linux
 python -m anyscribe onboard      # Windows (first time — prints PATH fix)

@@ -525,6 +525,10 @@ run_post_install() {
         if [[ "$INSTALL_METHOD" == "git" ]]; then
             echo ""
             warn 'Desktop mode skipped: git installs do not include the tray extra. Run: pip install "anyscribe[tray]" && anyscribe desktop install'
+        elif [[ "$OS" == "linux" && -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+            # A server over SSH: no tray to show, and a dashboard would open in a text browser.
+            echo ""
+            warn "Desktop mode skipped: no graphical session detected. On a desktop, run: anyscribe desktop install"
         else
             want_desktop=true
         fi

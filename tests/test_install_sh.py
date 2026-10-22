@@ -257,7 +257,8 @@ def run_installer_dry(tmp_path, *args, dry_run=True, setup=""):
     flags = (["--dry-run"] if dry_run else []) + list(args)
     out = subprocess.run(
         [bash, "-c", harness, "install.sh", *flags],
-        env={**os.environ, "SCRIPT": str(SCRIPT)},
+        # A graphical session by default, so a headless CI box still takes the desktop path.
+        env={**os.environ, "SCRIPT": str(SCRIPT), "DISPLAY": os.environ.get("DISPLAY", ":0")},
         capture_output=True,
         text=True,
         check=True,
@@ -280,6 +281,18 @@ def test_git_method_skips_desktop_and_says_why(tmp_path):
     # The skip notice names the retry command, so check that nothing ran it.
     assert "[dry-run]" in out and "desktop install --yes" not in out
     assert "Desktop mode skipped" in out and "[tray]" in out
+
+
+def test_headless_linux_skips_desktop_and_says_why(tmp_path):
+    out = run_installer_dry(tmp_path, setup="OS=linux; unset DISPLAY WAYLAND_DISPLAY")
+    assert "[dry-run]" in out and "desktop install --yes" not in out
+    assert (
+        "Desktop mode skipped: no graphical session detected. "
+        "On a desktop, run: anyscribe desktop install"
+    ) in out
+    # Wayland alone is a graphical session.
+    out = run_installer_dry(tmp_path, setup="OS=linux; unset DISPLAY; export WAYLAND_DISPLAY=w0")
+    assert "desktop install --yes" in out
 
 
 def test_ps1_has_nodesktop_switch_and_desktop_step():

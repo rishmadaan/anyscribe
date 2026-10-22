@@ -94,6 +94,8 @@ You can set up anyscribe either way — both paths save the same config, so pick
 
 ### Option A (recommended): Web UI
 
+**Used the one-line installer?** The dashboard is already open in your browser with the setup wizard; skip the command below and go straight to step 1. Run `anyscribe ui` only in CLI mode (installer with `--no-desktop`, or plain pip).
+
 ```bash
 anyscribe ui
 ```
@@ -107,7 +109,7 @@ Opens a local dashboard at `http://127.0.0.1:8457`. A **setup wizard pops up on 
 
 Click around — no commands to memorize.
 
-Close the tab when you're finished; to stop the server, hit Ctrl+C in the terminal or click **Shutdown** in the sidebar.
+Close the tab when you're finished. In CLI mode, stop the server with Ctrl+C in the terminal or **Shutdown** in the sidebar; in desktop mode leave it running (Quit from the tray icon stops it).
 
 ### Option B: Terminal (interactive)
 

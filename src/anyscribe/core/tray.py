@@ -12,6 +12,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import IO
@@ -71,6 +72,20 @@ def health_is_anyscribe(port: int) -> bool:
     except Exception:
         return False
     return r.status_code == 200 and isinstance(body, dict) and body.get("app") == "anyscribe"
+
+
+def ensure_streams() -> None:
+    """Give a windowless ``pythonw.exe`` somewhere to write.
+
+    There ``sys.stdout``/``sys.stderr`` are None, and uvicorn's logging setup
+    calls ``sys.stdout.isatty()``: the server would die before it starts.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+    log = open(TRAY_LOG, "a", buffering=1, encoding="utf-8")
+    sys.stdout = sys.stdout or log
+    sys.stderr = sys.stderr or log
 
 
 def _windows_pid_alive(pid: int) -> bool:

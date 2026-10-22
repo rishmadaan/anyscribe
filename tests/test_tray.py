@@ -623,15 +623,18 @@ def test_tray_does_not_attach_to_foreign_server(monkeypatch, health_server, caps
     assert "used by another program" in capsys.readouterr().err
 
 
-def test_tray_records_server_pid(monkeypatch):
+def test_tray_records_server_pid(monkeypatch, tmp_path):
     class Proc:
         pid = 4321
 
         def wait(self, timeout=None):
             return 0
 
-    seen, real_write = [], tray.write_pidfile
-    monkeypatch.setattr(tray_cmd.subprocess, "Popen", lambda *a, **k: Proc())
+    seen, real_write, popen_kwargs = [], tray.write_pidfile, {}
+    monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
+    monkeypatch.setattr(
+        tray_cmd.subprocess, "Popen", lambda *a, **k: popen_kwargs.update(k) or Proc()
+    )
     monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: None)
     monkeypatch.setattr(
         tray_cmd.core,
@@ -641,3 +644,35 @@ def test_tray_records_server_pid(monkeypatch):
     _run_fake_tray(monkeypatch, _free_port())
     assert (4321, tray.SERVER_PIDFILE) in seen
     assert not tray.SERVER_PIDFILE.exists()  # removed again by the teardown
+    # Under pythonw.exe the tray has no streams of its own to hand the server.
+    assert popen_kwargs["stdin"] is subprocess.DEVNULL
+    assert popen_kwargs["stdout"].name == popen_kwargs["stderr"].name == str(tray.TRAY_LOG)
+
+
+def test_ensure_streams_replaces_none(monkeypatch, tmp_path):
+    from anyscribe.web.app import _ensure_streams
+
+    monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
+    monkeypatch.setattr(sys, "stdout", None)
+    real_stderr = sys.stderr
+    _ensure_streams()
+    try:
+        assert sys.stdout is not None and sys.stdout.name == str(tray.TRAY_LOG)
+        assert sys.stderr is real_stderr  # a working stream is left alone
+    finally:
+        sys.stdout.close()
+
+
+def test_uvicorn_config_with_no_stdout(tmp_path):
+    """The reviewer's probe: uvicorn's log setup calls sys.stdout.isatty() (None under pythonw)."""
+    probe = (
+        "import sys; sys.stdout = None; "
+        "from anyscribe.web.app import _ensure_streams; _ensure_streams(); "
+        "import uvicorn; uvicorn.Config('anyscribe.web.app:create_app', factory=True)"
+    )
+    env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+    r = subprocess.run(
+        [sys.executable, "-c", probe], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / ".anyscribe" / "logs" / "tray.log").exists()

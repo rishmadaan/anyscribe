@@ -129,6 +129,7 @@ def tray(
 
     Requires the optional extra: [bold]pip install 'anyscribe\[tray]'[/bold]
     """
+    core.ensure_streams()
     # Held for the tray's whole life; checked before the extra so a duplicate exits quietly.
     lock = core.acquire_instance_lock()
     if lock is None:
@@ -165,10 +166,16 @@ def _run_tray(port: int) -> None:
             state["foreign"] = True
             _log(f"port {port} is used by another program; not starting the server")
             return
-        state["proc"] = subprocess.Popen(
-            [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
-            **_child_kwargs(),
-        )
+        core.TRAY_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(core.TRAY_LOG, "ab") as log:
+            # Explicit streams: under pythonw.exe the tray has none to hand down.
+            state["proc"] = subprocess.Popen(
+                [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                **_child_kwargs(),
+            )
         core.write_pidfile(state["proc"].pid, core.SERVER_PIDFILE)
 
     def on_open(icon, item) -> None:  # noqa: ANN001

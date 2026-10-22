@@ -140,3 +140,5 @@ one). Stop-and-replace remains the fallback, and the only path on Windows.
 `_kickstart` runs plain `launchctl kickstart` (it is reached only with no tray
 alive), and the plist's `ThrottleInterval` is 10 s, launchd's default, so a
 click within a minute of Quit comes back under launchd inside the wait.
+
+2026-10-22 correction: ThrottleInterval is 10 (launchd's default) since the r1b fix; the 60 above (in "The launchd measurement") is history, and so is "every minute" in "What shipped": a non-zero exit under `KeepAlive` would relaunch every 10 s.

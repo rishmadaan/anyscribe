@@ -313,6 +313,12 @@ def test_uninstall_removes_everything(calls, tmp_manifest):
     assert not paths.DESKTOP_DIR.exists() and desktop.read_manifest() is None
 
 
+def test_uninstall_without_install_leaves_hand_started_server(monkeypatch, calls):
+    monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: True)
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("must not stop"))
+    assert desktop.uninstall()["stopped"] is False
+
+
 def test_uninstall_stops_tray_and_warns_about_running_job(monkeypatch, tmp_manifest, calls):
     tmp_manifest()
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: calls["stop"].append(port) or True)

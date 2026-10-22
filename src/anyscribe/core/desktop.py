@@ -200,8 +200,11 @@ def uninstall() -> dict:
     """Stop the tray and server, remove launcher, login item, icons and manifest."""
     m = read_manifest()
     port = m["port"] if m else tray.DEFAULT_PORT
-    was_serving = tray.port_responding(port)
-    stopped = tray.stop_tray(port) or was_serving
+    stopped = False
+    # Nothing recorded and no tray: a server on the port was started by hand; leave it.
+    if m or tray.read_pidfile():
+        was_serving = tray.port_responding(port)
+        stopped = tray.stop_tray(port) or was_serving
     login_item = service.uninstall_service()  # after the stop, so macOS unloads the job
     launcher_removed = launcher.uninstall_launcher()
     shutil.rmtree(paths.DESKTOP_DIR, ignore_errors=True)

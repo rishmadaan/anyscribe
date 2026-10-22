@@ -388,7 +388,7 @@ anyscribe desktop open                            # what the app icon runs
 | Subcommand | What it does |
 |-----------|--------------|
 | `install` | Renders the icons into `~/.anyscribe/desktop/`, writes the app launcher and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records everything in `~/.anyscribe/desktop.json`. Running it again is a clean reinstall: it stops the old tray and replaces both files (this is also the fix after upgrading Python or for a stale PATH). |
-| `uninstall` | Stops the tray and its server, removes the launcher, login item, icons and manifest. Any transcription in progress is cancelled and resumes from its checkpoint next run. Never touches `~/anyscribe/`, config or keys. |
+| `uninstall` | Stops the tray and its server (with nothing installed and no tray running, a hand-started `anyscribe ui` is left alone), removes the launcher, login item, icons and manifest. Any transcription in progress is cancelled and resumes from its checkpoint next run. Never touches `~/anyscribe/`, config or keys. |
 | `status` | Reports what is installed, whether the tray and server are running, and `healthy` with a `reason` when not. Read-only. |
 | `open` | Opens the dashboard, starting the tray first if nothing is serving (falls back to a bare `anyscribe ui --no-open` when the tray cannot run, e.g. no display). |
 

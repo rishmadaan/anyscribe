@@ -18,6 +18,7 @@ from anyscribe.cli.main import app
 from anyscribe.core import launcher, service, tray
 
 runner = CliRunner()
+REAL_READ_PIDFILE = tray.read_pidfile  # before fake_agents stubs it
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +42,7 @@ def _free_port() -> int:
 
 def test_pidfile_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     assert tray.read_pidfile() is None
     tray.write_pidfile()
     assert tray.read_pidfile() == os.getpid()
@@ -408,7 +409,7 @@ def test_child_kwargs_per_platform(monkeypatch):
 
 def test_stop_tray_shuts_down_and_kills(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     tray.PIDFILE.write_text("777")
     killed, posted = [], []
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: not killed)  # exits on SIGTERM
@@ -430,7 +431,7 @@ def test_stop_tray_without_tray_signals_nothing(monkeypatch, tmp_path):
 
 def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     tray.PIDFILE.write_text("777")
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
@@ -447,7 +448,7 @@ def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_pat
 def test_stop_tray_waits_for_port_to_free(monkeypatch, tmp_path):
     # The old server must be gone before stop_tray returns, or a new tray attaches to it.
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     tray.PIDFILE.write_text("777")
     alive = iter([True, True, False])  # read_pidfile, first poll, then exited
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: next(alive, False))
@@ -468,7 +469,7 @@ def test_stop_tray_waits_for_port_to_free(monkeypatch, tmp_path):
 
 def test_stop_tray_kills_when_pid_outlives_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     tray.PIDFILE.write_text("777")
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     monkeypatch.setattr(tray, "port_responding", lambda port: False)
@@ -566,10 +567,92 @@ def test_post_shutdown_leaves_foreign_server_alone(health_server):
 
 
 def test_pid_is_anyscribe_rejects_non_positive_and_other_programs():
-    assert tray.pid_is_anyscribe(0) is False and tray.pid_is_anyscribe(-1) is False
+    assert tray.pid_is_anyscribe(0, "tray") is False and tray.pid_is_anyscribe(-1, "tray") is False
     child = subprocess.Popen(_sleeper())
     try:
-        assert tray.pid_is_anyscribe(child.pid) is False
+        assert tray.pid_is_anyscribe(child.pid, "tray") is False
+    finally:
+        child.kill()
+        child.wait()
+
+
+@pytest.mark.parametrize(
+    "cmdline, role, expected",
+    [
+        ("/usr/bin/python3 -m anyscribe tray --port 8457", "tray", True),
+        ("/usr/bin/python3 -m anyscribe ui --port 8457 --no-open", "ui", True),
+        ("/usr/bin/python3 -m anyscribe ui --port 8457 --no-open", "tray", False),
+        ("/home/x/.venv/bin/python3 /home/x/.venv/bin/scribe tray --port 8457", "tray", True),
+        ("/home/x/.venv/bin/python3 /home/x/.venv/bin/ascli tray", "tray", True),
+        ('"C:\\Py\\python.exe" "C:\\Py\\Scripts\\anyscribe.exe" tray --port 8457', "tray", True),
+        ("C:\\Py\\Scripts\\anyscribe.exe tray", "tray", True),
+        ("/x/anyscribe/.venv/bin/python -c import time", "tray", False),  # path, not command
+        ("/usr/bin/python3 -m anyscribe https://x", "tray", False),  # a transcription
+        ("/usr/bin/transcribe tray", "tray", False),
+        ("/usr/bin/python3 -m anyscribe traybox", "tray", False),
+    ],
+)
+def test_command_line_identity(cmdline, role, expected):
+    assert tray.command_line_is(cmdline, role) is expected
+
+
+def test_command_line_identity_ignores_case_only_on_windows(monkeypatch):
+    cmd = "C:\\PY\\SCRIPTS\\ANYSCRIBE.EXE TRAY"
+    monkeypatch.setattr(tray.os, "name", "posix")
+    assert tray.command_line_is(cmd, "tray") is False
+    monkeypatch.setattr(tray.os, "name", "nt")
+    assert tray.command_line_is(cmd, "tray") is True
+
+
+def _child(*extra: str) -> subprocess.Popen:
+    """A sleeping Python whose command line carries ``extra`` after the script.
+
+    Returns once it runs its script: mid-exec (macOS re-execs a framework
+    Python) ps can show another command line, or none.
+    """
+    script = "import time; print('ready', flush=True); time.sleep(30)"
+    child = subprocess.Popen([sys.executable, "-c", script, *extra], stdout=subprocess.PIPE)
+    assert child.stdout.readline().strip() == b"ready"
+    return child
+
+
+def test_path_containing_anyscribe_is_not_a_tray_and_survives_stop_tray(tmp_path):
+    """A repo checkout's own python (".../anyscribe/.venv/bin/python -c ...") is not the tray."""
+    child = _child(str(tmp_path / "anyscribe-x" / "python"))
+    try:
+        assert tray.pid_is_anyscribe(child.pid, "tray") is False
+        tray.PIDFILE.write_text(str(child.pid))
+        assert tray.stop_tray(_free_port(), timeout=1) is False
+        time.sleep(0.3)  # a signal, had one been sent, has landed
+        assert child.poll() is None  # this exact process is still running
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_transcription_is_not_a_tray():
+    child = _child("-m", "anyscribe", "https://x")
+    try:
+        assert tray.pid_is_anyscribe(child.pid, "tray") is False
+        assert tray.pid_is_anyscribe(child.pid, "ui") is False
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_alias_tray_is_recognised_and_keeps_its_login_item_job(fake_agents, monkeypatch):
+    """A tray started as `scribe tray`: recognised, so the Settings toggle does not unload it."""
+    agents, calls = fake_agents
+    child = _child(str(Path("/x/bin/scribe")), "tray", "--port", "8457")
+    try:
+        assert tray.pid_is_anyscribe(child.pid, "tray") is True
+        assert tray.pid_is_anyscribe(child.pid, "ui") is False
+        tray.PIDFILE.write_text(str(child.pid))
+        monkeypatch.setattr(service.tray, "read_pidfile", REAL_READ_PIDFILE)
+        path = service.install_service()
+        assert service.uninstall_service() is True and not path.exists()
+        assert not any(c[0] == "unload" for c in calls)
+        assert child.poll() is None
     finally:
         child.kill()
         child.wait()
@@ -600,7 +683,7 @@ def test_stop_tray_stops_recorded_server(monkeypatch):
     tray.PIDFILE.write_text("777")
     tray.SERVER_PIDFILE.write_text("888")
     killed = []
-    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid, role: True)
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: pid not in [k[0] for k in killed])
     monkeypatch.setattr(tray, "port_responding", lambda port: False)
     monkeypatch.setattr(tray.os, "kill", lambda pid, sig: killed.append((pid, sig)))

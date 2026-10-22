@@ -9,6 +9,7 @@ tray-free.
 from __future__ import annotations
 
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -123,11 +124,23 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def pid_is_anyscribe(pid: int) -> bool:
-    """True if this pid's command line names anyscribe.
+def command_line_is(cmdline: str, role: str) -> bool:
+    """True if ``cmdline`` runs anyscribe's ``role`` command ("tray" or "ui").
+
+    Module form (``python -m anyscribe tray``) or a console script under any of
+    the three names (``.../bin/scribe tray``, ``...\\Scripts\\anyscribe.exe" tray``;
+    Windows quotes a spaced path, hence the optional quote).
+    """
+    pattern = rf'(?:-m\s+anyscribe|[\\/](?:anyscribe|scribe|ascli)(?:\.exe)?"?)\s+{role}\b'
+    return re.search(pattern, cmdline, re.IGNORECASE if os.name == "nt" else 0) is not None
+
+
+def pid_is_anyscribe(pid: int, role: str) -> bool:
+    """True if this pid is running anyscribe's ``role`` command ("tray" or "ui").
 
     A pidfile can outlive a crash or reboot, and its number can be reused by
-    an unrelated program: never signal a pid on its number alone.
+    an unrelated program: never signal a pid on its number alone. Neither a
+    path that merely contains "anyscribe" nor a transcription run is a tray.
     """
     if pid <= 0:
         return False
@@ -140,15 +153,15 @@ def pid_is_anyscribe(pid: int) -> bool:
         out = subprocess.run(args, capture_output=True, text=True, timeout=15).stdout
     except (OSError, subprocess.SubprocessError):
         return False
-    return "anyscribe" in out
+    return command_line_is(out, role)
 
 
-def _read_pid(path: Path) -> int | None:
+def _read_pid(path: Path, role: str) -> int | None:
     try:
         pid = int(path.read_text().strip())
     except (FileNotFoundError, ValueError, OSError):
         return None
-    return pid if pid > 0 and _pid_alive(pid) and pid_is_anyscribe(pid) else None
+    return pid if pid > 0 and _pid_alive(pid) and pid_is_anyscribe(pid, role) else None
 
 
 def read_pidfile() -> int | None:
@@ -157,7 +170,7 @@ def read_pidfile() -> int | None:
     A stale pidfile (process gone, or its pid reused by another program) is
     treated as absent.
     """
-    return _read_pid(PIDFILE)
+    return _read_pid(PIDFILE, "tray")
 
 
 def write_pidfile(pid: int | None = None, path: Path | None = None) -> None:
@@ -240,7 +253,7 @@ def stop_tray(port: int, timeout: float = 10.0) -> bool:
     """
     _post_shutdown(port)
     tray_signalled = _terminate(read_pidfile(), port, timeout)
-    server_pid = _read_pid(SERVER_PIDFILE)
+    server_pid = _read_pid(SERVER_PIDFILE, "ui")
     server_signalled = server_pid is not None and _terminate(server_pid, port, timeout)
     remove_pidfile(force=True)
     remove_pidfile(force=True, path=SERVER_PIDFILE)

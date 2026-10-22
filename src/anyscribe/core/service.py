@@ -168,13 +168,15 @@ def install_service(port: int = tray.DEFAULT_PORT) -> Path:
 
 
 def uninstall_service() -> bool:
-    """Remove the login item (unloading it on macOS). Returns True if it existed."""
+    """Remove the login item; a running tray keeps running. True if it existed."""
     if not supported():
         raise NotImplementedError(f"Autostart is not supported on {sys.platform}")
     path = login_item_path()
     existed = path.exists()
     if existed:
-        if sys.platform == "darwin":
+        # Unload kills the tray, and with it the dashboard the Startup toggle sits
+        # in; only unload a registration that has no live tray behind it.
+        if sys.platform == "darwin" and tray.read_pidfile() is None:
             _launchctl("unload", str(path))
         path.unlink()
     return existed

@@ -394,7 +394,7 @@ anyscribe uninstall-service --yes --json   # removes it
 | `--yes` | `-y` | Skip confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json` | `-j` | Output result as JSON: `{"success": true, "data": {...}, "error": null}` |
 
-`install-service` returns `{"path": "<login item>", "plist": "<same path>"}` (`plist` is kept for older agents); `uninstall-service` returns `{"removed": true|false}`. On macOS, installation loads the LaunchAgent and can start the tray immediately as well as at login, and removal unloads it and can stop a tray it manages, including the server that tray started. On Windows and Linux, removal only deletes the file; a running tray keeps running until quit. A manually launched tray must be quit separately. Neither command uninstalls anyscribe.
+`install-service` returns `{"path": "<login item>", "plist": "<same path>"}` (`plist` is kept for older agents); `uninstall-service` returns `{"removed": true|false}`. On macOS, installation loads the LaunchAgent and can start the tray immediately as well as at login. Removal removes the login item; a tray that is already running keeps running until you Quit it from its menu (or run `anyscribe desktop uninstall`, which stops it). Neither command uninstalls anyscribe.
 
 ---
 

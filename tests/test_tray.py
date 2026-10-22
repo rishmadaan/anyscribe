@@ -130,6 +130,7 @@ def fake_agents(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(service, "_launchctl", lambda *a: calls.append(a))
     monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
+    monkeypatch.setattr(service.tray, "read_pidfile", lambda: None)
     return agents, calls
 
 
@@ -148,6 +149,16 @@ def test_uninstall_removes_and_unloads(fake_agents):
     assert service.uninstall_service() is True
     assert not path.exists()
     assert ("unload", str(path)) in calls
+
+
+def test_uninstall_leaves_running_tray_alone(fake_agents, monkeypatch):
+    """Unload would kill the tray serving the Settings page the toggle lives on."""
+    agents, calls = fake_agents
+    path = service.install_service()
+    monkeypatch.setattr(service.tray, "read_pidfile", lambda: 4242)
+    assert service.uninstall_service() is True
+    assert not path.exists()
+    assert not any(c[0] == "unload" for c in calls)
 
 
 def test_uninstall_when_absent(fake_agents):

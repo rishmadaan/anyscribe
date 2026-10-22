@@ -966,7 +966,7 @@ Remove the login auto-start registered by `anyscribe install-service`.
 anyscribe uninstall-service
 ```
 
-Deletes the login item that `install-service` created (the file that starts the tray at login). On macOS it also unloads the LaunchAgent: if that login item started the tray you're running now, this stops that tray and any server it started. On Windows and Linux a running tray keeps going until you quit it. A tray you started yourself with `anyscribe tray` keeps running until you quit it. anyscribe itself stays installed.
+Removes the login item that `install-service` created (the file that starts the tray at login). A tray that is already running keeps running until you Quit it from its menu (or run `anyscribe desktop uninstall`, which stops it). anyscribe itself stays installed.
 
 ### Flags
 
@@ -982,7 +982,7 @@ anyscribe uninstall-service            # prompts for confirmation
 anyscribe uninstall-service --yes      # no prompt
 ```
 
-> **Fully removing the tray?** `anyscribe uninstall-service` stops it from starting at login, and on macOS stops a tray that was started that way. Any other running tray keeps running: quit it from its menu (or Ctrl+C the terminal it's running in).
+> **Fully removing the tray?** `anyscribe uninstall-service` only stops it from starting at login. A tray that is already running keeps running: quit it from its menu (or Ctrl+C the terminal it's running in), or run `anyscribe desktop uninstall`, which stops it.
 
 ---
 

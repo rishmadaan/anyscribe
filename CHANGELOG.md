@@ -11,6 +11,55 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.17.0 — 2026-10-22
+
+**Breaking**
+- anyscribe now needs Python 3.11 or newer (Python 3.10 reached end of life
+  in October 2026). If you installed with pip or the one-line installer,
+  nothing breaks on 3.10: `anyscribe update` and `pip install --upgrade
+  anyscribe` keep you on 0.16.5 and report it as up to date. To move to
+  0.17.0, re-run the one-line installer from the getting-started guide: it
+  finds or installs Python 3.11 or newer and installs anyscribe with it. Then
+  run `anyscribe --version`. If it still says 0.16.5, an older copy comes
+  first on your PATH: remove it with `python3.10 -m pip uninstall anyscribe`
+  (Windows: `py -3.10 -m pip uninstall anyscribe`) and open a new terminal.
+  Your settings and transcripts stay where they are. Optional add-ons stay
+  with the old Python: if you use offline transcription, run
+  `anyscribe local setup --model <size> --yes` again (downloaded models stay
+  on disk); if you use the MCP server, install `anyscribe[mcp]` again with
+  the new Python.
+
+**Changed**
+- anyscribe now requires Starlette 1.3.1 or newer (the web framework under
+  the web UI), the first version clear of its published security advisories,
+  and FastAPI 0.133 or newer so the two install together. Fresh installs
+  already got these; upgrading brings older installs up to them.
+- Installers say `anyscribe` everywhere (they still said `scribe`) and no
+  longer print "ready" when the post-install step was skipped. The macOS and
+  Linux installer routes a Python that has no pip through pipx, using that
+  same Python, and asks Python for the real scripts folder in the PATH hint.
+- Dependency pins: beaupy is capped below 4 (4.0 makes Ctrl+C in onboarding
+  raise instead of taking the default); python-multipart's floor is 0.0.31.
+  Python 3.14 is now supported and tested.
+- Web UI bundle rebuilt with refreshed frontend dependencies (0 open npm
+  advisories at the time of the audit, was 11).
+
+**Fixed**
+- The bundled Claude Code skill was corrected against the CLI: wrong flags,
+  JSON shapes, provider routing and chunk sizes, dozens of corrections. After
+  upgrading, running a normal command such as `anyscribe ui` updates the
+  skill Claude Code uses; `anyscribe --version`, `--help` and
+  `anyscribe migrate --dry-run` do not. To update it straight away, run
+  `anyscribe install-skill --force`.
+- The CLI's own help and error text: `anyscribe model info` names the right
+  repository for the turbo model; the Groq and OpenAI "no speaker labels"
+  errors say exactly how to retry; the hint to paste a URL interactively now
+  says `anyscribe transcribe`, not bare `anyscribe`.
+- README, user guide and landing page: dozens of corrections (version
+  strings, the `--json` output shape, `anyscribe transcribe --clipboard` where
+  the docs showed `anyscribe --clipboard`, which errors, local setup flags,
+  Sarvam's 28 s chunks, Deepgram's chunking, ElevenLabs' segment timestamps).
+
 ## 0.16.5 — 2026-09-13
 
 - anyscribe now uses GNU AGPLv3 or later. Modified versions offered over a network

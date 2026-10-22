@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-The installer checks for Python 3.10+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
+The installer checks for Python 3.11+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
 
 Verify it worked:
 
@@ -63,13 +63,13 @@ You should see `anyscribe` followed by a version number.
 
 > **`scribe` and `ascli` are shorter aliases.** Every `anyscribe` command in this guide also works typed as `scribe` or `ascli` — same tool, fewer letters. Use whichever you like.
 
-**Already have Python and just want the package?**
+**Already have Python 3.11 or newer and just want the package?**
 
 ```bash
 pip install "anyscribe[tray]"
 ```
 
-The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run `anyscribe doctor`, which tells you what's missing.
+The `[tray]` extra is what gives you the menu-bar icon and open-at-login (see [Keep it running](#keep-it-running)). Plain `pip install anyscribe` works too, and you can add the extra later. With pip you install ffmpeg and yt-dlp yourself — or just run `anyscribe doctor`, which tells you what's missing. On an older Python, pip quietly installs an older anyscribe instead; check with `python3 --version` first.
 
 > **Want to install Python and the dependencies by hand?** See the [Appendix: manual install](#appendix-manual-install) at the bottom.
 
@@ -280,14 +280,14 @@ The one worth knowing up front: if `anyscribe` isn't recognized, `python -m anys
 
 Prefer to install each piece yourself? The one-line installer in Step 1 does all of this for you — this path is for people who'd rather see every step.
 
-**1. Python 3.10 or newer.** Check what you have:
+**1. Python 3.11 or newer.** Check what you have:
 
 ```bash
 python3 --version      # macOS / Linux
 python --version       # Windows
 ```
 
-You should see something like `Python 3.12.x`. If you get an error or a version below 3.10:
+You should see something like `Python 3.12.x`. If you get an error or a version below 3.11:
 
 **macOS:**
 ```bash
@@ -298,6 +298,8 @@ brew install python@3.12
 ```bash
 sudo apt install python3 python3-pip python3-venv
 ```
+
+Then run `python3 --version` again. If it still shows 3.10 or older (Ubuntu 22.04 does), install a newer Python alongside it: `sudo apt install python3.11 python3.11-venv`. It does not change which Python `pip` uses, so step 3 below uses pipx on Linux. Debian 11 has no Python 3.11 package; upgrade to Debian 12 first. The simplest route on any Linux is still the one-line installer at the top of this guide, which does all of this for you.
 
 **Windows:**
 Download from [python.org/downloads](https://www.python.org/downloads/) and run the installer. **Check "Add Python to PATH"** during installation.
@@ -313,9 +315,10 @@ brew install ffmpeg yt-dlp
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo apt install ffmpeg
-pip install yt-dlp
+sudo apt install ffmpeg pipx
 ```
+
+No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3.
 
 **Windows:**
 ```powershell
@@ -323,11 +326,33 @@ winget install ffmpeg
 pip install yt-dlp
 ```
 
-**3. anyscribe itself.**
+**3. anyscribe itself.** Install with the same Python you checked in step 1, so a second, older Python's `pip` cannot sneak in.
 
+**macOS:**
 ```bash
-pip install "anyscribe[tray]"
+python3 -m pip install "anyscribe[tray]"
 ```
+
+If Homebrew's Python answers "externally-managed-environment", use pipx instead: `brew install pipx`, then `pipx install "anyscribe[tray]"` and `pipx ensurepath`.
+
+**Windows:**
+```powershell
+python -m pip install "anyscribe[tray]"
+```
+
+**Linux (Debian 12, Ubuntu 24.04 and newer, where `python3` is already 3.11+):**
+```bash
+pipx install "anyscribe[tray]"
+pipx ensurepath
+```
+
+**Linux (Ubuntu 22.04, using the python3.11 from step 1):**
+```bash
+pipx install --python /usr/bin/python3.11 "anyscribe[tray]"
+pipx ensurepath
+```
+
+Then open a new terminal. Plain `pip install` is refused by the system Python on Debian 12 and Ubuntu 24.04 ("externally managed"), and on Ubuntu 22.04 it belongs to the old Python and quietly installs an older anyscribe.
 
 Verify:
 

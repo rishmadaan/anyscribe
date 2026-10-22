@@ -10,7 +10,7 @@
 #
 # What it does:
 #   1. Checks your OS (macOS or Linux)
-#   2. Checks for Python 3.10+, installs if missing
+#   2. Checks for Python 3.11+, installs if missing
 #   3. Checks for yt-dlp and ffmpeg, installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
 #   5. Tells you to run `anyscribe ui`
@@ -46,13 +46,13 @@ die()   { fail "$1"; exit 1; }
 
 command_exists() { command -v "$1" &>/dev/null; }
 
-# Find a Python >= 3.10, preferring version-suffixed binaries (a brew
+# Find a Python >= 3.11, preferring version-suffixed binaries (a brew
 # python@3.12 install provides python3.12; the bare python3 may still be
 # the old system one).
 resolve_python() {
     local cand
-    for cand in python3.12 python3.11 python3.10 python3; do
-        if command_exists "$cand" && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+    for cand in python3.14 python3.13 python3.12 python3.11 python3; do
+        if command_exists "$cand" && "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
             PY="$cand"
             return 0
         fi
@@ -173,7 +173,8 @@ install_package() {
                 if [[ "$DRY_RUN" == true ]]; then
                     echo "    [dry-run] sudo apt install -y $apt_pkg"
                 else
-                    sudo apt update -qq && sudo apt install -y "$apt_pkg"
+                    # shellcheck disable=SC2086  # apt_pkg may name several packages
+                    sudo apt update -qq && sudo apt install -y $apt_pkg
                 fi
                 return
                 ;;
@@ -220,14 +221,23 @@ check_python() {
         ok "Python $("$PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")') ($PY)"
         return 0
     fi
-    warn "Python 3.10+ not found"
+    warn "Python 3.11+ not found"
     read -rp "    Install Python? [Y/n] " answer </dev/tty
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
-        install_package "Python" "python@3.12" "python3" ""
-        resolve_python || die "Python installed but no python3.10+ found on PATH. Open a new terminal and re-run the installer."
+        # Ubuntu 22.04 and Debian 11 ship python3 at 3.10 or older, so the bare
+        # python3 package would install nothing new; ask for 3.11 by name, with
+        # each package manager's own names. || true: where the package does not
+        # exist (Debian 11) the honest die below should speak, not apt's raw error.
+        local py_pkg="python3"
+        case "$LINUX_PKG" in
+            apt) py_pkg="python3.11 python3.11-venv" ;;
+            dnf) py_pkg="python3.11" ;;
+        esac
+        install_package "Python" "python@3.12" "$py_pkg" "" || true
+        resolve_python || die "Python 3.11+ still not found on PATH. Install Python 3.11 or newer with your package manager (macOS: brew install python@3.12; Ubuntu 22.04: sudo apt install python3.11 python3.11-venv; Debian 11 has none, upgrade to Debian 12), open a new terminal, and re-run the installer."
     else
-        die "Python 3.10+ is required. Install from https://python.org and try again."
+        die "Python 3.11+ is required. Install from https://python.org and try again."
     fi
 }
 
@@ -284,7 +294,17 @@ install_with_pipx() {
             esac
         fi
     fi
-    pipx install "$1"
+    # pipx defaults to its own interpreter (3.10 on Ubuntu 22.04); install with the one
+    # that passed the check. An existing anyscribe venv keeps its old Python even
+    # under --force (pipx 1.0.0 only reinstalls the package), so remove it first.
+    local venvs
+    venvs="$(pipx environment --value PIPX_LOCAL_VENVS 2>/dev/null || echo "$HOME/.local/pipx/venvs")"
+    if [[ -d "$venvs/anyscribe" ]]; then
+        info "Replacing the existing pipx anyscribe so it runs on $PY..."
+        pipx uninstall anyscribe || true
+        [[ ! -d "$venvs/anyscribe" ]] || die "Could not remove the existing pipx anyscribe, so it would keep its old Python. Run: pipx uninstall anyscribe, then re-run the installer."
+    fi
+    pipx install --force --python "$(command -v "$PY")" "$1"
     pipx ensurepath 2>/dev/null || true
     USED_PIPX=true
 }
@@ -302,7 +322,8 @@ install_anyscribe() {
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
-        echo "    [dry-run] $PY -m pip install $pip_cmd"
+        echo "    [dry-run] $PY -m pip install --upgrade $pip_cmd"
+        return 0  # nothing was installed, so there is nothing to verify
     else
         # Try pip first; fall back to pipx if this Python has no pip or is
         # externally managed.
@@ -310,7 +331,7 @@ install_anyscribe() {
         if ! "$PY" -m pip --version >/dev/null 2>&1; then
             warn "$PY has no pip. Using pipx instead..."
             install_with_pipx "$pip_cmd"
-        elif pip_output=$("$PY" -m pip install "$pip_cmd" 2>&1); then
+        elif pip_output=$("$PY" -m pip install --upgrade "$pip_cmd" 2>&1); then
             : # Success
         elif echo "$pip_output" | grep -qi "externally-managed"; then
             warn "System Python is externally managed. Using pipx instead..."
@@ -322,9 +343,28 @@ install_anyscribe() {
         fi
     fi
 
-    # Verify
+    # Verify. The command the user will type must be the copy just installed,
+    # not an older anyscribe from another Python that sits earlier on PATH.
+    local installed_ver="" found_ver=""
+    if [[ "$USED_PIPX" == true ]]; then
+        # || true: a dead or foreign copy must produce a warning, not a silent exit under set -e
+        installed_ver="$("$(pipx_bin_dir)/anyscribe" --version 2>/dev/null | awk '{print $2}' || true)"
+    else
+        installed_ver="$("$PY" -m anyscribe --version 2>/dev/null | awk '{print $2}' || true)"
+    fi
     if command_exists anyscribe; then
-        ok "anyscribe $(anyscribe --version 2>/dev/null | awk '{print $2}' || echo 'installed')"
+        found_ver="$(anyscribe --version 2>/dev/null | awk '{print $2}' || true)"
+        if [[ -n "$installed_ver" && "$found_ver" != "$installed_ver" ]]; then
+            warn "An older anyscribe (${found_ver:-unknown version}, $(command -v anyscribe)) is first on PATH; the new one is $installed_ver."
+            echo "    Remove the old one (a pip install on Python 3.10: python3.10 -m pip uninstall anyscribe) and open a new terminal,"
+            if [[ "$USED_PIPX" == true ]]; then
+                echo "    or run the new one as: $(pipx_bin_dir)/anyscribe"
+            else
+                echo "    or run the new one as: $PY -m anyscribe"
+            fi
+        else
+            ok "anyscribe ${found_ver:-installed}"
+        fi
     elif [[ "$USED_PIPX" == true ]]; then
         warn "anyscribe installed via pipx. Restart your terminal or run: pipx ensurepath"
     else
@@ -349,16 +389,17 @@ for d in (sysconfig.get_path("scripts"), sysconfig.get_path("scripts", sysconfig
     fi
 }
 
+# pipx's bin dir, which is usually not on this shell's PATH yet (ensurepath
+# only edits the profile).
+pipx_bin_dir() { pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin"; }
+
 # ── Run post-install action (opt-in) ─────────────────────────
 run_post_install() {
     [[ "$RUN_UI" == true || "$RUN_ONBOARD" == true ]] || return 0
+    # Launch the copy just installed, never whichever anyscribe PATH finds first.
     local cmd
-    if command_exists anyscribe; then
-        cmd=(anyscribe)
-    elif [[ "$USED_PIPX" == true ]]; then
-        # pipx's bin dir is usually not on this shell's PATH yet (ensurepath
-        # only edits the profile), and $PY never received anyscribe.
-        cmd=("$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/anyscribe")
+    if [[ "$USED_PIPX" == true ]]; then
+        cmd=("$(pipx_bin_dir)/anyscribe")
         if [[ ! -x "${cmd[0]}" ]]; then
             warn "Automatic launch skipped: the anyscribe executable could not be found. Run \`pipx list\` to inspect the installation."
             echo "    (looked for ${cmd[0]})"

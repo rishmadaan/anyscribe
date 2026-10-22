@@ -20,7 +20,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 - **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model base`) work with no internet connection. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
 - **No analytics or telemetry.** Besides the above, anyscribe checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote if you installed from a cloned repo). A download also upgrades yt-dlp first if your copy is over 60 days old.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL v3 or later](https://img.shields.io/badge/license-AGPL_v3_or_later-blue.svg)](https://github.com/rishmadaan/anyscribe/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/anyscribe.svg)](https://pypi.org/project/anyscribe/)
 [![Platforms: macOS, Linux, Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)](https://pypi.org/project/anyscribe/)
@@ -29,7 +29,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 
 ## What you need
 
-- **Python 3.10 or newer** — [python.org](https://www.python.org/downloads/)
+- **Python 3.11 or newer** — [python.org](https://www.python.org/downloads/)
 - **ffmpeg and yt-dlp** — the installers below put both in place for you; with the pip route, install them yourself (`brew install ffmpeg yt-dlp`, or [ffmpeg.org](https://ffmpeg.org/))
 - **An API key** for one cloud provider (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — or none at all if you run offline with the local provider
 
@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-**Already have Python, ffmpeg, and yt-dlp?**
+**Already have Python 3.11 or newer, ffmpeg, and yt-dlp?**
 
 ```bash
 pip install "anyscribe[tray]"

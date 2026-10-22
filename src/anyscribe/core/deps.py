@@ -40,12 +40,12 @@ DEPENDENCIES = [
         name="Python",
         command="python3",
         required=True,
-        description="Python interpreter (3.10+)",
+        description="Python interpreter (3.11+)",
         install_brew="brew install python@3.12",
         install_pip="",
         install_apt="sudo apt install python3",
         install_url="https://www.python.org/downloads/",
-        min_version="3.10",
+        min_version="3.11",
     ),
     Dependency(
         name="yt-dlp",
@@ -169,7 +169,7 @@ def check_dependencies() -> list[DepCheckResult]:
             # We're already running inside Python — check version directly
             major, minor = _get_python_version()
             version = f"{major}.{minor}"
-            found = (major, minor) >= (3, 10)
+            found = (major, minor) >= (3, 11)
             path = sys.executable
         elif dep.module_name:
             # pip-installed tool: check via `python -m module` (works cross-platform)
@@ -357,7 +357,7 @@ def check_and_install(interactive: bool = True) -> bool:
     for r in missing:
         # Skip Python — user needs to install it themselves
         if r.dep.name == "Python":
-            console.print("\n[red]Python 3.10+ is required.[/red]")
+            console.print("\n[red]Python 3.11+ is required.[/red]")
             console.print(f"  Current: {r.version or 'not found'}")
             console.print(f"  Install from: {r.dep.install_url}")
             all_installed = False

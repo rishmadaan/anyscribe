@@ -73,6 +73,7 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.16.3 | **MCP SDK v2 / protocol `2026-07-28`** — `FastMCP` → `MCPServer`, server identity now `anyscribe` + version string (resource URIs deliberately unchanged). Fixes a live install break: the unbounded `mcp>=1.0` resolved onto the v2 major released 2026-07-28, which deleted `mcp.server.fastmcp`, so every fresh `pip install "anyscribe[mcp]"` failed on import. Now pinned `mcp>=2,<3`. Root cause of the blind spot: CI installed `.[dev]` and never `.[mcp]`, so the MCP test importorskipped away on every run — CI now installs `.[dev,mcp]` and asserts the registered tool/resource surface | Released 2026-08-09 |
 | 0.16.4 | **`CHANGELOG.md` + dependency-drift fix** — a user-facing changelog covering every release (`BACKLOG.md` keeps the implementation detail and roadmap), with a new `check-docs.py` gate that fails CI when the shipped version has no entry, so it can't silently rot. Drops the dead `typer[all]` extra (typer stopped declaring it; plain `typer` has bundled rich + shellingham since 0.12) and bounds it `>=0.12,<1` — same latent-drift shape as the 0.16.3 `mcp` break, caught in that release's clean-install check | Released 2026-08-09 |
 | 0.16.5 | **AGPLv3-or-later migration** - first-party licensing, bundled MIT/ISC notices, editable frontend source, standalone skill license, and audited CLI/UI/legal documentation | Released 2026-09-13 (current) |
+| 0.17.0 | **Python 3.11 floor + Starlette security floor** (`requires-python>=3.11`, `starlette>=1.3.1`, `fastapi>=0.133`), carrying the 2026-10-21 staleness audit's five PRs (#15 UI deps, #16 installers/CI/pins, #17 user docs + landing, #18 skill + CLI strings, #19 building docs) | Prepared 2026-10-22; publication pending |
 | 1.0.0 | Stable: broader test coverage and release hardening | Future |
 
 ### How to bump versions
@@ -596,6 +597,15 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 - [x] First-party licensing changed to AGPL-3.0-or-later; preserve prior MIT grants.
 - [x] Package license metadata, frontend attribution, source archive, README, and landing copy updated.
 - [x] Assign version 0.16.5; publish matching wheel/source artifacts through the tagged release workflow and verify their license metadata.
+
+---
+
+## v0.17.0 — Python 3.11 floor, Starlette floor, staleness audit
+
+- [x] `requires-python >= 3.11`; 3.10 classifier dropped; CI matrix 3.11 / 3.12 / 3.14; installers, `anyscribe doctor`, README, getting-started and landing say 3.11+. Python 3.10 went end of life in October 2026; pip keeps 3.10 users on 0.16.5 by `requires-python`.
+- [x] Direct `starlette>=1.3.1` floor (first release clear of the OSV advisories) with `fastapi>=0.133` (first release whose Starlette pin is open-ended). FastAPI's Starlette requirement still permits versions below 1.3.1; the direct floor excludes them (PR #16 review found no FastAPI floor alone does).
+- [x] Ships the five audit PRs merged 2026-10-21 (journal: `2026-10-21-staleness-audit.md`); review record under `docs/reviews/2026-10-21-staleness-audit/`.
+- [ ] Carried forward, not in 0.17.0: a JavaScript runtime for yt-dlp (Deno recommended upstream; without one YouTube downloads warn and may miss formats); batch `--timeout` real cancel; Groq language list in the web picker; the React wizard's ElevenLabs card text; Deepgram landing price check.
 
 ---
 

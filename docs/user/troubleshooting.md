@@ -91,6 +91,26 @@ anyscribe migrate              # do it
 
 Safe to run twice: a second run just reports there's nothing left to do.
 
+### `anyscribe update` says up to date, but newer releases exist
+
+Current anyscribe needs Python 3.11 or newer. On Python 3.10, pip and
+`anyscribe update` stop at the last release that supported it and report it as
+up to date, so nothing looks wrong.
+
+**Fix** — check which Python you have:
+
+```bash
+python3 --version      # macOS / Linux
+python --version       # Windows
+```
+
+If it says 3.10 or older, re-run the one-line installer from
+[Getting Started](getting-started.md): it finds or installs Python 3.11 or
+newer and installs anyscribe with it. Then run `anyscribe --version`. If it
+still shows the old version, an older copy comes first on your PATH: remove it
+with `python3.10 -m pip uninstall anyscribe` (Windows: `py -3.10 -m pip
+uninstall anyscribe`) and open a new terminal.
+
 ### "Permission denied"
 
 Usually the app folder is owned by root, from an install run with `sudo`.

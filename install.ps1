@@ -5,7 +5,7 @@
 #   irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 #
 # What it does:
-#   1. Checks for Python 3.10+, offers to install via winget
+#   1. Checks for Python 3.11+, offers to install via winget
 #   2. Checks for ffmpeg, offers to install via winget/choco
 #   3. Installs yt-dlp via pip
 #   4. Installs anyscribe (with menu-bar tray) via pip
@@ -47,20 +47,24 @@ function Refresh-Path {
 function Test-Python {
     Write-Info "Checking Python..."
 
-    # Windows uses 'python' (not 'python3') when installed from python.org
-    foreach ($cmd in @('python', 'python3')) {
+    # Windows uses 'python' (not 'python3') when installed from python.org;
+    # 'py' is the python.org launcher, which picks the newest installed Python.
+    foreach ($cmd in @('python', 'python3', 'py')) {
         if (Test-CommandExists $cmd) {
             try {
                 $ver = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
                 $parts = $ver.Split('.')
                 $major = [int]$parts[0]
                 $minor = [int]$parts[1]
-                if ($major -ge 3 -and $minor -ge 10) {
+                if ($major -ge 3 -and $minor -ge 11) {
                     Write-Ok "Python $ver ($cmd)"
-                    $script:PythonCmd = $cmd
+                    # Keep the exact interpreter, not the name: Refresh-Path later
+                    # rebuilds PATH with machine entries first, which can re-point
+                    # `python` at an older install.
+                    $script:PythonCmd = (& $cmd -c "import sys; print(sys.executable)" 2>$null).Trim()
                     return
                 } else {
-                    Write-Warn "Python $ver found, but 3.10+ is required"
+                    Write-Warn "Python $ver found, but 3.11+ is required"
                 }
             } catch {
                 # Not a valid Python
@@ -68,7 +72,7 @@ function Test-Python {
         }
     }
 
-    Write-Warn "Python 3.10+ not found"
+    Write-Warn "Python 3.11+ not found"
 
     if (Test-CommandExists 'winget') {
         Write-Host "    Install Python 3.12 via winget? [Y/n] " -NoNewline
@@ -77,15 +81,28 @@ function Test-Python {
             Write-Info "Installing Python via winget..."
             winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
             Refresh-Path
-            if (Test-CommandExists 'python') {
-                $script:PythonCmd = 'python'
-                Write-Ok "Python installed"
-                return
+            # Re-check the version: an older all-users Python earlier on PATH
+            # still answers to `python` after a per-user winget install.
+            foreach ($cmd in @('python', 'python3', 'py')) {
+                if (Test-CommandExists $cmd) {
+                    try {
+                        $ver = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+                        $parts = $ver.Split('.')
+                        if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 11) {
+                            Write-Ok "Python $ver ($cmd)"
+                            $script:PythonCmd = (& $cmd -c "import sys; print(sys.executable)" 2>$null).Trim()
+                            return
+                        }
+                    } catch {
+                        # Not a valid Python
+                    }
+                }
             }
+            Write-Warn "Python 3.11+ still not found after the winget step (an older Python may be first on PATH, or winget failed). Open a new terminal and re-run, or remove the old Python from PATH."
         }
     }
 
-    Write-Fail "Python 3.10+ is required. Install from https://python.org"
+    Write-Fail "Python 3.11+ is required. Install from https://python.org"
     throw "Python not found"
 }
 
@@ -155,12 +172,27 @@ function Test-YtDlp {
 
 function Install-Anyscribe {
     Write-Info "Installing anyscribe..."
-    & $script:PythonCmd -m pip install --quiet "anyscribe[tray]"
+    & $script:PythonCmd -m pip install --quiet --upgrade "anyscribe[tray]"
+    if ($LASTEXITCODE -ne 0) { throw "pip install failed (exit $LASTEXITCODE)" }
 
-    # Verify
+    # Verify. The command the user will type must be the copy just installed,
+    # not an older anyscribe.exe from another Python earlier on PATH.
+    # try/catch: under ErrorActionPreference Stop, a native command writing to
+    # stderr can throw even with 2>$null; a probe failure must not abort here.
+    $installedVer = try { (& $script:PythonCmd -m anyscribe --version 2>$null | Out-String).Trim() } catch { '' }
+    if (-not $installedVer) {
+        throw "anyscribe was installed but `"$script:PythonCmd -m anyscribe --version`" did not run"
+    }
     Refresh-Path
     if (Test-CommandExists 'anyscribe') {
-        Write-Ok "anyscribe installed"
+        $foundVer = try { (anyscribe --version 2>$null | Out-String).Trim() } catch { '' }
+        if ($foundVer -ne $installedVer) {
+            Write-Warn "An older anyscribe ($(if ($foundVer) { $foundVer } else { 'unknown version' })) is first on PATH: $((Get-Command anyscribe).Source). The new one is $installedVer."
+            Write-Host "    Remove it (py -3.10 -m pip uninstall anyscribe) and open a new terminal, or run the new one as: & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Yellow
+            Fix-Path
+        } else {
+            Write-Ok "anyscribe installed ($foundVer)"
+        }
     } else {
         Write-Ok "anyscribe package installed"
         Fix-Path
@@ -221,14 +253,14 @@ try {
 
     if (-not (Test-CommandExists 'anyscribe')) {
         Write-Warn "If 'anyscribe' is not recognized, use:"
-        Write-Host "    $script:PythonCmd -m anyscribe ui" -ForegroundColor Cyan
+        Write-Host "    & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Cyan
         Write-Host ""
     }
 } catch {
     Write-Fail "Installation failed: $_"
     Write-Host ""
     Write-Host "  Manual install:" -ForegroundColor Yellow
-    Write-Host "    1. Install Python 3.10+ from https://python.org" -ForegroundColor Yellow
+    Write-Host "    1. Install Python 3.11+ from https://python.org" -ForegroundColor Yellow
     Write-Host "    2. pip install anyscribe" -ForegroundColor Yellow
     Write-Host "    3. Install ffmpeg from https://www.gyan.dev/ffmpeg/builds/" -ForegroundColor Yellow
     Write-Host ""

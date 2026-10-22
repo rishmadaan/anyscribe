@@ -53,6 +53,18 @@ anyscribe is not reliability.
   `--js-runtimes node:<path>` both fetched metadata for a public video with no
   runtime warning.
 
+## Not verified at release
+
+- install.ps1 has not been executed anywhere (no Windows machine in review);
+  its runtime step was reviewed by reading only.
+- The installer's probe timeout branch is not exercised by tests (they stub
+  `command`, so neither timeout nor gtimeout runs).
+- On macOS without timeout(1) or gtimeout the probes are unbounded.
+- The live downloads used a short public video that may not require the
+  challenge solver; the runtime flag was exercised, challenge solving itself
+  was not observed.
+- dnf and pacman branches were not run on real distributions.
+
 ## Exit
 
 Uninstall Deno and yt-dlp degrades to the warned behaviour; Node is a drop-in

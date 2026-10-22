@@ -1,0 +1,12 @@
+(Opus 5.5, effort high, fit reviewer, round 4, target ec59f54. Verdict: CONDITIONAL on I1 (turn the hand-run banner cases into tests) and the path scrub of the review record, which at ec59f54 is committed on the branch unscrubbed (37 lines, 9 files).)
+
+Round-3 ledger: Astra I1-I6 FIXED (I3 fixed in code, no automated test); Opus I1, I3-I10 FIXED; Opus I2 settled but not yet applied. No new code defects.
+
+I1 should-fix CONFIRMED tests/test_install_sh.py: the round-3 banner fix (version_banner, 2>&1, deno boundary) has no test; reverting it passes every installer test. Parametrize the failing-probe harness: warning line before v24.22.0 (accepted); v24.22.0 on stderr (accepted); unrelated-tool 99.1.2 (rejected); ~/.deno/bin/deno printing "deno 2.3." (rejected); "deno 2.3.0 (stable)\r\n" (accepted).
+I2 nit PLAUSIBLE install.sh:328: BusyBox timeout rejects --kill-after; use the short form -k 1 10, accepted by GNU and BusyBox 1.30+.
+I3 nit CONFIRMED troubleshooting (user and skill): "Node 22+, nothing to install" leaves a reader who still sees the warning stuck (nvm node not on anyscribe's PATH); add the node --version check and the Deno fallback.
+I4 nit CONFIRMED README:53 still lists yt-dlp as a prerequisite; getting-started macOS block still installs yt-dlp via brew, which anyscribe never uses.
+I5 nit CONFIRMED skill troubleshooting: "give the Linux commands (sudo) to the user" reads as only the sudo line; say both commands, and why.
+I6 nit CONFIRMED journal: add a "Not verified at release" section (install.ps1 never run; probe timeout branch untested; macOS unbounded probes; test video may not need the solver).
+Answers: empty probe input handled; bare [[ =~ ]] always matches after version_banner; deno "2.3.0rc1" accepted by bash/ps1, rejected by Python (real Deno prints -rc.1, all accept); ps1 WaitAll timeout returns null and warns; Test-DenoUsable unreachable when deno absent; test_node_that_fails still exercises the path; CHANGELOG true sentence by sentence; both Docker transcripts match the claims (JSON check ran without --quiet and with Deno present). Advice: stop hardening after I1. Backlog: SKILL.md's Windows `python -m anyscribe --json --quiet` hits the stdout PATH notice on first run (pre-existing).
+Pending owner: nvm node and Homebrew deno invisible to the tray/service (as ffmpeg today); red icon on the optional row; sudo prompt for unzip right after "Install Deno?"; a real Windows run.

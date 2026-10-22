@@ -181,9 +181,11 @@ winget install DenoLand.Deno
 anyscribe doctor
 ```
 
-If you already have Node 22 or newer, nothing to install: anyscribe tells
-yt-dlp to use it. The one-line installer from [Getting Started](getting-started.md)
-does all of this for you.
+If you already have Node 22 or newer, anyscribe uses it and there is nothing
+to install. If you still see this warning, anyscribe could not find it: run
+`node --version` in the same terminal you run anyscribe from. If that fails,
+which is common when Node comes from nvm, install Deno as above. The one-line
+installer from [Getting Started](getting-started.md) does all of this for you.
 
 ### `yt-dlp download failed: Video unavailable`
 

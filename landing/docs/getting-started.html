@@ -275,10 +275,11 @@ Download from <a href="https://www.python.org/downloads/">python.org/downloads</
 <blockquote>
 <p><strong>Don't have Homebrew?</strong> It's the standard package manager for macOS. Install it from <a href="https://brew.sh">brew.sh</a>.</p>
 </blockquote>
-<p><strong>2. ffmpeg, yt-dlp, and Deno.</strong> ffmpeg converts audio; yt-dlp fetches the video; Deno runs the small JavaScript puzzle YouTube sets before it hands over media (Node 22+ works too, if you already have it; skip Deno then).</p>
+<p><strong>2. ffmpeg and Deno.</strong> ffmpeg converts audio; Deno runs the small JavaScript puzzle YouTube sets before it hands over media (Node 22+ works too, if you already have it; skip Deno then). yt-dlp, which fetches the video, comes with anyscribe in step 3.</p>
 <p><strong>macOS:</strong></p>
-<pre><code class="language-bash">brew install ffmpeg yt-dlp deno
+<pre><code class="language-bash">brew install ffmpeg deno
 </code></pre>
+<p>No separate yt-dlp step: anyscribe installs it in step 3.</p>
 <p><strong>Linux (Ubuntu/Debian):</strong></p>
 <pre><code class="language-bash">sudo apt install ffmpeg pipx unzip
 curl -fsSL https://deno.land/install.sh | sh

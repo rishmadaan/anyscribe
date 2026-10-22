@@ -1,0 +1,83 @@
+before: python3=Python 3.12.3; yt-dlp=2026.10.21; deno=none; node=none; unzip=none
+install.sh sha256 prefix: ce20f8ab32e6 (reviewed checkout ec59f54)
+  ┌─────────────────────────────────────┐
+  │       anyscribe installer           │
+  │  Video → Transcript → Markdown      │
+  └─────────────────────────────────────┘
+==> Detected OS: linux (apt)
+==> Checking Python...
+  ✓ Python 3.12 (python3.12)
+==> Checking yt-dlp...
+  ✓ yt-dlp 2026.10.21
+==> Checking ffmpeg...
+  ✓ ffmpeg 6.1.1-3ubuntu5
+==> Checking JavaScript runtime (Deno or Node, for YouTube)...
+  ! No supported JavaScript runtime found; YouTube downloads may miss formats or fail
+    Deno's installer (deno.land) puts it in ~/.deno and adds that folder to your shell profile.
+    Install Deno? [Y/n] 
+24 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Suggested packages:
+0 upgraded, 1 newly installed, 0 to remove and 24 not upgraded.
+0% [Working]0% [Waiting for headers]                        Get:1 http://ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 unzip arm64 6.0-28ubuntu4.1 [171 kB]
+0% [1 unzip 0 B/171 kB 0%]                          100% [Working]              Fetched 171 kB in 1s (271 kB/s)
+debconf: delaying package configuration, since apt-utils is not installed
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 27267 files and directories currently installed.)
+                                                                           0.2%#                                                                          1.5%##                                                                         3.4%##                                                                         3.9%####                                                                       6.1%#####                                                                      7.4%######                                                                     8.6%#######                                                                   10.1%########                                                                  11.8%#########                                                                 13.2%#########                                                                 13.6%##########                                                                14.1%##########                                                                14.2%##########                                                                14.8%###########                                                               15.3%###########                                                               15.6%############                                                              16.9%############                                                              17.8%#############                                                             19.0%##############                                                            20.1%###############                                                           21.6%###############                                                           22.0%################                                                          23.4%#################                                                         24.3%##################                                                        25.6%###################                                                       26.7%####################                                                      28.0%####################                                                      29.0%######################                                                    30.6%#######################                                                   32.2%#######################                                                   33.3%########################                                                  34.7%#########################                                                 35.9%##########################                                                37.1%
+###########################                                               38.1%###########################                                               38.7%############################                                              39.7%#############################                                             41.0%##############################                                            41.9%##############################                                            42.8%###############################                                           43.1%###############################                                           43.9%################################                                          45.0%################################                                          45.8%#################################                                         46.8%#################################                                         47.2%##################################                                        48.5%###################################                                       49.8%#####################################                                     51.5%#####################################                                     52.4%######################################                                    54.2%#######################################                                   55.3%########################################                                  56.7%#########################################                                 58.1%##########################################                                59.7%############################################                              61.1%#############################################                             62.8%##############################################                            64.7%###############################################                           65.9%###############################################                           66.1%################################################                          67.3%##################################################                        69.5%###################################################                       71.5%####################################################                      73.4%######################################################                    75.3%#######################################################                   76.8%########################################################                  78.8%##########################################################                81.5%############################################################              83.5%############################################################              84.3%##############################################################            86.3%###############################################################           87.6%################################################################          89.4%##################################################################        91.8%##################################################################        92.9%####################################################################      94.8%#####################################################################     96.9%#######################################################################   99.3%######################################################################## 100.0%
+Deno was installed successfully to /root/.deno/bin/deno
+Download https://jsr.io/@deno/installer-shell-setup/meta.json
+Download https://jsr.io/@deno/installer-shell-setup/0.3.4_meta.json
+Download https://jsr.io/@deno/installer-shell-setup/0.3.4/bundled.esm.js
+info: backing '/root/.profile' up to '/root/.deno/.shellRcBackups/.profile.bak'
+info: backing '/root/.bashrc' up to '/root/.deno/.shellRcBackups/.bashrc.bak'
+Deno was added to the PATH.
+You may need to restart your shell for it to become available.
+Run '/root/.deno/bin/deno --help' to get started
+Stuck? Join our Discord https://discord.gg/deno
+  ✓ deno 2.9
+==> Installing anyscribe...
+  ! python3.12 has no pip. Using pipx instead...
+[?25lcreating virtual environment...
+determining package name from 'git+https://github.com/rishmadaan/anyscribe.git@ec59f544259fb024b47d0ab7eeef8e43876d3031'...
+creating virtual environment...
+installing anyscribe from spec 'git+https://github.com/rishmadaan/anyscribe.git@ec59f544259fb024b47d0ab7eeef8e43876d3031'...
+  These apps are now globally available
+    - anyscribe
+    - anyscribe-mcp
+    - ascli
+    - scribe
+    - scribe-mcp
+done! ✨ 🌟 ✨
+[?25h/root/.local/bin is already in PATH.
+Otherwise pipx is ready to go! ✨ 🌟 ✨
+  ✓ anyscribe v0.17.0
+  ┌─────────────────────────────────────┐
+  │  anyscribe is installed!            │
+  │                                     │
+  │  Next step:                         │
+  │    anyscribe ui                     │
+  │                                     │
+  │  Opens a dashboard in your browser  │
+  │  to set up and start transcribing.  │
+  └─────────────────────────────────────┘
+  ! Installed via pipx — if 'anyscribe' is not found, restart your terminal
+    or run: pipx ensurepath
+installer exit=0
+--- after
+deno 2.9.8 (stable, release, aarch64-unknown-linux-gnu)
+/root/.bashrc
+/root/.profile
+anyscribe v0.17.0
+Name: yt-dlp
+Version: 2026.10.21
+Name: yt-dlp-ejs
+Version: 0.8.0
+│ yt-dlp             │ Found  │ 2026.10.21                                     │
+│ JavaScript runtime │ Found  │ deno 2.9.8                                     │
+--- real download, branch code, ~/.deno/bin/deno off PATH
+Downloaded: /root/.anyscribe/downloads/video/youtube/me-at-the-zoo.mp4
+  Title: Me at the zoo
+  Type:  video
+--- json path stays clean
+json ok: True ['success', 'data', 'error']
+stderr lines: 2

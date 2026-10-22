@@ -3,7 +3,7 @@
 Findings below are based on code tracing unless stated otherwise. I did not execute tests, installers, or network requests.
 
 1. **I1 · blocker · CONFIRMED: Unsupported runtimes are reported as usable.**  
-   Where: [deps.py:113](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/src/anyscribe/core/deps.py:113), [install.sh:317](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.sh:317), [install.ps1:162](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.ps1:162).
+   Where: [deps.py:113](<checkout>/src/anyscribe/core/deps.py:113), [install.sh:317](<checkout>/install.sh:317), [install.ps1:162](<checkout>/install.ps1:162).
 
    `find_js_runtime()` checks executable presence, not identity or version. Node 18 is passed to yt-dlp and shown as “Found” by doctor. Deno 1.x, Deno 2.2, or an unrelated executable named `deno` takes priority over a valid Node 24. Both installers also accept any Deno without checking its version; Bash even reports success when `deno --version` fails.
 
@@ -12,42 +12,42 @@ Findings below are based on code tracing unless stated otherwise. I did not exec
    **Fix:** validate successful, recognizable version output with a timeout. Skip invalid candidates and continue to the next candidate, including the home-directory Deno. Apply the same minimums in both installers. Test old Deno plus valid Node, Node 18 alone, unrelated executables, and failed probes.
 
 2. **I2 · blocker · CONFIRMED: The optional Bash step can abort the installation.**  
-   Where: [install.sh:324](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.sh:324), [install.sh:337](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.sh:337).
+   Where: [install.sh:324](<checkout>/install.sh:324), [install.sh:337](<checkout>/install.sh:337).
 
    If a Node wrapper prints `unknown`, Bash interprets that text as a variable name in the arithmetic comparison. With `set -u`, an unset variable aborts the shell. Separately, failure to open `/dev/tty`, or EOF at the prompt, makes the unguarded `read` terminate installation under `set -e`. A machine with all existing prerequisites installed can therefore fail solely because this optional step was added.
 
    **Fix:** validate digits before arithmetic; treat unreadable input as “skip” with a warning and return success. Add tests that reach the continuation after both failures. The existing installer test replaces `check_js_runtime` with a no-op, so it cannot catch either problem.
 
 3. **I3 · blocker · CONFIRMED: PowerShell runtime failures escape to the fatal installer handler.**  
-   Where: [install.ps1:167](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.ps1:167), [install.ps1:183](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.ps1:183), [install.ps1:299](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.ps1:299).
+   Where: [install.ps1:167](<checkout>/install.ps1:167), [install.ps1:183](<checkout>/install.ps1:183), [install.ps1:299](<checkout>/install.ps1:299).
 
    Only the integer conversion is caught. An exception from invoking Node, reading the answer, or launching winget reaches the outer handler, which exits 1 before installing anyscribe. A throwing Node wrapper is a concrete example. Native-command error behavior also needs checking on Windows PowerShell, which the existing comments elsewhere in this file explicitly recognize.
 
    **Fix:** catch failures within the optional step, print the manual-install warning, and continue. Check command exit status before claiming a usable runtime. Verify both probe and installation failures.
 
 4. **I4 · should-fix · CONFIRMED: The existing auto-update does not preserve the newly required solver dependency.**  
-   Where: [deps.py:378](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/src/anyscribe/core/deps.py:378).
+   Where: [deps.py:378](<checkout>/src/anyscribe/core/deps.py:378).
 
    The initial install requests `yt-dlp[default]`, but the 60-day updater requests bare `yt-dlp`. Using the lead’s package metadata, a permitted installation of yt-dlp 2025.11.12 brings EJS 0.3.1; the updater can move yt-dlp to 2026.10.21 without bringing its matching EJS 0.8.0. The solver package then falls out of step with the downloader.
 
    **Fix:** retain the existing update policy, but upgrade `"yt-dlp[default]"`. Update the associated manual-update hints. Test that the upgrade command includes the extra. The mismatched dependency path is traced; its downstream download failure was not reproduced here.
 
 5. **I5 · should-fix · CONFIRMED: The Node fallback test depends on the reviewer’s home directory.**  
-   Where: [test_js_runtime.py:23](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/tests/test_js_runtime.py:23).
+   Where: [test_js_runtime.py:23](<checkout>/tests/test_js_runtime.py:23).
 
    The test hides Deno from PATH but leaves `Path.home()` real. On a machine with executable `~/.deno/bin/deno`, the implementation correctly chooses that Deno and the test incorrectly fails.
 
    **Fix:** give the test an isolated home directory. Also restore `_js_runtime_warned` through `monkeypatch` or `patch`, rather than leaving changed global state behind.
 
 6. **I6 · should-fix · CONFIRMED: The Linux troubleshooting fix omits a prerequisite.**  
-   Where: [troubleshooting.md:167](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/docs/user/troubleshooting.md:167), [skill troubleshooting:104](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/src/anyscribe/skill/references/troubleshooting.md:104), [deps.py:157](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/src/anyscribe/core/deps.py:157).
+   Where: [troubleshooting.md:167](<checkout>/docs/user/troubleshooting.md:167), [skill troubleshooting:104](<checkout>/src/anyscribe/skill/references/troubleshooting.md:104), [deps.py:157](<checkout>/src/anyscribe/core/deps.py:157).
 
    The supplied Deno-script evidence requires unzip or 7z. These standalone recovery instructions fail on a minimal Linux machine without either. Getting Started includes unzip correctly.
 
    **Fix wording:** “On Ubuntu/Debian, install the prerequisite with `sudo apt install unzip`, then run `curl -fsSL https://deno.land/install.sh | sh`. On other Linux distributions, install unzip or 7z using your package manager first.” Regenerate the corresponding HTML.
 
 7. **I7 · nit · CONFIRMED: Two documentation claims exceed the evidence.**  
-   Where: [install.sh:336](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.sh:336), [install.ps1:177](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/install.ps1:177), [journal:36](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1/docs/building/journal/2026-10-22-v0171-youtube-js-runtime.md:36).
+   Where: [install.sh:336](<checkout>/install.sh:336), [install.ps1:177](<checkout>/install.ps1:177), [journal:36](<checkout>/docs/building/journal/2026-10-22-v0171-youtube-js-runtime.md:36).
 
    “Would miss formats or fail” states a certain consequence, while the supplied live example succeeded. The journal also promises the Deno page in doctor’s missing-runtime row, but the table prints only the dependency description.
 

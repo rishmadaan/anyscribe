@@ -1,6 +1,6 @@
 **NOT YET.** The change matches the approved job, and the normal YouTube paths are wired correctly. Instagram’s command arguments match main. Remaining installer defects can still cause a hang, reject supported Node, or report an unusable Deno as installed.
 
-Reviewed commit: `af41426146c8cf833fb28d1b89df25ff926dc210`, against `b061832`, in [wt-r3](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3). Findings distinguish in-memory reproductions from code tracing. No files were changed.
+Reviewed commit: `af41426146c8cf833fb28d1b89df25ff926dc210`, against `b061832`, in [wt-r3](<checkout>). Findings distinguish in-memory reproductions from code tracing. No files were changed.
 
 The round-2 findings stand as follows:
 
@@ -25,7 +25,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 1. **I1: should-fix, CONFIRMED by tracing. Bash’s timeout does not guarantee termination.**
 
-   Where: [install.sh:327](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/install.sh:327), also line 329.
+   Where: [install.sh:327](<checkout>/install.sh:327), also line 329.
 
    `timeout 10` sends SIGTERM after ten seconds. It does not force termination if the program ignores that signal. A hanging runtime wrapper that ignores SIGTERM therefore still blocks installation before the installer can try supported Node or continue without a runtime.
 
@@ -33,7 +33,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 2. **I2: should-fix, CONFIRMED by tracing. PowerShell can manufacture a probe timeout by not reading stderr.**
 
-   Where: [install.ps1:166](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/install.ps1:166).
+   Where: [install.ps1:166](<checkout>/install.ps1:166).
 
    `Get-VersionLine` redirects both output streams but drains only stdout. A runtime wrapper that writes more than the stderr pipe can hold blocks before it exits. `WaitForExit(10000)` then expires, kills the program and returns `$null`.
 
@@ -45,7 +45,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 3. **I3: should-fix, CONFIRMED. Installer banner validation remains inconsistent and incomplete.**
 
-   Where: [install.sh:333](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/install.sh:333), line 342; [install.ps1:173](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/install.ps1:173), line 183.
+   Where: [install.sh:333](<checkout>/install.sh:333), line 342; [install.ps1:173](<checkout>/install.ps1:173), line 183.
 
    Two concrete cases remain:
 
@@ -58,7 +58,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 4. **I4: should-fix, CONFIRMED by tracing. Windows reports Deno installed without validating the result.**
 
-   Where: [install.ps1:212](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/install.ps1:212).
+   Where: [install.ps1:212](<checkout>/install.ps1:212).
 
    Suppose an old Deno is already on PATH, so the initial probe rejects it. The user accepts the winget step, but winget exits unsuccessfully without throwing. The subsequent `Test-CommandExists 'deno'` finds the same old executable and prints `deno installed`.
 
@@ -68,7 +68,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 5. **I5: should-fix, CONFIRMED. Verification of the reviewed fresh-Ubuntu installation remains outstanding.**
 
-   Where: [lead-evidence-r3.md:7](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/lead-evidence-r3.md:7), [round-3 Docker log](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/docker-ubuntu2404-deno-install-r3.log).
+   Where: [lead-evidence-r3.md:7](<run-folder>/lead-evidence-r3.md:7), [round-3 Docker log](<run-folder>/docker-ubuntu2404-deno-install-r3.log).
 
    The reviewed installer hashes to:
 
@@ -82,7 +82,7 @@ The new PowerShell pipe problem was introduced by this round’s fix. The other 
 
 6. **I6: nit, CONFIRMED. Two documentation statements remain stronger than the implementation.**
 
-   Where: [README.md:33](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/README.md:33), [CHANGELOG.md:25](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r3/CHANGELOG.md:25).
+   Where: [README.md:33](<checkout>/README.md:33), [CHANGELOG.md:25](<checkout>/CHANGELOG.md:25).
 
    README still tells pip users to install yt-dlp themselves. Replace that bullet with:
 
@@ -108,7 +108,7 @@ Answers to the brief’s concrete questions:
 - **CHANGELOG:** the solver declaration, warning behavior, doctor row, stderr change and Python-first ordering match the code, subject to the installer findings and wording correction above.
 - **Version gate:** applying the checker’s version-pattern rules to the six named user-facing files found no offending literals. Ten named Python files parsed successfully.
 
-No owner decision is required. Fixes, CI verification, package-resolution checks and the pinned installation evidence belong to the implementation/release lead. The accepted Windows and macOS limitations are not assignments for Rishabh.
+No owner decision is required. Fixes, CI verification, package-resolution checks and the pinned installation evidence belong to the implementation/release lead. The accepted Windows and macOS limitations are not assignments for the owner.
 
 I inspected every source file in the brief’s source list, both patches, the lead evidence, all four prior reports, the available installation transcript in the patch, and the empty round-3 log. Reproductions used extracted Python syntax and fake process results without importing or starting anyscribe.
 

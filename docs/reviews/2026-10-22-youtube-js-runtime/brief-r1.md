@@ -7,9 +7,9 @@ only what this brief names.
 WHAT: anyscribe pull request #21 "Give yt-dlp a JavaScript runtime for YouTube
 (Deno or Node), install Deno when missing (0.17.1 prep)", branch
 feat/youtube-js-runtime, head commit 0b1dffb909f1e3feb3e2db5f812ff750aa85528c, against main b061832 (v0.17.0).
-Checkout to read: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r1 (a detached clone at that commit). Full diff:
-/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/diff-r1.patch. Lead evidence (claims to check where you can; the live
-yt-dlp runs and PyPI facts are the lead's): /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/lead-evidence-r1.md.
+Checkout to read: <checkout> (a detached clone at that commit). Full diff:
+<run-folder>/diff-r1.patch. Lead evidence (claims to check where you can; the live
+yt-dlp runs and PyPI facts are the lead's): <run-folder>/lead-evidence-r1.md.
 
 WHY IT EXISTS (the owner's ask, in his words, 2026-10-22). After the lead laid
 out three options for yt-dlp's JavaScript-runtime requirement, (a) document,

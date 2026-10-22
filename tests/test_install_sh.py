@@ -182,3 +182,63 @@ def test_check_python_asks_each_package_manager_by_its_own_names(tmp_path):
     assert results["apt"] == ["python3 python3-venv", "python3.11 python3.11-venv"]
     assert results["dnf"] == ["python3", "python3.11"]
     assert results["pacman"] == ["python3"]
+
+
+def _js_runtime_verdict(tmp_path, setup):
+    """Run js_runtime_found with fake programs; returns the installer's output."""
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash not available")
+    harness = (
+        'eval "$(sed \'$d\' "$INSTALL_SH")"\n'
+        'ok(){ echo "ok: $*"; }; warn(){ echo "warn: $*"; }\n'
+        'command(){ return 1; }; command_exists(){ [[ "$1" == node && -n "${HAVE_NODE:-}" ]]; }\n'
+        f"HOME={tmp_path}\n" + setup + "\n"
+        'js_runtime_found && echo "verdict: accepted" || echo "verdict: not accepted"\n'
+    )
+    return subprocess.run(
+        [bash, "-c", harness],
+        env={**os.environ, "INSTALL_SH": str(SCRIPT)},
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+@pytest.mark.parametrize(
+    "setup,expected",
+    [
+        (
+            'HAVE_NODE=1; node(){ echo "npm warn x"; echo v24.22.0; }',
+            "accepted",
+        ),  # warning before the banner
+        ("HAVE_NODE=1; node(){ echo v24.22.0 >&2; }", "accepted"),  # banner on stderr
+        ('HAVE_NODE=1; node(){ echo "unrelated-tool 99.1.2"; }', "not accepted"),  # impostor
+        ("HAVE_NODE=1; node(){ echo v18.20.0; }", "not accepted"),  # too old
+    ],
+)
+def test_node_banner_cases(tmp_path, setup, expected):
+    out = _js_runtime_verdict(tmp_path, setup)
+    assert f"verdict: {expected}" in out
+
+
+@pytest.mark.parametrize(
+    "banner,expected",
+    [
+        ("deno 2.3.", "not accepted"),  # a truncated banner is not a version
+        ("deno 2.3.0 (stable)\r", "accepted"),  # CRLF output
+        ("deno 2.2.9 (stable)", "not accepted"),  # below yt-dlp's minimum
+        ("something-else 2.9.0", "not accepted"),  # a same-named unrelated program
+        (
+            "deno 2.3.0rc1 (stable)",
+            "not accepted",
+        ),  # malformed suffix glued to the patch, as Python treats it
+        ("deno 2.3.0-rc.1 (stable)", "accepted"),  # a real release candidate banner
+    ],
+)
+def test_home_deno_banner_cases(tmp_path, banner, expected):
+    deno = tmp_path / ".deno" / "bin" / "deno"
+    deno.parent.mkdir(parents=True)
+    deno.write_text("#!/bin/sh\nprintf '%s\\n' " + repr(banner).replace("\\r", "\\r") + "\n")
+    deno.chmod(0o755)
+    out = _js_runtime_verdict(tmp_path, "")
+    assert f"verdict: {expected}" in out

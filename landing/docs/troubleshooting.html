@@ -169,9 +169,11 @@ anyscribe doctor
 <pre><code class="language-powershell">winget install DenoLand.Deno
 anyscribe doctor
 </code></pre>
-<p>If you already have Node 22 or newer, nothing to install: anyscribe tells
-yt-dlp to use it. The one-line installer from <a href="/docs/getting-started">Getting Started</a>
-does all of this for you.</p>
+<p>If you already have Node 22 or newer, anyscribe uses it and there is nothing
+to install. If you still see this warning, anyscribe could not find it: run
+<code>node --version</code> in the same terminal you run anyscribe from. If that fails,
+which is common when Node comes from nvm, install Deno as above. The one-line
+installer from <a href="/docs/getting-started">Getting Started</a> does all of this for you.</p>
 <h3 id="yt-dlp-download-failed-video-unavailable"><code>yt-dlp download failed: Video unavailable</code></h3>
 <p>The video is private, deleted, age-restricted, or blocked in your region.</p>
 <p>anyscribe auto-updates yt-dlp when it's more than 60 days old — YouTube changes

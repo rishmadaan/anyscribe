@@ -322,15 +322,24 @@ install_with_pipx() {
 # at 10 s, SIGKILL a second later), and prints its output (stdout then stderr)
 # only when the program exits 0; a hung or failing binary prints nothing so the
 # caller moves on to the next candidate.
+# Prints the bounded-run prefix (SIGTERM at 10 s, SIGKILL a second later; the
+# short -k form is accepted by GNU coreutils and BusyBox alike), or nothing
+# where neither timeout nor gtimeout exists (stock macOS: the probe is unbounded).
+bounded_prefix() {
+    local t
+    for t in timeout gtimeout; do
+        command -v "$t" >/dev/null 2>&1 || continue
+        printf '%s -k 1 10' "$t"
+        return 0
+    done
+    return 0
+}
+
 probe_version() {
-    local out
-    if command -v timeout >/dev/null 2>&1; then
-        out="$(timeout --kill-after=1 10 "$@" 2>&1)" || return 1
-    elif command -v gtimeout >/dev/null 2>&1; then
-        out="$(gtimeout --kill-after=1 10 "$@" 2>&1)" || return 1
-    else
-        out="$("$@" 2>&1)" || return 1
-    fi
+    local out prefix
+    prefix="$(bounded_prefix)"
+    # shellcheck disable=SC2086  # the prefix is meant to split into words
+    out="$($prefix "$@" 2>&1)" || return 1
     printf '%s\n' "$out"
 }
 
@@ -341,7 +350,7 @@ version_banner() {
     while IFS= read -r line; do
         line="${line%$'\r'}"
         case "$name" in
-            deno) [[ "$line" =~ ^deno\ ([0-9]+)\.([0-9]+)\.([0-9]+)([^0-9]|$) ]] && { printf '%s\n' "$line"; return 0; } ;;
+            deno) [[ "$line" =~ ^deno\ ([0-9]+)\.([0-9]+)\.([0-9]+)([^[:alnum:]_]|$) ]] && { printf '%s\n' "$line"; return 0; } ;;
             node) [[ "$line" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.]+)?$ ]] && { printf '%s\n' "$line"; return 0; } ;;
         esac
     done

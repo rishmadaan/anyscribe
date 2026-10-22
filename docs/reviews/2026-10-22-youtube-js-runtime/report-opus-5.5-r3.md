@@ -3,7 +3,7 @@
 Round-2 ledger: all FIXED (Sol I1-I5, I7; Opus I1-I5); Sol I6 FIXED in method, pending the pinned transcript. No new code defects; I3 is a docs overclaim from the round-2 wording, I6 a test gap on a must-never.
 
 I1 should-fix CONFIRMED CHANGELOG 0.17.1: never tells an upgrading user (pip / anyscribe update) that a runtime is now wanted or how to get it. Add the bullet given.
-I2 should-fix CONFIRMED docs/reviews/2026-10-22-youtube-js-runtime/: about 20 absolute /Users/rish/.review-runs paths in briefs, reports and lead evidence about to enter a public repo; scrub to repo-relative / <review-run>/ before committing, grep for "/Users/" after.
+I2 should-fix CONFIRMED docs/reviews/2026-10-22-youtube-js-runtime/: about 20 absolute ~/.review-runs paths in briefs, reports and lead evidence about to enter a public repo; scrub to repo-relative / <review-run>/ before committing, grep for the home-folder prefix after.
 I3 nit CONFIRMED commands.md:310,1182: "Startup messages ... go to stderr" overclaims; the Windows one-time PATH notice (cli/main.py:117-146) still prints to stdout. Add the exception.
 I4 nit CONFIRMED README.md:33 still says pip users install yt-dlp themselves; getting-started Windows appendix still has a bare `python -m pip install yt-dlp`.
 I5 nit CONFIRMED skill troubleshooting and SKILL.md:30: the Linux fix uses sudo and a remote script that Claude's shell cannot run; tell the user and hand them the commands; SKILL.md's installer description should mention ffmpeg and the runtime.

@@ -104,9 +104,12 @@ Without one, YouTube downloads warn, may miss formats, or fail.
 `sudo apt install unzip` (or 7z on other distros) then
 `curl -fsSL https://deno.land/install.sh | sh`; Windows `winget install
 DenoLand.Deno`; then `anyscribe doctor` (the "JavaScript runtime" row should
-say Found). With Node 22+ already present, nothing to install. These install
-system software: tell the user first, and give the Linux commands (sudo) to the
-user to run in their own terminal.
+say Found). With Node 22+ already present, nothing to install; if the warning
+appears anyway, node is not on the PATH anyscribe sees, so suggest Deno. These
+install system software, so tell the user before running any of them. On
+Linux, do not run them yourself: give the user both commands to run in their
+own terminal (the first asks for their sudo password; the second edits their
+shell profile).
 
 ### "Instagram requires a login to fetch this reel"
 

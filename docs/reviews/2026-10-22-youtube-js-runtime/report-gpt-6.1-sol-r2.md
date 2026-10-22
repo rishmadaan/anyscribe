@@ -1,6 +1,6 @@
 **NOT YET.** The approach matches the approved job. The normal Deno and Node paths are wired, and the stdout fix is sound. Runtime validation remains incomplete, and the round-2 Python installation change introduces a separate Linux failure.
 
-Reviewed commit: `6cad090b6f367e70690a790cf7d489bf8b20ac17`. References below are relative to the [reviewed checkout](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2).
+Reviewed commit: `6cad090b6f367e70690a790cf7d489bf8b20ac17`. References below are relative to the [reviewed checkout](<checkout>).
 
 **Round-1 findings**
 
@@ -26,7 +26,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 1. **I1 · blocker · CONFIRMED: runtime validation still accepts unsupported or unrelated programs.**
 
-   Where: [deps.py:133](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/src/anyscribe/core/deps.py:133), [install.sh:325](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/install.sh:325), [install.ps1:164](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/install.ps1:164).
+   Where: [deps.py:133](<checkout>/src/anyscribe/core/deps.py:133), [install.sh:325](<checkout>/install.sh:325), [install.ps1:164](<checkout>/install.ps1:164).
 
    I extracted the Python functions without importing the application and supplied fake process results:
 
@@ -44,7 +44,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 2. **I2 · should-fix · CONFIRMED: installer runtime probes can hang installation indefinitely.**
 
-   Where: [install.sh:325](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/install.sh:325), [install.ps1:164](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/install.ps1:164).
+   Where: [install.sh:325](<checkout>/install.sh:325), [install.ps1:164](<checkout>/install.ps1:164).
 
    Neither installer bounds `deno --version` or `node --version`. A hanging Deno wrapper prevents installation from reaching a valid Node 24, the optional prompt, or anyscribe itself. Exception handling and `|| true` cannot handle a command that never returns.
 
@@ -52,7 +52,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 3. **I3 · should-fix · CONFIRMED: a decoding failure in the new probe aborts downloads, including Instagram video downloads.**
 
-   Where: [deps.py:127](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/src/anyscribe/core/deps.py:127), [download.py:122](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/src/anyscribe/cli/download.py:122).
+   Where: [deps.py:127](<checkout>/src/anyscribe/core/deps.py:127), [download.py:122](<checkout>/src/anyscribe/cli/download.py:122).
 
    `text=True` can raise `UnicodeDecodeError` when a runtime or wrapper emits bytes incompatible with Python’s encoding. That exception escapes the probe’s timeout/OSError handler. I reproduced the escape with the extracted function.
 
@@ -62,7 +62,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 4. **I4 · should-fix · CONFIRMED: the Python installation repair passes apt package names to other package managers.**
 
-   Where: [install.sh:233](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/install.sh:233), with argument handling at `:186,195`.
+   Where: [install.sh:233](<checkout>/install.sh:233), with argument handling at `:186,195`.
 
    The new first attempt supplies `"python3 python3-venv"` for every Linux package manager. The dnf and pacman branches quote that entire string as one package argument.
 
@@ -72,7 +72,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 5. **I5 · should-fix · CONFIRMED: manual recovery instructions can recreate the solver mismatch fixed in the updater.**
 
-   Where: [user troubleshooting:185](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/docs/user/troubleshooting.md:185), [skill troubleshooting:95](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2/src/anyscribe/skill/references/troubleshooting.md:95), and skill troubleshooting `:139`.
+   Where: [user troubleshooting:185](<checkout>/docs/user/troubleshooting.md:185), [skill troubleshooting:95](<checkout>/src/anyscribe/skill/references/troubleshooting.md:95), and skill troubleshooting `:139`.
 
    These instructions still upgrade bare yt-dlp. Following them can upgrade the downloader without requesting its matching solver dependency.
 
@@ -84,7 +84,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 6. **I6 · should-fix · CONFIRMED: the fresh-Ubuntu evidence does not identify the reviewed installer.**
 
-   Where: [Docker transcript:2](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/docker-ubuntu2404-deno-install.log:2), [lead evidence](/Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/lead-evidence-r2.md).
+   Where: [Docker transcript:2](<run-folder>/docker-ubuntu2404-deno-install.log:2), [lead evidence](<run-folder>/lead-evidence-r2.md).
 
    The transcript arrived during this review. It records a successful unzip installation, non-interactive Deno setup, installer exit 0, doctor detection and a public-video download with Deno off PATH.
 
@@ -123,7 +123,7 @@ Windows execution and a browser-visible job warning remain **DECLINED-OK**, as s
 
 **Pending owner checks**
 
-Only the carried-forward preference about the missing optional runtime’s appearance in Settings needs Rishabh’s judgment. It does not block this verdict. Node’s PATH, actual shell-profile edits and machine installation checks belong to the release lead.
+Only the carried-forward preference about the missing optional runtime’s appearance in Settings needs the owner’s judgment. It does not block this verdict. Node’s PATH, actual shell-profile edits and machine installation checks belong to the release lead.
 
 **Verification and limits**
 

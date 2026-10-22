@@ -181,7 +181,7 @@ function Get-ProbeLines($exe, $argument) {
 # The runtime's own version banner among the probe lines, or $null.
 function Get-RuntimeBanner($name, $lines) {
     if (-not $lines) { return $null }
-    $pattern = if ($name -eq 'deno') { '^deno (\d+)\.(\d+)\.(\d+)(\D|$)' } else { '^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$' }
+    $pattern = if ($name -eq 'deno') { '^deno (\d+)\.(\d+)\.(\d+)\b' } else { '^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$' }
     foreach ($line in $lines) { if ($line -match $pattern) { return $line } }
     return $null
 }

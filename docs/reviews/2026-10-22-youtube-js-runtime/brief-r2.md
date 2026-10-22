@@ -7,10 +7,10 @@ only what this brief names.
 WHAT: anyscribe pull request #21 "Give yt-dlp a JavaScript runtime for YouTube
 (Deno or Node), install Deno when missing (0.17.1 prep)", branch
 feat/youtube-js-runtime, head commit 6cad090b6f367e70690a790cf7d489bf8b20ac17 (round 2; round 1 reviewed 0b1dffb),
-against main b061832 (v0.17.0). Checkout to read: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/wt-r2 (a detached clone at
-that commit). Full diff against main: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/diff-r2.patch; the round-1 fix commit
-alone: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/fixes-r2.patch. Lead evidence: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/lead-evidence-r2.md. Round-1
-reports: /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/report-gpt-6-astra-r1.md (correctness), /Users/rish/.review-runs/2026-10-22-anyscribe-js-runtime/report-opus-5.5-r1.md (fit).
+against main b061832 (v0.17.0). Checkout to read: <checkout> (a detached clone at
+that commit). Full diff against main: <run-folder>/diff-r2.patch; the round-1 fix commit
+alone: <run-folder>/fixes-r2.patch. Lead evidence: <run-folder>/lead-evidence-r2.md. Round-1
+reports: <run-folder>/report-gpt-6-astra-r1.md (correctness), <run-folder>/report-opus-5.5-r1.md (fit).
 
 WHY IT EXISTS (the owner's ask, in his words, 2026-10-22): after three options
 for yt-dlp's JavaScript-runtime requirement, (a) document, (b) yt-dlp[default]

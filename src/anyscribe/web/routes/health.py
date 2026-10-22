@@ -16,6 +16,7 @@ async def health() -> dict:
     results = check_dependencies()
     deps = {r.dep.name: r.found for r in results}
     return {
+        "app": "anyscribe",  # identity: the desktop app and tray only attach to, open or stop this
         "ok": all(r.found for r in results if r.dep.required),  # optional rows never flip it
         "version": __version__,
         "dependencies": deps,

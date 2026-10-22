@@ -27,8 +27,8 @@ console = Console()
 err_console = Console(stderr=True)
 
 STOPPED_COPY = (
-    "Stopped anyscribe. Any transcription in progress was cancelled; "
-    "it will resume from its checkpoint the next time you run it."
+    "Stopped anyscribe. If a transcription was running, it was interrupted: "
+    "run it again (long jobs reuse the chunks they already finished)."
 )
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from anyscribe import __version__
 from anyscribe.config import paths
 from anyscribe.core import launcher, service, tray
 from anyscribe.core.fileutil import atomic_write
+from anyscribe.core.tray import health_is_anyscribe
 
 
 class Manifest(TypedDict):
@@ -74,20 +76,6 @@ def tray_available() -> bool:
     return find_spec("pystray") is not None and find_spec("PIL") is not None
 
 
-def health_is_anyscribe(port: int) -> bool:
-    """True if anyscribe's own web server answers on this port."""
-    try:
-        import httpx
-
-        # A login-started server runs throttled: health took 3.5-8 s there on macOS
-        # (0.4 s from a terminal). Too short a timeout reads our own server as foreign.
-        r = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=10.0)
-        body = r.json()
-    except Exception:
-        return False
-    return r.status_code == 200 and isinstance(body, dict) and "version" in body
-
-
 def spawn_detached(args: list[str], log: Path) -> subprocess.Popen:
     """Start a process that outlives this one, output appended to ``log``."""
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +97,7 @@ def spawn_detached(args: list[str], log: Path) -> subprocess.Popen:
 
 
 EXTERNAL_WAIT = 10.0  # seconds open_dashboard waits for launchd's tray before spawning one
+ORPHAN_GRACE = 3.0  # seconds a live tray gets to bring its server's port up
 
 
 def _wait_until(done: Callable[[], bool], timeout: float, interval: float = 0.25) -> bool:
@@ -120,12 +109,43 @@ def _wait_until(done: Callable[[], bool], timeout: float, interval: float = 0.25
     return True
 
 
-def _start(args: list[str] | None, port: int, timeout: float) -> str:
-    """Spawn ``args`` (None: a tray is already starting) and wait for health.
+def _kickstart(port: int) -> bool:
+    """(Re)start the tray under launchd, so KeepAlive restarts it after a crash.
+
+    False if there is no login item for this port or launchctl refused.
+    """
+    try:
+        args = plistlib.loads(service.plist_path().read_bytes())["ProgramArguments"]
+    except (OSError, ValueError, KeyError):
+        return False
+    if args[-1:] != [str(port)]:
+        return False  # the login item serves another port
+    target = f"gui/{os.getuid()}/{service.LABEL}"
+    try:
+        r = subprocess.run(
+            ["launchctl", "kickstart", "-k", target], check=False, capture_output=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0
+
+
+def _start_tray(port: int) -> subprocess.Popen | None:
+    """Start the tray: through launchd on macOS when the login item is there, else spawn.
+
+    Returns the spawned process, or None when launchd started it.
+    """
+    if sys.platform == "darwin" and _kickstart(port):
+        return None
+    python = launcher.pythonw(sys.executable)
+    return spawn_detached([python, "-m", "anyscribe", "tray", "--port", str(port)], tray.TRAY_LOG)
+
+
+def _await_health(proc: subprocess.Popen | None, port: int, timeout: float) -> str:
+    """Wait for health on ``port`` (``proc``: what was started, None if someone else).
 
     Returns "up", "exited" (the process died first) or "timeout".
     """
-    proc = spawn_detached(args, tray.TRAY_LOG) if args else None
     result = "timeout"
 
     def done() -> bool:
@@ -156,14 +176,19 @@ def open_dashboard(port: int, timeout: float = 15.0, expect_external: bool = Fal
     if not health_is_anyscribe(port):
         if tray.port_responding(port):
             raise PortInUseError(port)
-        python = launcher.pythonw(sys.executable)
-        # A tray already running (e.g. launchd's) brings its server up; a second would race it.
-        tray_args = [python, "-m", "anyscribe", "tray", "--port", str(port)]
-        state = _start(None if tray.read_pidfile() else tray_args, port, timeout)
+        proc = None  # a tray already running (e.g. launchd's) brings its server up
+        if tray.read_pidfile() is None:
+            proc = _start_tray(port)
+        elif not _wait_until(lambda: tray.port_responding(port), ORPHAN_GRACE):
+            # A tray whose server is gone (dashboard Shutdown, a crash) starts nothing: replace it.
+            tray.stop_tray(port)
+            proc = _start_tray(port)
+        state = _await_health(proc, port, timeout)
         if state == "exited":
             # The tray exits at once with no tray backend (headless Linux, no display).
+            python = launcher.pythonw(sys.executable)
             ui_args = [python, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"]
-            state = _start(ui_args, port, timeout)
+            state = _await_health(spawn_detached(ui_args, tray.TRAY_LOG), port, timeout)
         if state != "up":
             raise StartFailed(port)
     if not webbrowser.open(url):

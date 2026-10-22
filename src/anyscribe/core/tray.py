@@ -1,4 +1,4 @@
-"""Tray companion core — process supervision, port probe, pidfile.
+"""Tray companion core — process supervision, port probe, pidfile, instance lock.
 
 GUI-free helpers so they stay unit-testable. The pystray loop lives in
 ``cli/tray_cmd.py`` and imports these. All pystray/Pillow imports are lazy
@@ -11,14 +11,45 @@ from __future__ import annotations
 import os
 import signal
 import socket
+import subprocess
 import time
+from pathlib import Path
+from typing import IO
 
 from anyscribe.config.paths import APP_HOME, LOGS_DIR
 
 PIDFILE = APP_HOME / "tray.pid"
+SERVER_PIDFILE = APP_HOME / "server.pid"
+LOCKFILE = APP_HOME / "tray.lock"
 TRAY_LOG = LOGS_DIR / "tray.log"
 GITHUB_RELEASES_URL = "https://github.com/rishmadaan/anyscribe/releases"
 DEFAULT_PORT = 8457
+
+
+def acquire_instance_lock(path: Path | None = None) -> IO | None:
+    """Take the one-tray-per-user lock; None if another tray holds it.
+
+    Keep the returned file open for the tray's whole life: the OS drops the
+    lock when the process exits, however it exits, so a crash never locks out
+    the next start.
+    """
+    path = path or LOCKFILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            f.seek(0)  # msvcrt locks bytes from the current position
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
 
 
 def port_responding(port: int, host: str = "127.0.0.1", timeout: float = 0.5) -> bool:
@@ -26,6 +57,20 @@ def port_responding(port: int, host: str = "127.0.0.1", timeout: float = 0.5) ->
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(timeout)
         return s.connect_ex((host, port)) == 0
+
+
+def health_is_anyscribe(port: int) -> bool:
+    """True if anyscribe's own web server answers on this port."""
+    try:
+        import httpx
+
+        # A login-started server runs throttled: health took 3.5-8 s there on macOS
+        # (0.4 s from a terminal). Too short a timeout reads our own server as foreign.
+        r = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=10.0)
+        body = r.json()
+    except Exception:
+        return False
+    return r.status_code == 200 and isinstance(body, dict) and body.get("app") == "anyscribe"
 
 
 def _windows_pid_alive(pid: int) -> bool:
@@ -59,38 +104,69 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def read_pidfile() -> int | None:
-    """Return the live pid recorded in the pidfile, or None.
+def pid_is_anyscribe(pid: int) -> bool:
+    """True if this pid's command line names anyscribe.
 
-    Stale pidfiles (process gone) are treated as absent — so a crash doesn't
-    lock out the next launch.
+    A pidfile can outlive a crash or reboot, and its number can be reused by
+    an unrelated program: never signal a pid on its number alone.
     """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        query = f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine'
+        args = ["powershell", "-NoProfile", "-NonInteractive", "-Command", query]
+    else:
+        args = ["ps", "-o", "command=", "-p", str(pid)]
     try:
-        pid = int(PIDFILE.read_text().strip())
+        out = subprocess.run(args, capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "anyscribe" in out
+
+
+def _read_pid(path: Path) -> int | None:
+    try:
+        pid = int(path.read_text().strip())
     except (FileNotFoundError, ValueError, OSError):
         return None
-    return pid if _pid_alive(pid) else None
+    return pid if pid > 0 and _pid_alive(pid) and pid_is_anyscribe(pid) else None
 
 
-def write_pidfile() -> None:
-    PIDFILE.parent.mkdir(parents=True, exist_ok=True)
-    PIDFILE.write_text(str(os.getpid()))
+def read_pidfile() -> int | None:
+    """Return the live anyscribe tray pid recorded in the pidfile, or None.
+
+    A stale pidfile (process gone, or its pid reused by another program) is
+    treated as absent.
+    """
+    return _read_pid(PIDFILE)
 
 
-def remove_pidfile(force: bool = False) -> None:
-    """Remove the pidfile if this process owns it (or ``force``).
+def write_pidfile(pid: int | None = None, path: Path | None = None) -> None:
+    path = path or PIDFILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(pid or os.getpid()))
+
+
+def remove_pidfile(force: bool = False, pid: int | None = None, path: Path | None = None) -> None:
+    """Remove the pidfile if it still names ``pid`` (default: this process), or ``force``.
 
     A tray tearing down after a newer tray started must not delete the newer one's file.
     """
+    path = path or PIDFILE
     try:
-        if force or PIDFILE.read_text().strip() == str(os.getpid()):
-            PIDFILE.unlink()
+        if force or path.read_text().strip() == str(pid or os.getpid()):
+            path.unlink()
     except OSError:  # includes FileNotFoundError
         pass
 
 
 def _post_shutdown(port: int) -> None:
-    """Ask the web server on this port to stop; ignore any failure."""
+    """Ask anyscribe's web server on this port to stop; ignore any failure.
+
+    Only anyscribe gets the request: another program on the port is left alone.
+    """
+    if not health_is_anyscribe(port):
+        return
     try:
         import httpx
 
@@ -109,21 +185,19 @@ def _wait_until(done, timeout: float) -> bool:
     return True
 
 
-def stop_tray(port: int, timeout: float = 10.0) -> bool:
-    """Stop a running tray and its server from outside. True if a tray pid was signalled.
+def _terminate(pid: int | None, port: int, timeout: float) -> bool:
+    """SIGTERM ``pid``, wait for it and the port, SIGKILL if it outlives ``timeout``.
 
-    Waits until the tray has exited and the port is free, so a tray started right
-    after this returns cannot mistake the dying server for an external one.
+    True if the pid was signalled. Waits for the port too, so a tray started
+    right after cannot mistake the dying server for an external one.
     """
-    _post_shutdown(port)
-    pid = read_pidfile()
     signalled = False
     if pid is not None:
         try:
             os.kill(pid, signal.SIGTERM)
             signalled = True
         except OSError:
-            pass  # exited since the pidfile read, or not ours to signal; drop the pidfile anyway
+            pass  # exited since the pidfile read, or not ours to signal
 
     def gone() -> bool:
         return not (signalled and _pid_alive(pid)) and not port_responding(port)
@@ -135,5 +209,20 @@ def stop_tray(port: int, timeout: float = 10.0) -> bool:
         except OSError:
             pass
         _wait_until(lambda: not port_responding(port), 2.0)
-    remove_pidfile(force=True)
     return signalled
+
+
+def stop_tray(port: int, timeout: float = 10.0) -> bool:
+    """Stop a running tray and its server from outside. True if either was signalled.
+
+    The server is stopped by its own pid as well: on Windows the tray is
+    terminated outright, skipping its teardown, and a server whose HTTP side
+    has stopped can still be finishing a transcription.
+    """
+    _post_shutdown(port)
+    tray_signalled = _terminate(read_pidfile(), port, timeout)
+    server_pid = _read_pid(SERVER_PIDFILE)
+    server_signalled = server_pid is not None and _terminate(server_pid, port, timeout)
+    remove_pidfile(force=True)
+    remove_pidfile(force=True, path=SERVER_PIDFILE)
+    return tray_signalled or server_signalled

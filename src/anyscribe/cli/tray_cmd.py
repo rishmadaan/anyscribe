@@ -82,6 +82,7 @@ def _shutdown_server(proc, port: int) -> None:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+    core.remove_pidfile(pid=proc.pid, path=core.SERVER_PIDFILE)
 
 
 def _child_kwargs() -> dict:
@@ -128,6 +129,13 @@ def tray(
 
     Requires the optional extra: [bold]pip install 'anyscribe\[tray]'[/bold]
     """
+    # Held for the tray's whole life; checked before the extra so a duplicate exits quietly.
+    lock = core.acquire_instance_lock()
+    if lock is None:
+        # Exit 0: the login item relaunches any non-zero exit, forever.
+        err_console.print("[yellow]An anyscribe tray is already running.[/yellow]")
+        raise typer.Exit(code=0)
+
     try:
         import pystray  # noqa: F401
         from PIL import Image  # noqa: F401
@@ -135,13 +143,8 @@ def tray(
         err_console.print(_MISSING_EXTRA, style="red", markup=False)
         raise typer.Exit(code=1)
 
-    # Already-running instance? Bail instead of colliding on the port.
-    if core.read_pidfile() is not None:
-        # Exit 0: the login item relaunches any non-zero exit, forever.
-        err_console.print("[yellow]An anyscribe tray is already running.[/yellow]")
-        raise typer.Exit(code=0)
-
     _run_tray(port)
+    lock.close()
 
 
 def _run_tray(port: int) -> None:
@@ -150,20 +153,29 @@ def _run_tray(port: int) -> None:
     core.write_pidfile()
     state: dict = {"proc": None}
 
-    def _server_up() -> bool:
-        return core.port_responding(port)
+    def _log(msg: str) -> None:
+        print(f"tray: {msg}", file=sys.stderr, flush=True)  # the tray's stderr is tray.log
 
     def _start_server() -> None:
-        """Spawn the uvicorn server as a subprocess unless one is already up."""
-        if _server_up():
-            return  # attach to an externally-started server (we don't own it)
+        """Spawn the uvicorn server as a subprocess unless anyscribe is already up."""
+        state["foreign"] = False
+        if core.health_is_anyscribe(port):
+            return  # attach to an externally-started anyscribe server (we don't own it)
+        if core.port_responding(port):
+            state["foreign"] = True
+            _log(f"port {port} is used by another program; not starting the server")
+            return
         state["proc"] = subprocess.Popen(
             [sys.executable, "-m", "anyscribe", "ui", "--port", str(port), "--no-open"],
             **_child_kwargs(),
         )
+        core.write_pidfile(state["proc"].pid, core.SERVER_PIDFILE)
 
     def on_open(icon, item) -> None:  # noqa: ANN001
-        webbrowser.open(f"http://127.0.0.1:{port}")
+        if core.health_is_anyscribe(port):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        else:
+            _log(f"Open UI: anyscribe is not answering on port {port}")
 
     def on_restart(icon, item) -> None:  # noqa: ANN001
         _shutdown_server(state.pop("proc", None), port)
@@ -174,7 +186,9 @@ def _run_tray(port: int) -> None:
         webbrowser.open(core.GITHUB_RELEASES_URL)
 
     def status_text(item) -> str:  # noqa: ANN001
-        return f"Status: {'running' if _server_up() else 'stopped'}"
+        if state.get("foreign"):
+            return f"Status: port {port} is used by another program"
+        return f"Status: {'running' if core.port_responding(port) else 'stopped'}"
 
     def on_quit(icon, item) -> None:  # noqa: ANN001
         _teardown(state, port)

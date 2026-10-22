@@ -17,6 +17,8 @@ from anyscribe.core import desktop, tray
 
 REAL_HEALTH = desktop.health_is_anyscribe  # before the autouse fixture stubs it
 REAL_OPEN = desktop.open_dashboard
+REAL_PORT_RESPONDING = tray.port_responding
+REAL_KICKSTART = desktop._kickstart
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +27,13 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DESKTOP_MANIFEST", tmp_path / "desktop.json")
     monkeypatch.setattr(paths, "DESKTOP_DIR", tmp_path / "desktop")
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "SERVER_PIDFILE", tmp_path / "server.pid")
+    monkeypatch.setattr(tray, "LOCKFILE", tmp_path / "tray.lock")
     monkeypatch.setattr(tray, "TRAY_LOG", tmp_path / "logs" / "tray.log")
+    # launchctl acts on the real user's job whatever HOME says: never run it here.
+    monkeypatch.setattr(desktop, "_kickstart", lambda port: False)
+    monkeypatch.setattr(desktop.service, "is_installed", lambda: False)
+    monkeypatch.setattr(desktop, "ORPHAN_GRACE", 0)
     monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: False)
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: False)
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: False)
@@ -59,7 +67,6 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(
         desktop.service, "uninstall_service", lambda: record("uninstall_service", None, True)
     )
-    monkeypatch.setattr(desktop.service, "is_installed", lambda: False)  # not the real plist
     monkeypatch.setattr(
         desktop, "open_dashboard", lambda port, **k: record("open_dashboard", port, "url")
     )
@@ -225,15 +232,19 @@ def test_install_over_existing_stops_old_tray_first(monkeypatch, calls, tmp_mani
 # ---- open ----------------------------------------------------------------
 
 
-def test_open_refuses_foreign_listener(monkeypatch):
-    monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: True)
-    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: False)
+def test_open_refuses_foreign_listener(monkeypatch, health_server, fake_browser):
+    """A real server answering like a program with a version, but not anyscribe."""
+    monkeypatch.setattr(desktop.tray, "port_responding", REAL_PORT_RESPONDING)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", REAL_HEALTH)
     monkeypatch.setattr(desktop, "spawn_detached", lambda *a, **k: pytest.fail("must not spawn"))
+    port = health_server.port
     with pytest.raises(desktop.PortInUseError) as e:
-        desktop.open_dashboard(8457)
+        desktop.open_dashboard(port)
     assert str(e.value) == (
-        "Port 8457 is in use by another program. Run: anyscribe desktop install --port <free port>"
+        f"Port {port} is in use by another program. "
+        "Run: anyscribe desktop install --port <free port>"
     )
+    assert fake_browser.opened == []
 
 
 def test_open_when_already_healthy_just_opens(monkeypatch, fake_browser):
@@ -258,8 +269,84 @@ def test_open_does_not_spawn_second_tray(monkeypatch, fake_spawn, fake_browser):
     health = iter([False, True])
     monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: next(health))
     monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: 4242)
+    bound = iter([False, True])  # free at the foreign-port check, then its server binds
+    monkeypatch.setattr(desktop.tray, "port_responding", lambda port, **k: next(bound, True))
+    monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: pytest.fail("killed a live tray"))
     desktop.open_dashboard(8457, timeout=1)
     assert fake_spawn.args == []
+
+
+def test_open_replaces_orphaned_tray(monkeypatch, fake_spawn, fake_browser):
+    """Dashboard Shutdown leaves the tray up with no server; clicking the app must recover."""
+    order = []
+    monkeypatch.setattr(desktop.tray, "read_pidfile", lambda: None if "stop" in order else 4242)
+
+    def stop(port):
+        order.append("stop")
+
+    monkeypatch.setattr(desktop.tray, "stop_tray", stop)
+    real_spawn = desktop.spawn_detached
+
+    def spawn(args, log):
+        order.append("start")
+        return real_spawn(args, log)
+
+    monkeypatch.setattr(desktop, "spawn_detached", spawn)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: "start" in order)
+    url = desktop.open_dashboard(8457, timeout=1)
+    assert order == ["stop", "start"]
+    assert len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
+    assert fake_browser.opened == [url]
+
+
+def _login_item(tmp_path, monkeypatch, port=8457):
+    plist = tmp_path / "com.anyscribe.tray.plist"
+    plist.write_text(desktop.service.render_plist(python="/usr/bin/python3", port=port))
+    monkeypatch.setattr(desktop.service, "plist_path", lambda: plist)
+    monkeypatch.setattr(desktop, "_kickstart", REAL_KICKSTART)
+    monkeypatch.setattr(desktop.sys, "platform", "darwin")
+
+
+def _fake_run(monkeypatch, returncode):
+    ran = []
+
+    def run(args, **kwargs):
+        ran.append(args)
+        return subprocess.CompletedProcess(args, returncode, b"", b"")
+
+    monkeypatch.setattr(desktop.subprocess, "run", run)
+    return ran
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="launchctl targets gui/<uid>, POSIX only")
+def test_open_uses_launchctl_kickstart_on_macos_with_login_item(
+    monkeypatch, tmp_path, fake_spawn, fake_browser
+):
+    """After Quit, the app click restarts the tray under launchd, so crash restart still holds."""
+    _login_item(tmp_path, monkeypatch)
+    ran = _fake_run(monkeypatch, 0)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(ran))
+    desktop.open_dashboard(8457, timeout=1)
+    assert ran == [
+        ["launchctl", "kickstart", "-k", f"gui/{desktop.os.getuid()}/com.anyscribe.tray"]
+    ]
+    assert fake_spawn.args == []
+    assert fake_browser.opened == ["http://127.0.0.1:8457"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="launchctl targets gui/<uid>, POSIX only")
+def test_open_spawns_when_kickstart_fails(monkeypatch, tmp_path, fake_spawn, fake_browser):
+    _login_item(tmp_path, monkeypatch)
+    ran = _fake_run(monkeypatch, 113)
+    monkeypatch.setattr(desktop, "health_is_anyscribe", lambda port: bool(fake_spawn.args))
+    desktop.open_dashboard(8457, timeout=1)
+    assert len(ran) == 1 and len(fake_spawn.args) == 1 and "tray" in fake_spawn.args[0]
+
+
+def test_kickstart_skips_login_item_for_another_port(monkeypatch, tmp_path):
+    _login_item(tmp_path, monkeypatch, port=9000)
+    ran = _fake_run(monkeypatch, 0)
+    assert desktop._kickstart(8457) is False and ran == []
 
 
 def test_open_falls_back_to_ui_when_tray_dies(monkeypatch, fake_browser):
@@ -295,7 +382,11 @@ def test_open_prints_url_when_no_browser(monkeypatch, fake_browser, capsys):
 
 @pytest.mark.parametrize(
     "status, body, expected",
-    [(200, {"ok": True, "version": "1"}, True), (200, {"ok": True}, False), (404, {}, False)],
+    [
+        (200, {"app": "anyscribe", "ok": True, "version": "1"}, True),
+        (200, {"ok": True, "version": "1"}, False),  # another program's health page
+        (404, {"app": "anyscribe"}, False),
+    ],
 )
 def test_health_is_anyscribe(monkeypatch, status, body, expected):
     import httpx
@@ -373,7 +464,7 @@ def test_uninstall_stops_tray_and_warns_about_running_job(monkeypatch, tmp_manif
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: calls["stop"].append(port) or True)
     r = CliRunner().invoke(app, ["desktop", "uninstall", "--yes"])
     assert r.exit_code == 0 and calls["stop"] == [8457]
-    assert "transcription in progress" in r.output and "resume" in r.output
+    assert "If a transcription was running, it was interrupted: run it again" in r.output
 
 
 # ---- CLI -----------------------------------------------------------------

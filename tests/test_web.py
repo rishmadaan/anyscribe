@@ -25,6 +25,7 @@ class TestHealth:
         assert r.status_code == 200
         data = r.json()
         assert "version" in data
+        assert data["app"] == "anyscribe"  # the identity the desktop app and tray check
         assert "ok" in data
         assert "dependencies" in data
 

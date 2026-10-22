@@ -909,7 +909,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 When `uninstall` stops a running copy, it prints:
 
 ```
-Stopped anyscribe. Any transcription in progress was cancelled; it will resume from its checkpoint the next time you run it.
+Stopped anyscribe. If a transcription was running, it was interrupted: run it again (long jobs reuse the chunks they already finished).
 ```
 
 What gets written where:

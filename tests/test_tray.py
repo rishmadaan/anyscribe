@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -19,11 +20,28 @@ from anyscribe.core import launcher, service, tray
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def tmp_tray_files(monkeypatch, tmp_path):
+    """Every pidfile and lock in a tmp dir, never one a real tray holds."""
+    monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "SERVER_PIDFILE", tmp_path / "server.pid")
+    monkeypatch.setattr(tray, "LOCKFILE", tmp_path / "tray.lock")
+
+
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 # ---- pidfile -------------------------------------------------------------
 
 
 def test_pidfile_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
     assert tray.read_pidfile() is None
     tray.write_pidfile()
     assert tray.read_pidfile() == os.getpid()
@@ -224,6 +242,8 @@ def test_install_service_unsupported_platform(monkeypatch):
 class FakeProc:
     """Fake Popen: ignores /shutdown, exits only after terminate()."""
 
+    pid = 999
+
     def __init__(self):
         self.terminated = False
         self.killed = False
@@ -330,7 +350,7 @@ def test_setup_callback_makes_icon_visible():
 
 def test_tray_exits_zero_when_already_running(monkeypatch):
     # A login item relaunches any non-zero exit, so a duplicate must exit 0.
-    monkeypatch.setattr(tray_cmd.core, "read_pidfile", lambda: 4242)
+    monkeypatch.setattr(tray_cmd.core, "acquire_instance_lock", lambda: None)
     monkeypatch.setitem(sys.modules, "pystray", types.ModuleType("pystray"))
     monkeypatch.setitem(sys.modules, "PIL", types.ModuleType("PIL"))
     sys.modules["PIL"].Image = object
@@ -361,6 +381,7 @@ def test_child_kwargs_per_platform(monkeypatch):
 
 def test_stop_tray_shuts_down_and_kills(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
     tray.PIDFILE.write_text("777")
     killed, posted = [], []
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: not killed)  # exits on SIGTERM
@@ -382,6 +403,7 @@ def test_stop_tray_without_tray_signals_nothing(monkeypatch, tmp_path):
 
 def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
     tray.PIDFILE.write_text("777")
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
@@ -398,6 +420,7 @@ def test_stop_tray_removes_pidfile_when_kill_raises_oserror(monkeypatch, tmp_pat
 def test_stop_tray_waits_for_port_to_free(monkeypatch, tmp_path):
     # The old server must be gone before stop_tray returns, or a new tray attaches to it.
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
     tray.PIDFILE.write_text("777")
     alive = iter([True, True, False])  # read_pidfile, first poll, then exited
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: next(alive, False))
@@ -418,6 +441,7 @@ def test_stop_tray_waits_for_port_to_free(monkeypatch, tmp_path):
 
 def test_stop_tray_kills_when_pid_outlives_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(tray, "PIDFILE", tmp_path / "tray.pid")
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
     tray.PIDFILE.write_text("777")
     monkeypatch.setattr(tray, "_pid_alive", lambda pid: True)
     monkeypatch.setattr(tray, "port_responding", lambda port: False)
@@ -440,3 +464,180 @@ def test_remove_pidfile_leaves_another_trays_file(monkeypatch, tmp_path):
     tray.PIDFILE.write_text(str(os.getpid()))
     tray.remove_pidfile()
     assert not tray.PIDFILE.exists()
+
+
+# ---- ownership: instance lock, identity on the wire, only signal what is ours ----
+
+_LOCK_CHILD = """
+import sys, time
+from pathlib import Path
+from anyscribe.core import tray
+lock = tray.acquire_instance_lock(Path(sys.argv[1]))
+print("got" if lock else "busy", flush=True)
+time.sleep(float(sys.argv[2]))
+"""
+
+
+def test_instance_lock_excludes_second_process(tmp_path):
+    lockfile = tmp_path / "tray.lock"
+
+    def child(hold: float) -> subprocess.Popen:
+        return subprocess.Popen(
+            [sys.executable, "-c", _LOCK_CHILD, str(lockfile), str(hold)],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+
+    first = child(2)
+    first_line = first.stdout.readline().strip()  # it holds the lock from here on
+    second = child(0)
+    second_line = second.stdout.readline().strip()
+    second.wait(timeout=10)
+    first.wait(timeout=10)
+    assert (first_line, second_line) == ("got", "busy")
+    # Released at exit, however the holder exits: the next tray is not locked out.
+    assert tray.acquire_instance_lock(lockfile) is not None
+
+
+def test_tray_command_exits_zero_while_lock_held(tmp_path):
+    """The real launch command, not a fake: a second `anyscribe tray` exits 0, starting nothing."""
+    home = tmp_path / "home"
+    held = tray.acquire_instance_lock(home / ".anyscribe" / "tray.lock")
+    assert held is not None
+    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+    r = subprocess.run(
+        [sys.executable, "-m", "anyscribe", "tray", "--port", str(_free_port())],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    held.close()
+    assert r.returncode == 0, r.stderr
+    assert "An anyscribe tray is already running." in r.stderr
+    assert not (home / ".anyscribe" / "tray.pid").exists()
+
+
+def test_health_identity_requires_app_field(health_server):
+    assert tray.health_is_anyscribe(health_server.port) is False  # {"version": "1"}: foreign
+    health_server.body = {"app": "anyscribe", "version": "1"}
+    assert tray.health_is_anyscribe(health_server.port) is True
+
+
+def test_post_shutdown_leaves_foreign_server_alone(health_server):
+    tray._post_shutdown(health_server.port)
+    assert health_server.posts == []
+    health_server.body = {"app": "anyscribe", "version": "1"}
+    tray._post_shutdown(health_server.port)
+    assert health_server.posts == ["/api/shutdown"]
+
+
+def test_pid_is_anyscribe_rejects_non_positive_and_other_programs():
+    assert tray.pid_is_anyscribe(0) is False and tray.pid_is_anyscribe(-1) is False
+    child = subprocess.Popen(_sleeper())
+    try:
+        assert tray.pid_is_anyscribe(child.pid) is False
+    finally:
+        child.kill()
+        child.wait()
+
+
+def _sleeper() -> list[str]:
+    """A long-running process whose command line does not mention anyscribe."""
+    return ["ping", "-n", "30", "127.0.0.1"] if os.name == "nt" else ["sleep", "30"]
+
+
+def test_stale_pidfile_with_reused_pid_is_not_signalled():
+    """After a reboot the pidfile's number can belong to an unrelated program."""
+    child = subprocess.Popen(_sleeper(), stdout=subprocess.DEVNULL)
+    try:
+        tray.PIDFILE.write_text(str(child.pid))
+        signalled = tray.stop_tray(_free_port(), timeout=1)
+        time.sleep(0.3)  # a signal, had one been sent, has landed
+        assert child.poll() is None  # the unrelated program is still running
+        assert signalled is False
+        assert not tray.PIDFILE.exists()  # the stale file is gone
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_stop_tray_stops_recorded_server(monkeypatch):
+    """The tray's teardown is skipped on Windows; the server is stopped by its own pid."""
+    tray.PIDFILE.write_text("777")
+    tray.SERVER_PIDFILE.write_text("888")
+    killed = []
+    monkeypatch.setattr(tray, "pid_is_anyscribe", lambda pid: True)
+    monkeypatch.setattr(tray, "_pid_alive", lambda pid: pid not in [k[0] for k in killed])
+    monkeypatch.setattr(tray, "port_responding", lambda port: False)
+    monkeypatch.setattr(tray.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(tray, "_post_shutdown", lambda port: None)
+    assert tray.stop_tray(8457) is True
+    assert killed == [(777, signal.SIGTERM), (888, signal.SIGTERM)]
+    assert not tray.PIDFILE.exists() and not tray.SERVER_PIDFILE.exists()
+
+
+class _FakeMenu:
+    SEPARATOR = None
+
+    def __init__(self, *items):
+        self.items = items
+
+
+class _FakeMenuItem:
+    def __init__(self, text, action, **kw):
+        self.text, self.action = text, action
+
+
+def _run_fake_tray(monkeypatch, port: int) -> dict:
+    """Run _run_tray with a fake pystray whose loop returns at once; return its menu."""
+    menu = {}
+
+    class FakeIcon:
+        def __init__(self, name, image, title, m):
+            menu.update({str(i.text): i for i in m.items if i})
+
+        def run(self, setup=None):
+            pass
+
+    fake = types.ModuleType("pystray")
+    fake.Menu, fake.MenuItem, fake.Icon = _FakeMenu, _FakeMenuItem, FakeIcon
+    monkeypatch.setitem(sys.modules, "pystray", fake)
+    monkeypatch.setattr(tray_cmd, "_make_image", lambda: None)
+    monkeypatch.setattr(tray_cmd, "_watch_signals_in_thread", lambda state, port: None)
+    tray_cmd._run_tray(port)
+    return menu
+
+
+def test_tray_does_not_attach_to_foreign_server(monkeypatch, health_server, capsys):
+    monkeypatch.setattr(
+        tray_cmd.subprocess, "Popen", lambda *a, **k: pytest.fail("started a server")
+    )
+    opened = []
+    monkeypatch.setattr(tray_cmd.webbrowser, "open", opened.append)
+    menu = _run_fake_tray(monkeypatch, health_server.port)
+    status = next(i for i in menu.values() if callable(i.text))
+    assert status.text(None) == f"Status: port {health_server.port} is used by another program"
+    menu["Open UI"].action(None, None)
+    assert opened == []  # Open UI does not open another program's page
+    assert "used by another program" in capsys.readouterr().err
+
+
+def test_tray_records_server_pid(monkeypatch):
+    class Proc:
+        pid = 4321
+
+        def wait(self, timeout=None):
+            return 0
+
+    seen, real_write = [], tray.write_pidfile
+    monkeypatch.setattr(tray_cmd.subprocess, "Popen", lambda *a, **k: Proc())
+    monkeypatch.setattr(tray_cmd.core, "_post_shutdown", lambda port: None)
+    monkeypatch.setattr(
+        tray_cmd.core,
+        "write_pidfile",
+        lambda pid=None, path=None: seen.append((pid, path)) or real_write(pid, path),
+    )
+    _run_fake_tray(monkeypatch, _free_port())
+    assert (4321, tray.SERVER_PIDFILE) in seen
+    assert not tray.SERVER_PIDFILE.exists()  # removed again by the teardown

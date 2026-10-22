@@ -122,6 +122,21 @@
 <td><code>~/.anyscribe/tray.pid</code></td>
 <td>Process ID of the running tray companion</td>
 </tr>
+<tr>
+<td>Tray lock</td>
+<td><code>~/.anyscribe/tray.lock</code></td>
+<td>Empty file the running tray holds a lock on, so only one tray runs; safe to leave in place</td>
+</tr>
+<tr>
+<td>Server PID</td>
+<td><code>~/.anyscribe/server.pid</code></td>
+<td>Process ID of the dashboard server the tray started</td>
+</tr>
+<tr>
+<td>Desktop app</td>
+<td><code>~/.anyscribe/desktop.json</code>, <code>~/.anyscribe/desktop/</code></td>
+<td>What <code>anyscribe desktop install</code> set up, and the rendered icons</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -586,6 +601,10 @@ anyscribe config set groq_api_key gsk-...
 ├── recovery/                              # Audio kept from failed runs
 ├── checkpoints/                           # Chunk progress, so retries resume
 ├── tray.pid                               # Running tray companion's process ID
+├── tray.lock                              # Held by the running tray: only one runs
+├── server.pid                             # Dashboard server the tray started
+├── desktop.json                           # What `desktop install` set up
+├── desktop/                               # Rendered app icons
 └── logs/                                  # Processing logs
 </code></pre>
 <blockquote>

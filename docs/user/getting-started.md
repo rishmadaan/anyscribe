@@ -271,7 +271,7 @@ It says whether the app is installed, whether it's running, and, if something is
 anyscribe desktop uninstall
 ```
 
-This stops anyscribe (a transcription that was running is interrupted: run it again, and a long one reuses the chunks it already finished), then removes the app, the login item and the icons. Your transcripts in `~/anyscribe/`, your settings and your API keys are left exactly as they were, and the `anyscribe` command keeps working.
+This stops anyscribe and prints: "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." It then removes the app, the login item and the icons. Your transcripts in `~/anyscribe/`, your settings and your API keys are left exactly as they were, and the `anyscribe` command keeps working.
 
 > **Upgraded anyscribe with pip?** Run `anyscribe desktop install` once afterwards. The app already runs the new code next time it starts, but a copy that is running right now is still the old version; this restarts it on the new one and rewrites the login item with the new version's settings.
 

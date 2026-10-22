@@ -1358,7 +1358,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 </tbody>
 </table>
 <p>When <code>uninstall</code> stops a running copy, it prints:</p>
-<pre><code>Stopped anyscribe. If a transcription was running, it was interrupted: run it again (long jobs reuse the chunks they already finished).
+<pre><code>Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again.
 </code></pre>
 <p>What gets written where:</p>
 <table>
@@ -1408,7 +1408,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 <td><code>--port</code></td>
 <td><code>-p</code></td>
 <td><code>install</code>, <code>open</code></td>
-<td>Dashboard port. <code>install</code> stores it, and the app icon and login item use it; <code>open</code> defaults to the installed port</td>
+<td>Dashboard port. <code>install</code> stores it, and the app icon and login item use it; <code>open</code> defaults to the installed port. While desktop mode is running on one port, <code>open --port</code> with a different one refuses and stops nothing: to move it, run <code>anyscribe desktop install --port &lt;new&gt;</code></td>
 <td><code>8457</code></td>
 </tr>
 <tr>
@@ -1438,7 +1438,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 <pre><code class="language-bash"># Set up desktop mode (asks to confirm)
 anyscribe desktop install
 
-# Set it up without starting it now
+# Set up desktop mode without opening the dashboard now
 anyscribe desktop install --yes --no-launch
 
 # Something else already uses port 8457

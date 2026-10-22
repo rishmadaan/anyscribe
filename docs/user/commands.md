@@ -909,7 +909,7 @@ anyscribe desktop uninstall    # stop it and remove the app, login item and icon
 When `uninstall` stops a running copy, it prints:
 
 ```
-Stopped anyscribe. If a transcription was running, it was interrupted: run it again (long jobs reuse the chunks they already finished).
+Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again.
 ```
 
 What gets written where:
@@ -930,7 +930,7 @@ Icons go in `~/.anyscribe/desktop/` (and, on Linux, `~/.local/share/icons/hicolo
 
 | Flag | Short | On | Description | Default |
 |------|-------|----|-------------|---------|
-| `--port` | `-p` | `install`, `open` | Dashboard port. `install` stores it, and the app icon and login item use it; `open` defaults to the installed port | `8457` |
+| `--port` | `-p` | `install`, `open` | Dashboard port. `install` stores it, and the app icon and login item use it; `open` defaults to the installed port. While desktop mode is running on one port, `open --port` with a different one refuses and stops nothing: to move it, run `anyscribe desktop install --port <new>` | `8457` |
 | `--no-launch` | | `install` | Do not open the dashboard now. On macOS, registering the login item still starts the tray; on Windows and Linux this also skips starting it now. | Off |
 | `--yes` | `-y` | `install`, `uninstall` | Skip the confirmation prompt | Off |
 | `--json` | `-j` | `install`, `uninstall`, `status` | Output the result as JSON | Off |
@@ -941,7 +941,7 @@ Icons go in `~/.anyscribe/desktop/` (and, on Linux, `~/.local/share/icons/hicolo
 # Set up desktop mode (asks to confirm)
 anyscribe desktop install
 
-# Set it up without starting it now
+# Set up desktop mode without opening the dashboard now
 anyscribe desktop install --yes --no-launch
 
 # Something else already uses port 8457

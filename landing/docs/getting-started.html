@@ -276,7 +276,7 @@ tags: [transcript, youtube]
 <p><strong>To remove it:</strong></p>
 <pre><code class="language-bash">anyscribe desktop uninstall
 </code></pre>
-<p>This stops anyscribe (a transcription that was running is interrupted: run it again, and a long one reuses the chunks it already finished), then removes the app, the login item and the icons. Your transcripts in <code>~/anyscribe/</code>, your settings and your API keys are left exactly as they were, and the <code>anyscribe</code> command keeps working.</p>
+<p>This stops anyscribe and prints: "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." It then removes the app, the login item and the icons. Your transcripts in <code>~/anyscribe/</code>, your settings and your API keys are left exactly as they were, and the <code>anyscribe</code> command keeps working.</p>
 <blockquote>
 <p><strong>Upgraded anyscribe with pip?</strong> Run <code>anyscribe desktop install</code> once afterwards. The app already runs the new code next time it starts, but a copy that is running right now is still the old version; this restarts it on the new one and rewrites the login item with the new version's settings.</p>
 </blockquote>

@@ -360,9 +360,9 @@ anyscribe tray --port 9000    # supervise a server on a different port
 Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (opens the GitHub releases page), Quit.
 
 - If a server is already listening on the port, `anyscribe tray` attaches to it instead of starting a second one.
-- If a tray is already running (pidfile at `~/.anyscribe/tray.pid`), a second `anyscribe tray` prints *already running* and exits 0 rather than colliding.
+- If a tray is already running (it holds the lock on `~/.anyscribe/tray.lock`), a second `anyscribe tray` prints *already running* and exits 0 rather than colliding.
 - Works on Windows and Linux too, not only macOS.
-- Quit / SIGTERM / SIGINT all run the same teardown: stop the server *if the tray started it*, remove the pidfile.
+- Menu Quit performs teardown: stop the server *if the tray started it*, remove the pidfile. On macOS and Linux, SIGTERM/SIGINT do too; on Windows, desktop uninstall separately terminates the recorded server.
 
 ### Flags
 
@@ -388,7 +388,7 @@ anyscribe desktop open                            # what the app icon runs
 | Subcommand | What it does |
 |-----------|--------------|
 | `install` | Renders the icons into `~/.anyscribe/desktop/`, writes the app launcher and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records everything in `~/.anyscribe/desktop.json`. On macOS the login item is written first and launchd starts the tray, so a crash is restarted from the first session; on Windows and Linux the tray is started directly and the login item takes effect at the next login. Running it again is a clean reinstall: it stops the old tray and replaces both files (this is also the fix after upgrading Python or for a stale PATH). |
-| `uninstall` | Stops the tray and its server (with nothing installed and no tray running, a hand-started `anyscribe ui` is left alone), removes the launcher, login item, icons and manifest. A running transcription is interrupted (the server process is stopped by its pid too); the user runs it again, and long jobs reuse the chunks they already finished. Never touches `~/anyscribe/`, config or keys. |
+| `uninstall` | Stops the tray and its server (with nothing installed and no tray running, a hand-started `anyscribe ui` is left alone), removes the launcher, login item, icons and manifest. A running transcription is stopped too (the server process is stopped by its pid). It prints: "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." Never touches `~/anyscribe/`, config or keys. |
 | `status` | Reports what is installed, whether the tray and server are running, and `healthy` with a `reason` when not. `healthy` is true only when the app is installed and its dashboard answers. Read-only. |
 | `open` | Opens the dashboard, starting the tray first if nothing is serving (falls back to a bare `anyscribe ui --no-open` when the tray cannot run, e.g. no display). |
 
@@ -415,7 +415,7 @@ JSON `data`:
 - `uninstall`: `{"stopped": bool, "launcher": bool, "login_item": bool}` (each `true` if it was there).
 - `status`: `{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}`. `reason` is `null` when healthy, otherwise a sentence ending in the fix (e.g. the recorded Python no longer exists → `anyscribe desktop install`; installed but the dashboard not answering → `anyscribe desktop open`).
 
-Exit codes: `0` ok; `1` refused or failed (tray extra missing, port in use by another program, the server did not start); `2` unsupported platform. A port held by another program fails with `Port N is in use by another program. Run: anyscribe desktop install --port <free port>`. `open` also appends its errors to `~/.anyscribe/logs/tray.log`, since from the app icon there is no terminal. With no browser available (SSH, headless), the dashboard URL is printed on stderr, so `--json` stdout stays a single envelope.
+Exit codes: `0` ok; `1` refused or failed (tray extra missing, port in use by another program, the server did not start); `2` unsupported platform. A port held by another program fails with `Port N is in use by another program. Run: anyscribe desktop install --port <free port>`. `open --port B` while desktop mode runs on port A refuses (exit 1, nothing stopped): `` anyscribe is installed on port A. Run `anyscribe desktop open` (no --port) to open it, or `anyscribe desktop install --port B` to move it. `` `open` also appends its errors to `~/.anyscribe/logs/tray.log`, since from the app icon there is no terminal. With no browser available (SSH, headless), the dashboard URL is printed on stderr, so `--json` stdout stays a single envelope.
 
 ---
 

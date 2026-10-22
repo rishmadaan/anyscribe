@@ -26,6 +26,9 @@ anyscribe uses two locations: a visible workspace for your transcripts and a hid
 | Recovery | `~/.anyscribe/recovery/` | Audio kept from failed runs (listed by `anyscribe logs`) |
 | Checkpoints | `~/.anyscribe/checkpoints/` | Finished chunks of a long run, so a retry resumes instead of starting over |
 | Tray PID | `~/.anyscribe/tray.pid` | Process ID of the running tray companion |
+| Tray lock | `~/.anyscribe/tray.lock` | Empty file the running tray holds a lock on, so only one tray runs; safe to leave in place |
+| Server PID | `~/.anyscribe/server.pid` | Process ID of the dashboard server the tray started |
+| Desktop app | `~/.anyscribe/desktop.json`, `~/.anyscribe/desktop/` | What `anyscribe desktop install` set up, and the rendered icons |
 
 > **Upgrading from an older version?** If you have transcripts at `~/.anyscribe/workspace/`, anyscribe will automatically move them to `~/anyscribe/` on your next transcription.
 
@@ -418,6 +421,10 @@ Your transcripts live in the workspace (pure markdown, no binaries). Downloaded 
 ├── recovery/                              # Audio kept from failed runs
 ├── checkpoints/                           # Chunk progress, so retries resume
 ├── tray.pid                               # Running tray companion's process ID
+├── tray.lock                              # Held by the running tray: only one runs
+├── server.pid                             # Dashboard server the tray started
+├── desktop.json                           # What `desktop install` set up
+├── desktop/                               # Rendered app icons
 └── logs/                                  # Processing logs
 ```
 

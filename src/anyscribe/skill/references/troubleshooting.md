@@ -354,7 +354,7 @@ If the server responds at `http://127.0.0.1:8457` but you can't find the wavefor
 
 ### "An anyscribe tray is already running"
 
-A tray is already active — its pidfile (`~/.anyscribe/tray.pid`) still points at a live process. This is by design: `anyscribe tray` refuses to start a second instance instead of colliding.
+A tray is already active: it holds the one-tray lock (`~/.anyscribe/tray.lock`) for as long as it runs, so a second `anyscribe tray` exits quietly with code 0. The OS releases the lock when that tray exits, however it exits, so there is no stale lock to clean up.
 
 **Fix:** Use the existing tray (check the menu bar), or quit it first (menu → Quit, or Ctrl+C in its terminal), then relaunch.
 

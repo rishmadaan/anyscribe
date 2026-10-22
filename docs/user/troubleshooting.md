@@ -520,9 +520,8 @@ waveform to the always-visible side.
 
 ### `An anyscribe tray is already running.`
 
-A tray is already active and its pidfile (`~/.anyscribe/tray.pid`) still points
-at a live process. This is intentional — anyscribe refuses to start a second tray
-rather than collide with the first.
+A tray is already active: it holds a lock file (`~/.anyscribe/tray.lock`) while it
+runs, so a second copy steps aside instead of colliding with the first.
 
 **Fix:** use the existing one (check your menu bar or system tray), or quit it
 first (menu → Quit, or Ctrl+C in its terminal) and relaunch. This isn't an error:
@@ -598,7 +597,9 @@ back in. To stop anyscribe without the icon: `anyscribe desktop uninstall`.
 That's expected. Windows' SmartScreen warning (and macOS's Gatekeeper prompt) is
 for apps downloaded through a web browser. Desktop mode doesn't download an app:
 it builds the small launcher on your own machine from the anyscribe you just
-installed. The launcher is generated locally and needs no separately signed app download. It avoided Gatekeeper prompts in our Mac test; Windows click-through remains unverified.
+installed, with nothing to sign. On a Mac this showed no Gatekeeper prompt in our
+test; we have not yet confirmed the whole Windows path, so if Windows does warn
+you when you click the app, tell us.
 
 ### `port already in use`
 

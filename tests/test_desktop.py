@@ -598,7 +598,7 @@ def test_uninstall_stops_tray_and_warns_about_running_job(monkeypatch, tmp_manif
     monkeypatch.setattr(desktop.tray, "stop_tray", lambda port: calls["stop"].append(port) or True)
     r = CliRunner().invoke(app, ["desktop", "uninstall", "--yes"])
     assert r.exit_code == 0 and calls["stop"] == [8457]
-    assert "If a transcription was running, it was interrupted: run it again" in r.output
+    assert "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." in r.output
 
 
 # ---- CLI -----------------------------------------------------------------

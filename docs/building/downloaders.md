@@ -21,6 +21,7 @@
 - Two-step: metadata via `--dump-json --no-download`, then download with `--extract-audio`
 - Audio optimized for Whisper: 16kHz, mono, 64kbps mp3
 - Handles: `youtube.com/watch`, `youtu.be/`, `youtube.com/shorts/`, `youtube.com/live/`
+- YouTube's JavaScript challenges: `yt-dlp[default]` ships the solver scripts (`yt-dlp-ejs`); they run on Deno or Node 22+. `core/deps.py::find_js_runtime` looks for deno on PATH, then `~/.deno/bin/deno` (where Deno's install script puts it), then node, and `js_runtime_args` passes `--js-runtimes <name>:<path>` so yt-dlp uses exactly that binary. No runtime: one warning per process (`warn_if_no_js_runtime`), the download still runs. `anyscribe doctor` has a "JavaScript runtime" row; the installers add Deno when neither runtime is present
 
 ### Instagram (`downloaders/instagram.py`)
 - Uses yt-dlp via subprocess (same pattern as YouTube)

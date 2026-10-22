@@ -150,6 +150,20 @@ happens before anyscribe ever runs.</p>
 </code></pre>
 <p>Or run <code>anyscribe transcribe</code> with no URL and paste it at the prompt, where no
 quoting is needed.</p>
+<h3 id="no-javascript-runtime-found-or-no-supported-javascript-runtime-could-be-found"><code>No JavaScript runtime found</code> or <code>No supported JavaScript runtime could be found</code></h3>
+<p>YouTube makes downloaders solve a small JavaScript puzzle before it hands over
+the media. yt-dlp ships the puzzle-solving script, but needs a program to run
+it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
+warn, may miss formats, and can fail outright when YouTube changes the puzzle.</p>
+<p><strong>Fix</strong> — install Deno, then check:</p>
+<pre><code class="language-bash">brew install deno                                  # macOS
+curl -fsSL https://deno.land/install.sh | sh       # Linux
+winget install DenoLand.Deno                       # Windows (PowerShell)
+anyscribe doctor                                   # the &quot;JavaScript runtime&quot; row should say Found
+</code></pre>
+<p>If you already have Node 22 or newer, nothing to install: anyscribe tells
+yt-dlp to use it. The one-line installer from <a href="/docs/getting-started">Getting Started</a>
+does all of this for you.</p>
 <h3 id="yt-dlp-download-failed-video-unavailable"><code>yt-dlp download failed: Video unavailable</code></h3>
 <p>The video is private, deleted, age-restricted, or blocked in your region.</p>
 <p>anyscribe auto-updates yt-dlp when it's more than 60 days old — YouTube changes

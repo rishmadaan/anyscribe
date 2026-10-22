@@ -309,6 +309,61 @@ install_with_pipx() {
     USED_PIPX=true
 }
 
+# ── Check JavaScript runtime (for YouTube) ────────────────────
+# yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
+# 22+. Without one, downloads warn and may miss formats. Optional: a refusal
+# only warns.
+js_runtime_found() {
+    if command_exists deno || [[ -x "$HOME/.deno/bin/deno" ]]; then
+        local d; d="$(command -v deno 2>/dev/null || echo "$HOME/.deno/bin/deno")"
+        ok "deno $("$d" --version 2>/dev/null | head -1 | awk '{print $2}' || echo '(version unknown)')"
+        return 0
+    fi
+    if command_exists node; then
+        local major; major="$(node --version 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
+        if [[ "${major:-0}" -ge 22 ]]; then
+            ok "node $(node --version) (yt-dlp will use it for YouTube)"
+            return 0
+        fi
+        warn "node $(node --version) found, but yt-dlp needs 22 or newer"
+    fi
+    return 1
+}
+
+check_js_runtime() {
+    info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
+    js_runtime_found && return 0
+    warn "No JavaScript runtime found; YouTube downloads would miss formats or fail"
+    read -rp "    Install Deno? [Y/n] " answer </dev/tty
+    answer="${answer:-Y}"
+    if [[ ! "$answer" =~ ^[Yy] ]]; then
+        warn "Skipping. Install Deno later and run: anyscribe doctor"
+        return 0
+    fi
+    if [[ "$OS" == "macos" ]] && command_exists brew; then
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] brew install deno"
+        else
+            brew install deno || true
+        fi
+    else
+        # Deno publishes no apt/dnf package; its script installs to ~/.deno/bin
+        # and (with --yes) adds that to the shell profile. It needs unzip.
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] curl -fsSL https://deno.land/install.sh | sh -s -- --yes"
+        else
+            if ! command_exists unzip && [[ "$LINUX_PKG" == "apt" ]]; then
+                sudo apt update -qq && sudo apt install -y unzip || true
+            fi
+            curl -fsSL https://deno.land/install.sh | sh -s -- --yes || true
+        fi
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        return 0
+    fi
+    js_runtime_found || warn "Deno did not install. Install it by hand (https://docs.deno.com/runtime/getting_started/installation/) and run: anyscribe doctor"
+}
+
 # ── Install anyscribe ────────────────────────────────────────
 install_anyscribe() {
     info "Installing anyscribe..."
@@ -441,6 +496,7 @@ main() {
     check_python
     check_ytdlp
     check_ffmpeg
+    check_js_runtime
 
     echo ""
     install_anyscribe

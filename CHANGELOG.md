@@ -11,6 +11,20 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.17.1 — 2026-10-22
+
+**Changed**
+- YouTube downloads now use a JavaScript runtime. YouTube makes downloaders
+  solve a small JavaScript puzzle before handing over media; yt-dlp ships the
+  solver (`yt-dlp[default]`) and runs it on Deno or Node 22+. anyscribe finds
+  whichever you have (including a Deno installed by its own script, before you
+  open a new terminal) and tells yt-dlp to use it. With neither, YouTube
+  downloads print one warning and still run, but may miss formats or fail.
+- The installers add Deno when neither Deno nor Node 22+ is present (macOS:
+  Homebrew; Linux: Deno's install script into `~/.deno`; Windows: winget).
+  Declining only warns.
+- `anyscribe doctor` has a "JavaScript runtime" row.
+
 ## 0.17.0 — 2026-10-22
 
 **Breaking**

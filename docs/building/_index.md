@@ -2,6 +2,7 @@
 
 | Date | Type | Entry | TL;DR |
 |------|------|-------|-------|
+| 2026-10-22 | decision | [[journal/2026-10-22-v0171-youtube-js-runtime.md\|v0.17.1: JavaScript runtime for YouTube]] | yt-dlp[default] plus Deno-or-Node detection with `--js-runtimes`, a doctor row, and installers that add Deno when neither runtime exists; owner chose installing a runtime over a warning. |
 | 2026-10-22 | decision | [[journal/2026-10-22-v0170-python-311-starlette-floor.md\|v0.17.0: Python 3.11 floor and Starlette floor]] | Dropped end-of-life Python 3.10 (minor bump), added `starlette>=1.3.1` with `fastapi>=0.133`, since FastAPI's own Starlette pin still permits advisory-bearing versions; yt-dlp JavaScript runtime decision still open. |
 | 2026-10-21 | audit | [[journal/2026-10-21-staleness-audit.md\|Staleness audit: docs, skill, building docs, infra]] | Read-only four-area audit at v0.16.5 found ~150 stale or false statements, filed as five PRs for review (#15 to #19). Two owner decisions left open: a JavaScript runtime (Deno) for full yt-dlp YouTube support, and whether to drop end-of-life Python 3.10. |
 | 2026-09-13 | decision | [[journal/2026-09-13-v0165-agpl-release.md\|v0.16.5 AGPL release]] | First AGPLv3-or-later release after PR #14 review and merge; version and public wording updated, with matching source and notices. |

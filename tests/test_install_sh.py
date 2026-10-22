@@ -46,7 +46,7 @@ def test_skipped_pipx_launch_does_not_claim_ready(tmp_path):
     harness = (
         'eval "$(sed \'$d\' "$SCRIPT")"\n'  # load everything except the final `main` call
         "install_brew_if_needed(){ :; }; check_python(){ :; }; check_ytdlp(){ :; }\n"
-        "check_ffmpeg(){ :; }; install_anyscribe(){ USED_PIPX=true; }\n"
+        "check_ffmpeg(){ :; }; check_js_runtime(){ :; }; install_anyscribe(){ USED_PIPX=true; }\n"
         "command_exists(){ return 1; }; pipx(){ echo \"$BIN\"; }\n"
         "RUN_UI=true\nmain\n"
     )

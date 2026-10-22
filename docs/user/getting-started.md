@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-The installer checks for Python 3.11+, ffmpeg, and yt-dlp, installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
+The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
 
 Verify it worked:
 
@@ -306,24 +306,25 @@ Download from [python.org/downloads](https://www.python.org/downloads/) and run 
 
 > **Don't have Homebrew?** It's the standard package manager for macOS. Install it from [brew.sh](https://brew.sh).
 
-**2. ffmpeg and yt-dlp.** ffmpeg converts audio; yt-dlp fetches the video.
+**2. ffmpeg, yt-dlp, and Deno.** ffmpeg converts audio; yt-dlp fetches the video; Deno runs the small JavaScript puzzle YouTube sets before it hands over media (Node 22+ works too, if you already have it; skip Deno then).
 
 **macOS:**
 ```bash
-brew install ffmpeg yt-dlp
+brew install ffmpeg yt-dlp deno
 ```
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo apt install ffmpeg pipx
+sudo apt install ffmpeg pipx unzip
+curl -fsSL https://deno.land/install.sh | sh
 ```
 
-No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3.
+No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own environment in step 3. Deno's script puts the program in `~/.deno/bin` and adds it to your shell profile; anyscribe finds it there even before you open a new terminal.
 
 **Windows:**
 ```powershell
-winget install ffmpeg
-pip install yt-dlp
+winget install ffmpeg DenoLand.Deno
+python -m pip install yt-dlp
 ```
 
 **3. anyscribe itself.** Install with the same Python you checked in step 1, so a second, older Python's `pip` cannot sneak in.

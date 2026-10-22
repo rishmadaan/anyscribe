@@ -27,10 +27,18 @@ class YouTubeDownloader(AbstractDownloader):
         return any(p in url for p in self.PATTERNS)
 
     def download(self, url: str, output_dir: Path) -> DownloadResult:
-        from anyscribe.core.deps import ensure_ytdlp_current, get_command
+        from anyscribe.core.deps import (
+            ensure_ytdlp_current,
+            get_command,
+            js_runtime_args,
+            warn_if_no_js_runtime,
+        )
 
         ensure_ytdlp_current()
-        ytdlp = get_command("yt-dlp")
+        warn_if_no_js_runtime()
+        # YouTube's JavaScript challenges run on deno or node; without the flag
+        # yt-dlp only looks for deno on PATH.
+        ytdlp = [*get_command("yt-dlp"), *js_runtime_args()]
 
         output_dir.mkdir(parents=True, exist_ok=True)
         output_template = str(output_dir / "%(title).80s.%(ext)s")

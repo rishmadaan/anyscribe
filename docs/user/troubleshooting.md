@@ -153,6 +153,26 @@ anyscribe transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 Or run `anyscribe transcribe` with no URL and paste it at the prompt, where no
 quoting is needed.
 
+### `No JavaScript runtime found` or `No supported JavaScript runtime could be found`
+
+YouTube makes downloaders solve a small JavaScript puzzle before it hands over
+the media. yt-dlp ships the puzzle-solving script, but needs a program to run
+it: Deno (its default) or Node 22 or newer. Without one, YouTube downloads
+warn, may miss formats, and can fail outright when YouTube changes the puzzle.
+
+**Fix** — install Deno, then check:
+
+```bash
+brew install deno                                  # macOS
+curl -fsSL https://deno.land/install.sh | sh       # Linux
+winget install DenoLand.Deno                       # Windows (PowerShell)
+anyscribe doctor                                   # the "JavaScript runtime" row should say Found
+```
+
+If you already have Node 22 or newer, nothing to install: anyscribe tells
+yt-dlp to use it. The one-line installer from [Getting Started](getting-started.md)
+does all of this for you.
+
 ### `yt-dlp download failed: Video unavailable`
 
 The video is private, deleted, age-restricted, or blocked in your region.

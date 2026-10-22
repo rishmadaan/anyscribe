@@ -152,6 +152,45 @@ function Test-Ffmpeg {
     Write-Host ""
 }
 
+# ── Check JavaScript runtime (for YouTube) ───────────────────
+# yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
+# 22+. Optional: a failure only warns.
+
+function Test-JsRuntime {
+    Write-Info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
+
+    if (Test-CommandExists 'deno') {
+        Write-Ok "deno found"
+        return
+    }
+    if (Test-CommandExists 'node') {
+        $nodeVer = (& node --version 2>$null | Out-String).Trim()
+        $major = 0
+        try { $major = [int]($nodeVer.TrimStart('v').Split('.')[0]) } catch {}
+        if ($major -ge 22) {
+            Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
+            return
+        }
+        Write-Warn "node $nodeVer found, but yt-dlp needs 22 or newer"
+    }
+
+    Write-Warn "No JavaScript runtime found; YouTube downloads would miss formats or fail"
+    if (Test-CommandExists 'winget') {
+        Write-Host "    Install Deno via winget? [Y/n] " -NoNewline
+        $answer = Read-Host
+        if ($answer -eq '' -or $answer -match '^[Yy]') {
+            Write-Info "Installing Deno via winget..."
+            winget install DenoLand.Deno --accept-package-agreements --accept-source-agreements
+            Refresh-Path
+            if (Test-CommandExists 'deno') {
+                Write-Ok "deno installed"
+                return
+            }
+        }
+    }
+    Write-Warn "Deno not installed. Install it from https://docs.deno.com/runtime/getting_started/installation/ and run: anyscribe doctor"
+}
+
 # ── Check yt-dlp ──────────────────────────────────────────────
 
 function Test-YtDlp {
@@ -235,6 +274,7 @@ Write-Banner
 try {
     Test-Python
     Test-Ffmpeg
+    Test-JsRuntime
     Test-YtDlp
     Write-Host ""
     Install-Anyscribe

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 import shutil
@@ -9,6 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
@@ -17,6 +19,8 @@ console = Console()
 
 # yt-dlp versions older than this many days trigger an auto-update
 YTDLP_MAX_AGE_DAYS = 60
+
+JS_RUNTIME_URL = "https://docs.deno.com/runtime/getting_started/installation/"
 
 
 @dataclass
@@ -59,6 +63,16 @@ DEPENDENCIES = [
         module_name="yt_dlp",
     ),
     Dependency(
+        name="JavaScript runtime",
+        command="deno",
+        required=False,
+        description="Deno or Node; yt-dlp needs one to solve YouTube's JavaScript challenges",
+        install_brew="brew install deno",
+        install_pip="",
+        install_apt="",  # no apt package; the doctor points at the Deno page instead
+        install_url=JS_RUNTIME_URL,
+    ),
+    Dependency(
         name="ffmpeg",
         command="ffmpeg",
         required=True,
@@ -94,6 +108,55 @@ def get_command(name: str) -> list[str]:
                 return [sys.executable, "-m", dep.module_name]
             return [dep.command]
     return [name]
+
+
+def find_js_runtime() -> tuple[str, str] | None:
+    """Return (name, path) of a JavaScript runtime yt-dlp can use, or None.
+
+    yt-dlp runs its YouTube challenge scripts on deno (enabled by default) or
+    node (needs --js-runtimes). Deno's install script puts the binary in
+    ~/.deno/bin, which a shell opened before the install does not have on PATH,
+    so that location is checked too.
+    """
+    deno_home = Path.home() / ".deno" / "bin" / ("deno.exe" if os.name == "nt" else "deno")
+    for name, fallback in (("deno", deno_home), ("node", None)):
+        path = shutil.which(name)
+        if (
+            not path
+            and fallback is not None
+            and fallback.is_file()
+            and os.access(fallback, os.X_OK)
+        ):
+            path = str(fallback)
+        if path:
+            return name, path
+    return None
+
+
+def js_runtime_args() -> list[str]:
+    """yt-dlp flags that enable the runtime found; [] when there is none."""
+    runtime = find_js_runtime()
+    if runtime is None:
+        return []
+    name, path = runtime
+    return ["--js-runtimes", f"{name}:{path}"]
+
+
+_js_runtime_warned = False
+
+
+def warn_if_no_js_runtime() -> None:
+    """Print one warning per process when no JavaScript runtime is available."""
+    global _js_runtime_warned
+    if _js_runtime_warned or find_js_runtime() is not None:
+        return
+    _js_runtime_warned = True
+    console.print(
+        "[yellow]No JavaScript runtime found (Deno or Node). YouTube downloads may miss "
+        "formats or fail. Install Deno (macOS: brew install deno; Linux: "
+        "curl -fsSL https://deno.land/install.sh | sh; Windows: winget install "
+        "DenoLand.Deno), then run: anyscribe doctor[/yellow]"
+    )
 
 
 def _detect_os() -> str:
@@ -171,6 +234,15 @@ def check_dependencies() -> list[DepCheckResult]:
             version = f"{major}.{minor}"
             found = (major, minor) >= (3, 11)
             path = sys.executable
+        elif dep.name == "JavaScript runtime":
+            runtime = find_js_runtime()
+            found = runtime is not None
+            path = runtime[1] if runtime else None
+            version = None
+            if runtime:
+                raw = _get_version(runtime[1]) or ""
+                # deno prints "deno 2.9.7 (...)", node prints "v26.9.0"
+                version = raw if raw.startswith(runtime[0]) else f"{runtime[0]} {raw}".strip()
         elif dep.module_name:
             # pip-installed tool: check via `python -m module` (works cross-platform)
             found, version = _check_module(dep.module_name)

@@ -349,7 +349,7 @@ js_runtime_found() {
     if command_exists node; then
         v="$(probe_version node --version || true)"
         # node prints exactly "vX.Y.Z"
-        if [[ "$v" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        if [[ "$v" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.]+)?$ ]]; then
             if (( BASH_REMATCH[1] >= 22 )); then
                 ok "node $v (yt-dlp will use it for YouTube)"
                 return 0
@@ -366,6 +366,9 @@ check_js_runtime() {
     info "Checking JavaScript runtime (Deno or Node, for YouTube)..."
     js_runtime_found && return 0
     warn "No supported JavaScript runtime found; YouTube downloads may miss formats or fail"
+    if [[ "$OS" != "macos" ]] || ! command_exists brew; then
+        echo "    Deno's installer (deno.land) puts it in ~/.deno and adds that folder to your shell profile."
+    fi
     # This step is optional: an unreadable prompt (no terminal) skips it, never aborts.
     if ! read -rp "    Install Deno? [Y/n] " answer </dev/tty; then
         warn "No terminal to ask on. Skipping; install Deno later and run: anyscribe doctor"

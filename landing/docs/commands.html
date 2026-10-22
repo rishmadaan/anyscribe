@@ -553,7 +553,7 @@ anyscribe &quot;https://youtube.com/watch?v=abc123&quot; --json
 }
 </code></pre>
 <blockquote>
-<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to hide the usual progress output, then pipe to <code>jq</code>: <code>anyscribe "url" --json -q | jq '.data.file'</code>. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output.</p>
+<p><strong>Scripting tip:</strong> Use <code>--json --quiet</code> together to hide the usual progress output, then pipe to <code>jq</code>: <code>anyscribe "url" --json -q | jq '.data.file'</code>. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output. One exception: on Windows, the first run from a terminal where <code>anyscribe</code> is not on your PATH prints a one-time PATH notice into the output.</p>
 </blockquote>
 <h3 id="speaker-diarization">Speaker Diarization</h3>
 <p>The <code>--diarize</code> flag enables multi-speaker transcription — anyscribe identifies who said what and labels each turn.</p>
@@ -1609,7 +1609,9 @@ the JSON object:</p>
 </code></pre>
 <blockquote>
 <p><strong>Startup messages:</strong> JavaScript runtime warnings and yt-dlp update messages
-go to stderr, outside the JSON output.</p>
+go to stderr, outside the JSON output. One exception: on Windows, the first
+run from a terminal where <code>anyscribe</code> is not on your PATH prints a one-time
+PATH notice into the output.</p>
 </blockquote>
 <p>The result shape for a transcription is documented under
 <a href="#json-output">JSON Output</a>. Machine-readable output is also available from

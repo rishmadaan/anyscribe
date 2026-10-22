@@ -25,12 +25,19 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   winget on Windows when available. On apt-based Linux the installer first
   installs unzip if it is missing. Declining only warns.
 - `anyscribe doctor` has a "JavaScript runtime" row.
+- Upgrading does not install a runtime. Run `anyscribe doctor`: if the
+  "JavaScript runtime" row says Missing, install Deno (`brew install deno` on
+  macOS, `winget install DenoLand.Deno` on Windows, Linux steps in
+  Troubleshooting) or re-run the one-line installer. If you already have Node
+  22 or newer, nothing to do.
 
 **Fixed**
 - yt-dlp's auto-update messages no longer appear in `--json` output; they go
   to stderr.
-- The Linux installer installs your distribution's own Python first when no
-  Python is present (Ubuntu 24.04 has no `python3.11` package).
+- The Linux installer now asks for your distribution's own Python first when
+  it cannot find Python 3.11 or newer, and only then for python3.11 by name
+  (Ubuntu 24.04 has no `python3.11` package, so the installer used to stop
+  there).
 
 ## 0.17.0 — 2026-10-22
 

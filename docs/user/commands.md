@@ -307,7 +307,7 @@ On error:
 }
 ```
 
-> **Scripting tip:** Use `--json --quiet` together to hide the usual progress output, then pipe to `jq`: `anyscribe "url" --json -q | jq '.data.file'`. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output.
+> **Scripting tip:** Use `--json --quiet` together to hide the usual progress output, then pipe to `jq`: `anyscribe "url" --json -q | jq '.data.file'`. JavaScript runtime warnings and yt-dlp update messages go to stderr, outside the JSON output. One exception: on Windows, the first run from a terminal where `anyscribe` is not on your PATH prints a one-time PATH notice into the output.
 
 ### Speaker Diarization
 
@@ -1180,7 +1180,9 @@ anyscribe "https://youtube.com/watch?v=abc123" --json --quiet | jq -r '.data.fil
 ```
 
 > **Startup messages:** JavaScript runtime warnings and yt-dlp update messages
-> go to stderr, outside the JSON output.
+> go to stderr, outside the JSON output. One exception: on Windows, the first
+> run from a terminal where `anyscribe` is not on your PATH prints a one-time
+> PATH notice into the output.
 
 The result shape for a transcription is documented under
 [JSON Output](#json-output). Machine-readable output is also available from

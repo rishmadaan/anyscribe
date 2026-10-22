@@ -38,9 +38,9 @@ anyscribe is not reliability.
   and the MCP stdio server stay clean; the 60-day auto-update upgrades
   `yt-dlp[default]`, keeping `yt-dlp-ejs` in step; `/api/health` `ok` counts
   required dependencies only.
-- The Linux installer asks for the distribution's own python3 first when no
-  Python is present (Ubuntu 24.04 has no `python3.11` package; found in Docker)
-  and only then for python3.11 by name.
+- The Linux installer asks for the distribution's own python3 first whenever
+  it cannot find Python 3.11 or newer (Ubuntu 24.04 has no `python3.11`
+  package, found in Docker) and only then for python3.11 by name.
 - `anyscribe doctor`: an optional "JavaScript runtime" row showing the
   detected runtime and version, or `Missing (optional)` with a description of
   the dependency. Each candidate is run with `--version` and skipped when it is

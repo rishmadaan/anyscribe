@@ -168,6 +168,7 @@ function Get-VersionLine($exe, $argument) {
         $psi.CreateNoWindow = $true
         $p = [System.Diagnostics.Process]::Start($psi)
         $out = $p.StandardOutput.ReadToEndAsync()
+        $null = $p.StandardError.ReadToEndAsync()  # drain it, or a chatty program blocks on a full pipe
         if (-not $p.WaitForExit(10000)) { try { $p.Kill() } catch {}; return $null }
         if ($p.ExitCode -ne 0) { return $null }
         return (($out.Result -split "`r?`n")[0]).Trim()
@@ -192,7 +193,7 @@ function Test-JsRuntime {
         }
         if (Test-CommandExists 'node') {
             $nodeVer = Get-VersionLine 'node' '--version'
-            if ($nodeVer -and $nodeVer -match '^v(\d+)\.(\d+)\.(\d+)$') {
+            if ($nodeVer -and $nodeVer -match '^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$') {
                 if ([int]$Matches[1] -ge 22) {
                     Write-Ok "node $nodeVer (yt-dlp will use it for YouTube)"
                     return

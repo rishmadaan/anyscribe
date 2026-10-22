@@ -60,7 +60,7 @@ DEPENDENCIES = [
         required=True,
         description="YouTube/video downloader",
         install_brew="brew install yt-dlp",
-        install_pip="pip install yt-dlp",
+        install_pip="pip install yt-dlp[default]",  # the extra ships the YouTube challenge solver
         install_apt="sudo apt install yt-dlp",
         install_url="https://github.com/yt-dlp/yt-dlp#installation",
         module_name="yt_dlp",
@@ -120,7 +120,7 @@ JS_RUNTIME_MIN = {"deno": (2, 3), "node": (22, 0)}  # yt-dlp's minimums (EJS wik
 # warning line, an unrelated tool with the same name) is not a version.
 _JS_VERSION_LINE = {
     "deno": re.compile(r"^deno (\d+)\.(\d+)\.(\d+)\b"),
-    "node": re.compile(r"^v(\d+)\.(\d+)\.(\d+)$"),
+    "node": re.compile(r"^v(\d+)\.(\d+)\.(\d+)(-[\w.]+)?$"),  # allows a pre-release suffix
 }
 
 

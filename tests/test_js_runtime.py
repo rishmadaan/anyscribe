@@ -187,3 +187,41 @@ def test_failed_probe_is_skipped(empty_home) -> None:
         patch.object(deps.subprocess, "run", _versions(cases)),
     ):
         assert deps.find_js_runtime() is None
+
+
+def test_video_download_flags_youtube_only(tmp_path: Path) -> None:
+    """cli/download.py: Instagram's yt-dlp command is untouched; YouTube's carries the flag."""
+    from anyscribe.cli import download as dl
+
+    seen: dict[str, list[str]] = {}
+
+    def run(cmd, **kwargs):
+        seen[cmd[-1]] = cmd
+        return MagicMock(returncode=0, stdout='{"title": "t", "ext": "mp4"}', stderr="")
+
+    (tmp_path / "t.mp4").write_bytes(b"x")
+    with (
+        patch("anyscribe.cli.download.subprocess.run", run),
+        patch("anyscribe.core.deps.ensure_ytdlp_current"),
+        patch(
+            "anyscribe.core.deps.find_js_runtime",
+            return_value=("deno", "/opt/bin/deno", "deno 2.9.7"),
+        ) as find,
+    ):
+        try:
+            dl._download_video("https://instagram.com/reel/x", "instagram", tmp_path, quiet=True)
+        except Exception:
+            pass  # only the yt-dlp command matters here
+        assert find.call_count == 0
+        try:
+            dl._download_video("https://youtu.be/abc", "youtube", tmp_path, quiet=True)
+        except Exception:
+            pass
+    insta = seen["https://instagram.com/reel/x"]
+    yt = seen["https://youtu.be/abc"]
+    assert "--js-runtimes" not in insta
+    assert yt[yt.index("--js-runtimes") + 1] == "deno:/opt/bin/deno"
+    # Instagram's command is YouTube's minus the runtime flag (and the URL): the pre-PR shape
+    without_flag = [a for a in yt if a not in ("--js-runtimes", "deno:/opt/bin/deno")]
+    assert without_flag[:-1] == insta[:-1]
+    assert insta[1:3] == ["-m", "yt_dlp"]

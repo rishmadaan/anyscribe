@@ -325,8 +325,9 @@ No separate yt-dlp step on Linux: anyscribe installs yt-dlp inside its own envir
 ```powershell
 winget install ffmpeg
 winget install DenoLand.Deno
-python -m pip install yt-dlp
 ```
+
+No separate yt-dlp step: anyscribe installs it in step 3.
 
 **3. anyscribe itself.** Install with the same Python you checked in step 1, so a second, older Python's `pip` cannot sneak in.
 

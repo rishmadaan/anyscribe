@@ -318,28 +318,43 @@ install_with_pipx() {
 # yt-dlp solves YouTube's JavaScript challenges on Deno (its default) or Node
 # 22+. Without one, downloads warn and may miss formats. Optional: a refusal
 # only warns.
-# Runs a version probe, bounded to 10 s where timeout(1) exists, and prints its
-# first stdout line only when the program exits 0; a hung or failing binary
-# prints nothing so the caller moves on to the next candidate.
+# Runs a version probe, bounded to about 11 s where timeout(1) exists (SIGTERM
+# at 10 s, SIGKILL a second later), and prints its output (stdout then stderr)
+# only when the program exits 0; a hung or failing binary prints nothing so the
+# caller moves on to the next candidate.
 probe_version() {
     local out
     if command -v timeout >/dev/null 2>&1; then
-        out="$(timeout 10 "$@" 2>/dev/null)" || return 1
+        out="$(timeout --kill-after=1 10 "$@" 2>&1)" || return 1
     elif command -v gtimeout >/dev/null 2>&1; then
-        out="$(gtimeout 10 "$@" 2>/dev/null)" || return 1
+        out="$(gtimeout --kill-after=1 10 "$@" 2>&1)" || return 1
     else
-        out="$("$@" 2>/dev/null)" || return 1
+        out="$("$@" 2>&1)" || return 1
     fi
-    printf '%s\n' "$out" | head -1
+    printf '%s\n' "$out"
+}
+
+# Prints the first line of stdin that is the named runtime's own version banner
+# ("deno X.Y.Z ..." or "vX.Y.Z"), skipping wrapper warnings and other noise.
+version_banner() {
+    local name="$1" line
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+        case "$name" in
+            deno) [[ "$line" =~ ^deno\ ([0-9]+)\.([0-9]+)\.([0-9]+)([^0-9]|$) ]] && { printf '%s\n' "$line"; return 0; } ;;
+            node) [[ "$line" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.]+)?$ ]] && { printf '%s\n' "$line"; return 0; } ;;
+        esac
+    done
+    return 1
 }
 
 js_runtime_found() {
     local d v
     for d in "$(command -v deno 2>/dev/null || true)" "$HOME/.deno/bin/deno"; do
         [[ -n "$d" && -x "$d" ]] || continue
-        v="$(probe_version "$d" --version || true)"
-        # deno's own banner, "deno X.Y.Z (...)"; anything else is not deno
-        [[ "$v" =~ ^deno\ ([0-9]+)\.([0-9]+)\. ]] || continue
+        v="$(probe_version "$d" --version | version_banner deno || true)"
+        [[ -n "$v" ]] || continue  # not deno, or it failed
+        [[ "$v" =~ ^deno\ ([0-9]+)\.([0-9]+)\. ]]
         if (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] >= 3) )); then
             ok "deno ${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
             return 0
@@ -347,9 +362,9 @@ js_runtime_found() {
         warn "$v found at $d, but yt-dlp needs Deno 2.3 or newer"
     done
     if command_exists node; then
-        v="$(probe_version node --version || true)"
-        # node prints exactly "vX.Y.Z"
-        if [[ "$v" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.]+)?$ ]]; then
+        v="$(probe_version node --version | version_banner node || true)"
+        if [[ -n "$v" ]]; then
+            [[ "$v" =~ ^v([0-9]+)\. ]]
             if (( BASH_REMATCH[1] >= 22 )); then
                 ok "node $v (yt-dlp will use it for YouTube)"
                 return 0

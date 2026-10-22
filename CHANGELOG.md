@@ -22,8 +22,9 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
   downloads print one warning and still run, but may miss formats or fail.
 - The installers offer Deno when neither Deno 2.3+ nor Node 22+ is usable:
   Homebrew on macOS, Deno's install script (into `~/.deno`) on Linux, or
-  winget on Windows when available. On apt-based Linux the installer first
-  installs unzip if it is missing. Declining only warns.
+  winget on Windows when available. On apt-based Linux, after you accept
+  Deno installation, the installer first attempts to install unzip if it is
+  missing. Declining only warns.
 - `anyscribe doctor` has a "JavaScript runtime" row.
 - Upgrading does not install a runtime. Run `anyscribe doctor`: if the
   "JavaScript runtime" row says Missing, install Deno (`brew install deno` on

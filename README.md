@@ -30,7 +30,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 ## What you need
 
 - **Python 3.11 or newer** — [python.org](https://www.python.org/downloads/)
-- **ffmpeg** (and yt-dlp, which pip installs with anyscribe) — the installers below put both in place for you; with the pip route, install ffmpeg yourself (`brew install ffmpeg`, or [ffmpeg.org](https://ffmpeg.org/))
+- **ffmpeg and yt-dlp** — the installers below put both in place. Installing anyscribe with pip includes yt-dlp and its default extras; install ffmpeg separately (`brew install ffmpeg`, or [ffmpeg.org](https://ffmpeg.org/))
 - **Deno or Node 22+ for YouTube** — YouTube makes downloaders solve a small JavaScript puzzle, and yt-dlp runs it on one of these. The installers add Deno when neither is present; with the pip route, `brew install deno` or [deno.com](https://docs.deno.com/runtime/getting_started/installation/). Without one, YouTube downloads warn and may miss formats.
 - **An API key** for one cloud provider (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — or none at all if you run offline with the local provider
 

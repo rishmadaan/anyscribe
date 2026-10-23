@@ -13,7 +13,10 @@
 #   2. Checks for Python 3.11+, installs if missing
 #   3. Checks for yt-dlp, ffmpeg and a JavaScript runtime (Deno or Node 22+), installs if missing
 #   4. Installs anyscribe (with the tray extra) via pip (with pipx fallback)
-#   5. Tells you to run `anyscribe ui`
+#   5. Sets up desktop mode (`anyscribe desktop install --yes`: an app icon and
+#      a tray that starts at login, then opens the dashboard); --no-desktop
+#      skips it, and --method git skips it because git installs lack the tray extra
+#   6. Tells you how to reach anyscribe (`anyscribe ui`)
 # ──────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -23,6 +26,8 @@ INSTALL_METHOD="pip"       # pip (from PyPI) or git (from GitHub)
 REPO_URL="https://github.com/rishmadaan/anyscribe.git"
 RUN_ONBOARD=false
 RUN_UI=false
+RUN_DESKTOP=true
+DESKTOP_STATE=""           # "" not attempted, "done", or "failed"
 VERBOSE=false
 DRY_RUN=false
 USED_PIPX=false
@@ -67,6 +72,7 @@ while [[ $# -gt 0 ]]; do
         --repo)         REPO_URL="$2"; shift 2 ;;
         --onboard)      RUN_ONBOARD=true; shift ;;
         --ui)           RUN_UI=true; shift ;;
+        --no-desktop)   RUN_DESKTOP=false; shift ;;
         --verbose)      VERBOSE=true; shift ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --help|-h)
@@ -80,7 +86,8 @@ while [[ $# -gt 0 ]]; do
             echo "                       git: install from GitHub repository"
             echo "  --repo <url>         GitHub repo URL (for git method)"
             echo "  --onboard            Run the CLI onboarding wizard after install"
-            echo "  --ui                 Launch the web UI after install"
+            echo "  --ui                 Launch the web UI after install (desktop mode already opens it)"
+            echo "  --no-desktop         Skip desktop mode (app icon + tray that starts at login)"
             echo "  --verbose            Show detailed output"
             echo "  --dry-run            Show what would be done without doing it"
             echo "  --help               Show this help"
@@ -511,9 +518,22 @@ for d in (sysconfig.get_path("scripts"), sysconfig.get_path("scripts", sysconfig
 # only edits the profile).
 pipx_bin_dir() { pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin"; }
 
-# ── Run post-install action (opt-in) ─────────────────────────
+# ── Run post-install actions ─────────────────────────────────
 run_post_install() {
-    [[ "$RUN_UI" == true || "$RUN_ONBOARD" == true ]] || return 0
+    local want_desktop=false
+    if [[ "$RUN_DESKTOP" == true ]]; then
+        if [[ "$INSTALL_METHOD" == "git" ]]; then
+            echo ""
+            warn 'Desktop mode skipped: git installs do not include the tray extra. Run: pip install "anyscribe[tray]" && anyscribe desktop install'
+        elif [[ "$OS" == "linux" && -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+            # A server over SSH: no tray to show, and a dashboard would open in a text browser.
+            echo ""
+            warn "Desktop mode skipped: no graphical session detected. On a desktop, run: anyscribe desktop install"
+        else
+            want_desktop=true
+        fi
+    fi
+    [[ "$want_desktop" == true || "$RUN_UI" == true || "$RUN_ONBOARD" == true ]] || return 0
     # Launch the copy just installed, never whichever anyscribe PATH finds first.
     local cmd
     if [[ "$USED_PIPX" == true ]]; then
@@ -522,13 +542,28 @@ run_post_install() {
             warn "Automatic launch skipped: the anyscribe executable could not be found. Run \`pipx list\` to inspect the installation."
             echo "    (looked for ${cmd[0]})"
             POST_INSTALL_SKIPPED=true
+            [[ "$want_desktop" != true ]] || DESKTOP_STATE=failed
             return 0
         fi
     else
         cmd=("$PY" -m anyscribe)
     fi
 
-    if [[ "$RUN_UI" == true ]]; then
+    # Desktop mode opens the dashboard itself, so it stands in for --ui.
+    if [[ "$want_desktop" == true ]]; then
+        [[ "$RUN_ONBOARD" != true ]] || run_onboard
+        echo ""
+        info "Setting up desktop mode..."
+        echo ""
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] ${cmd[*]} desktop install --yes"
+            DESKTOP_STATE=done
+        elif "${cmd[@]}" desktop install --yes; then
+            DESKTOP_STATE=done
+        else
+            DESKTOP_STATE=failed
+        fi
+    elif [[ "$RUN_UI" == true ]]; then
         echo ""
         info "Launching web UI..."
         echo ""
@@ -538,14 +573,28 @@ run_post_install() {
             "${cmd[@]}" ui
         fi
     elif [[ "$RUN_ONBOARD" == true ]]; then
-        echo ""
-        info "Starting onboarding wizard..."
-        echo ""
-        if [[ "$DRY_RUN" == true ]]; then
-            echo "    [dry-run] ${cmd[*]} onboard --skip-deps"
-        else
-            "${cmd[@]}" onboard --skip-deps
-        fi
+        run_onboard
+    fi
+}
+
+# Uses run_post_install's `cmd` (bash dynamic scope).
+run_onboard() {
+    echo ""
+    info "Starting onboarding wizard..."
+    echo ""
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "    [dry-run] ${cmd[*]} onboard --skip-deps"
+    else
+        "${cmd[@]}" onboard --skip-deps
+    fi
+}
+
+# Where desktop mode put anyscribe, in this OS's words.
+desktop_where() {
+    if [[ "$OS" == "macos" ]]; then
+        echo "anyscribe is in the Applications folder inside your home folder (~/Applications) and running in your menu bar"
+    else
+        echo "anyscribe is in your app menu and running in your system tray"
     fi
 }
 
@@ -567,7 +616,11 @@ main() {
     run_post_install
 
     echo ""
-    if [[ "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; then
+    if [[ "$DESKTOP_STATE" == done ]]; then
+        ok "$(desktop_where)"
+        echo ""
+    fi
+    if [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
         echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
         echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
@@ -584,15 +637,18 @@ main() {
         echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
         echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
         echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
-        if [[ "$POST_INSTALL_SKIPPED" == true ]]; then
+        if [[ "$DESKTOP_STATE" == failed ]]; then
+            echo ""
+            warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
+        elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
             echo ""
             warn "anyscribe was installed, but the launch you asked for did not run (see above)."
         fi
-        if [[ "$USED_PIPX" == true ]]; then
-            echo ""
-            warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
-            echo "    or run: pipx ensurepath"
-        fi
+    fi
+    if [[ "$USED_PIPX" == true ]]; then
+        echo ""
+        warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
+        echo "    or run: pipx ensurepath"
     fi
     echo ""
 }

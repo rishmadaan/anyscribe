@@ -74,7 +74,8 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.16.4 | **`CHANGELOG.md` + dependency-drift fix** — a user-facing changelog covering every release (`BACKLOG.md` keeps the implementation detail and roadmap), with a new `check-docs.py` gate that fails CI when the shipped version has no entry, so it can't silently rot. Drops the dead `typer[all]` extra (typer stopped declaring it; plain `typer` has bundled rich + shellingham since 0.12) and bounds it `>=0.12,<1` — same latent-drift shape as the 0.16.3 `mcp` break, caught in that release's clean-install check | Released 2026-08-09 |
 | 0.16.5 | **AGPLv3-or-later migration** - first-party licensing, bundled MIT/ISC notices, editable frontend source, standalone skill license, and audited CLI/UI/legal documentation | Released 2026-09-13 |
 | 0.17.0 | **Python 3.11 floor + Starlette security floor** (`requires-python>=3.11`, `starlette>=1.3.1`, `fastapi>=0.133`), carrying the 2026-10-21 staleness audit's five PRs (#15 UI deps, #16 installers/CI/pins, #17 user docs + landing, #18 skill + CLI strings, #19 building docs) | Released 2026-10-22 |
-| 0.17.1 | **JavaScript runtime for YouTube**: `yt-dlp[default]` (ships `yt-dlp-ejs`), `core/deps.py` finds Deno or Node 22+ and passes `--js-runtimes`, doctor row, installers add Deno when neither runtime exists | Released 2026-10-22 (current) |
+| 0.17.1 | **JavaScript runtime for YouTube**: `yt-dlp[default]` (ships `yt-dlp-ejs`), `core/deps.py` finds Deno or Node 22+ and passes `--js-runtimes`, doctor row, installers add Deno when neither runtime exists | Released 2026-10-22 |
+| 0.18.0 | **Desktop mode**: `anyscribe desktop install/uninstall/status/open` (app launcher + login item + manifest on macOS, Windows, Linux), installers run it by default (`--no-desktop` / `-NoDesktop`), Start at login on all three OSes, tray fixed on Windows, login-started tray gets a full PATH and `ProcessType Interactive` | Built 2026-10-22, not yet released (current) |
 | 1.0.0 | Stable: broader test coverage and release hardening | Future |
 
 ### How to bump versions
@@ -619,6 +620,22 @@ Journal: `docs/building/journal/2026-08-09-changelog-and-typer-drift.md`.
 
 ---
 
+## v0.18.0 — Desktop mode
+
+Design: `docs/superpowers/specs/2026-10-22-desktop-mode-design.md`. Journal: `docs/building/journal/2026-10-22-desktop-mode.md`.
+
+- [x] `core/launcher.py`: icons from `assets/app-icon.png` (Pillow; `.icns` via `iconutil`), app launcher per OS (`~/Applications/anyscribe.app`, Start-menu `anyscribe.lnk` via PowerShell `WScript.Shell`, `~/.local/share/applications/anyscribe.desktop`) running `desktop open`.
+- [x] `core/service.py`: login item on macOS (plist with PATH, `KeepAlive {SuccessfulExit false}`, `ThrottleInterval 10`, `ProcessType Interactive`, `tray.log`), Windows (Startup `anyscribe tray.lnk`), Linux (`~/.config/autostart/anyscribe-tray.desktop`); `service_path()`; removing it never stops a running tray.
+- [x] `core/desktop.py` + `cli/desktop_cmd.py`: `install` / `uninstall` / `status` / `open`, manifest `~/.anyscribe/desktop.json`, exit codes 0/1/2, `--json` envelope.
+- [x] `core/tray.py`: Windows guards (`pthread_sigmask`, `sigwait`, `preexec_fn`), second tray exits 0, `stop_tray(port)`.
+- [x] Installers end with `desktop install --yes` (`--no-desktop` / `-NoDesktop`); git-method installs skip it with a message; failure warns and keeps the plain banner.
+- [x] Settings → Startup on all three OSes ("Start at login"); one tray-missing refusal string across CLI, desktop and route.
+- [x] CI `desktop-platforms` job (macOS + Windows).
+- [x] Docs: getting-started "Two ways to install", commands, troubleshooting, agents, README, landing, skill.
+- [ ] Release (tag + PyPI): owner-gated, not done.
+
+---
+
 ## v1.0.0 — Stable Release
 
 - [x] PyPI published (`pip install anyscribe`) — live since v0.3.1
@@ -690,6 +707,10 @@ Full plan, research citations, architecture, schema, and phases:
 ---
 
 ## Parked
+
+### Signed downloadable app (Tauri + SignPath Foundation + Apple Developer Program)
+
+**Parked 2026-10-22** when desktop mode shipped without it. A downloadable, double-clickable installer: a Tauri shell around a PyInstaller-frozen Python, signed for Windows through SignPath Foundation (free for open source) and notarized for macOS through the Apple Developer Program (paid yearly). Desktop mode does not need it because it builds the launcher on the user's machine, where nothing is quarantined; this becomes worth it when users should not need Python or a terminal at all. Parked with it, from the same design: bundling ffmpeg/Deno/yt-dlp inside the app, in-app self-update, reaching the dashboard from other devices, and the tray restarting a crashed server (the menu's "Restart server" stays manual).
 
 ### Landing page — unparked/shipped 2026-07-04
 

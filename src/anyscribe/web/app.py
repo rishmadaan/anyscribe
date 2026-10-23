@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from anyscribe import __version__
+from anyscribe.core.tray import ensure_streams as _ensure_streams
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
 
 def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) -> None:
     """Start the uvicorn server."""
+    _ensure_streams()
     import uvicorn
 
     app = create_app()

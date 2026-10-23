@@ -326,21 +326,21 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Startup — macOS only; renders nothing anywhere else. */}
+      {/* Startup — hidden only where the API says unsupported. */}
       {autostart?.supported && (
         <section className="mb-10">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
             Startup
           </h2>
           <div className="rounded-lg border border-border-subtle bg-surface px-4 py-3">
-            <SettingRow label="Open at login (menu-bar app)">
+            <SettingRow label="Start at login">
               <Toggle
                 value={autostart.enabled}
                 onChange={(v) => void handleAutostart(v)}
               />
             </SettingRow>
             <p className="text-xs text-text-muted mt-1">
-              Starts the anyscribe menu-bar icon when you log in.
+              Starts anyscribe in the background when you log in.
             </p>
           </div>
         </section>

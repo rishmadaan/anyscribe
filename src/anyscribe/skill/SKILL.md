@@ -77,9 +77,11 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Initial setup (headless, agent or script) | `anyscribe onboard --provider X --api-key $KEY --yes --json` *(see rule below)* |
 | Migrate from the old `anyscribecli` install | `anyscribe migrate` (`--dry-run` to preview, `--json` for machine output) |
 | Use the web UI | `anyscribe ui` (opens browser dashboard at 127.0.0.1:8457) |
-| Keep anyscribe available in the menu bar / always running | `anyscribe tray` (needs `pip install "anyscribe[tray]"` first) |
-| Auto-start the menu bar at login (macOS) | `anyscribe install-service --yes --json` |
-| Remove menu-bar auto-start | `anyscribe uninstall-service --yes --json` |
+| Install the desktop app (app icon, menu-bar tray, start at login; needs `pip install "anyscribe[tray]"`) | `anyscribe desktop install --yes --json` (`--no-launch`: Do not open the dashboard now. On macOS, registering the login item still starts the tray; on Windows and Linux this also skips starting it now.) |
+| Is the desktop app installed / running / healthy? | `anyscribe desktop status --json` |
+| Remove the desktop app (stops it; keeps transcripts, config, keys) | `anyscribe desktop uninstall --yes --json` |
+| Run the menu-bar tray once, without installing the app | `anyscribe tray` (prefer `desktop install`; needs the tray extra) |
+| Only the start-at-login item, no app icon | `anyscribe install-service --yes --json` / `anyscribe uninstall-service --yes --json` (prefer `desktop install` / `desktop uninstall`) |
 | Diagnose problems | `anyscribe doctor` |
 | Reinstall or refresh this skill | `anyscribe install-skill --force` |
 | Full traceback plus log for a bug report | `anyscribe --debug transcribe "url"` (writes `~/.anyscribe/logs/scribe.log`; `--debug` must come before the subcommand) |

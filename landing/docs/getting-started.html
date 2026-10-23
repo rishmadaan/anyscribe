@@ -63,9 +63,9 @@
 - anyscribe installed on your machine
 - An Obsidian vault ready to browse your transcripts
 - Your first video transcribed to markdown
-- anyscribe running in the background, if you want it there</p>
+- An <strong>anyscribe</strong> app icon that opens the dashboard, if you used the one-line installer</p>
 <blockquote>
-<p><strong>anyscribe has three equivalent surfaces.</strong> The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every <em>setting</em> can be changed from either the CLI or the Web UI. A few commands are CLI-only: <code>batch</code>, <code>download</code>, <code>logs</code>, <code>doctor</code>, <code>update</code>, <code>migrate</code>, <code>install-skill</code>, and <code>tray</code>. Pick whichever fits:</p>
+<p><strong>anyscribe has three equivalent surfaces.</strong> The Web UI, the terminal wizard, and the headless flag-driven CLI all cover the full product. Every <em>setting</em> can be changed from either the CLI or the Web UI. A few commands are CLI-only: <code>batch</code>, <code>download</code>, <code>logs</code>, <code>doctor</code>, <code>update</code>, <code>migrate</code>, <code>install-skill</code>, <code>desktop</code>, and <code>tray</code>. Pick whichever fits:</p>
 <ul>
 <li><strong>Prefer clicking?</strong> → <code>anyscribe ui</code> opens a browser dashboard with a setup wizard on first launch. See Option A in Step 2.</li>
 <li><strong>Prefer typing?</strong> → <code>anyscribe onboard</code> runs an arrow-key terminal wizard. See Option B.</li>
@@ -92,7 +92,15 @@
 <p><strong>Windows (PowerShell):</strong></p>
 <pre><code class="language-powershell">irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 </code></pre>
-<p>The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the menu-bar tray included. On Windows it also fixes your PATH so <code>anyscribe</code> works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).</p>
+<p>The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the tray included. On Windows it also fixes your PATH so <code>anyscribe</code> works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).</p>
+<p><strong>Then it sets up desktop mode:</strong> an <strong>anyscribe</strong> app icon, anyscribe started now and at every login, and the dashboard opened in your browser. See <a href="#two-ways-to-install">Two ways to install</a> for what that means and how to undo it. Want the command-line tool only? Add <code>--no-desktop</code>:</p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash -s -- --no-desktop
+</code></pre>
+<pre><code class="language-powershell">&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1))) -NoDesktop
+</code></pre>
+<blockquote>
+<p><strong>Why the longer Windows line?</strong> The plain <code>irm … | iex</code> form can't pass options to the script, so skipping desktop mode needs this wrapped form. If the desktop step fails for any reason, the installer warns you, finishes the normal install, and tells you to retry later with <code>anyscribe desktop install</code>.</p>
+</blockquote>
 <p>Verify it worked:</p>
 <pre><code class="language-bash">anyscribe --version
 </code></pre>
@@ -103,7 +111,7 @@
 <p><strong>Already have Python 3.11 or newer and just want the package?</strong></p>
 <pre><code class="language-bash">pip install &quot;anyscribe[tray]&quot;
 </code></pre>
-<p>The <code>[tray]</code> extra is what gives you the menu-bar icon and open-at-login (see <a href="#keep-it-running">Keep it running</a>). Plain <code>pip install anyscribe</code> works too, and you can add the extra later. Installing anyscribe with pip also installs yt-dlp and its default extras. Install ffmpeg yourself and, for YouTube, Deno 2.3+ (<code>brew install deno</code>, or <a href="https://docs.deno.com/runtime/getting_started/installation/">deno.com</a>) unless Node 22+ is available. Run <code>anyscribe doctor</code> to see what is missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
+<p>The <code>[tray]</code> extra is what gives you the tray icon and the desktop app (see <a href="#two-ways-to-install">Two ways to install</a>); pip doesn't set up the desktop app by itself, so run <code>anyscribe desktop install</code> afterwards if you want it. Plain <code>pip install anyscribe</code> works too, and you can add the extra later. Installing anyscribe with pip also installs yt-dlp and its default extras. Install ffmpeg yourself and, for YouTube, Deno 2.3+ (<code>brew install deno</code>, or <a href="https://docs.deno.com/runtime/getting_started/installation/">deno.com</a>) unless Node 22+ is available. Run <code>anyscribe doctor</code> to see what is missing. On an older Python, pip quietly installs an older anyscribe instead; check with <code>python3 --version</code> first.</p>
 <blockquote>
 <p><strong>Want to install Python and the dependencies by hand?</strong> See the <a href="#appendix-manual-install">Appendix: manual install</a> at the bottom.</p>
 <p><strong><code>command not found: anyscribe</code> on Windows?</strong> Use <code>python -m anyscribe</code> as a drop-in replacement — it always works. See <a href="#troubleshooting">Troubleshooting</a>.</p>
@@ -111,6 +119,7 @@
 <h2 id="step-2-first-run">Step 2 — First run</h2>
 <p>You can set up anyscribe either way — both paths save the same config, so pick whichever feels natural.</p>
 <h3 id="option-a-recommended-web-ui">Option A (recommended): Web UI</h3>
+<p><strong>Used the one-line installer?</strong> The dashboard is already open in your browser with the setup wizard; skip the command below and go straight to step 1. Run <code>anyscribe ui</code> only in CLI mode (installer with <code>--no-desktop</code>, or plain pip).</p>
 <pre><code class="language-bash">anyscribe ui
 </code></pre>
 <p>Opens a local dashboard at <code>http://127.0.0.1:8457</code>. A <strong>setup wizard pops up on first launch</strong>:</p>
@@ -121,7 +130,7 @@
 <li><strong>Confirm your workspace</strong> — where your transcripts live, default <code>~/anyscribe/</code>.</li>
 </ol>
 <p>Click around — no commands to memorize.</p>
-<p>Close the tab when you're finished; to stop the server, hit Ctrl+C in the terminal or click <strong>Shutdown</strong> in the sidebar.</p>
+<p>Close the tab when you're finished. In CLI mode, stop the server with Ctrl+C in the terminal or <strong>Shutdown</strong> in the sidebar; in desktop mode leave it running (Quit from the tray icon stops it).</p>
 <h3 id="option-b-terminal-interactive">Option B: Terminal (interactive)</h3>
 <pre><code class="language-bash">anyscribe onboard                   # macOS / Linux
 python -m anyscribe onboard      # Windows (first time — prints PATH fix)
@@ -202,23 +211,81 @@ word_count: 847
 reading_time: &quot;4 min&quot;
 tags: [transcript, youtube]
 </code></pre>
-<h2 id="keep-it-running">Keep it running</h2>
-<p><code>anyscribe ui</code> runs in a terminal window, which means the server dies when you close it. If you want anyscribe to just <em>be there</em>, put it in your menu bar.</p>
-<p><strong>The menu-bar icon:</strong></p>
-<pre><code class="language-bash">anyscribe tray
-</code></pre>
-<p>The tray is a small icon that sits in your menu bar (macOS) or system tray (Linux/Windows) with the web server running behind it. Click it to open the dashboard, no terminal needed. Both one-line installers include the tray by default, so this works right after install. Installed with plain <code>pip install anyscribe</code>? Add it with <code>pip install "anyscribe[tray]"</code>.</p>
-<p><strong>Start it automatically at login (macOS):</strong></p>
-<p>Open <code>anyscribe ui</code> → <strong>Settings</strong> → <strong>Startup</strong> → toggle <strong>Open at login (menu-bar app)</strong> on. That's it — the menu-bar icon comes back every time you log in.</p>
+<h2 id="two-ways-to-install">Two ways to install</h2>
+<p>anyscribe runs the same way underneath either way; what differs is whether you ever see a terminal.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>Desktop mode</strong></th>
+<th><strong>CLI mode</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>How you get it</td>
+<td>The one-line installer (default), or <code>anyscribe desktop install</code></td>
+<td><code>pip install anyscribe</code>, or the installer with <code>--no-desktop</code></td>
+</tr>
+<tr>
+<td>How you open the dashboard</td>
+<td>Click the <strong>anyscribe</strong> app icon</td>
+<td>Run <code>anyscribe ui</code> in a terminal</td>
+</tr>
+<tr>
+<td>Runs in the background</td>
+<td>Yes, in your menu bar (macOS) or system tray (Windows, Linux), started at every login</td>
+<td>Only while the terminal window running <code>anyscribe ui</code> is open</td>
+</tr>
+<tr>
+<td>Claude Code, MCP, terminal commands</td>
+<td>Work</td>
+<td>Work</td>
+</tr>
+</tbody>
+</table>
 <blockquote>
-<p>The Startup section only appears on macOS. If the tray extra isn't installed, the toggle refuses with a message telling you to run <code>pip install "anyscribe[tray]"</code> first — better than a login item that silently fails.</p>
+<p><strong>Claude Code does not need the app open.</strong> The skill and the MCP server run each transcription themselves and exit; they never talk to the dashboard. Transcripts Claude makes show up in the dashboard's History the next time you open it, because it reads them straight from your vault.</p>
 </blockquote>
-<p>The CLI does the same thing:</p>
-<pre><code class="language-bash">anyscribe install-service      # register the tray to start at login
-anyscribe uninstall-service    # undo it
+<h3 id="desktop-mode">Desktop mode</h3>
+<p>This is what the one-line installer set up, using one command you can also run yourself:</p>
+<pre><code class="language-bash">anyscribe desktop install
 </code></pre>
-<p><strong>The way back in.</strong> Closed the tab, clicked Shutdown, or rebooted? Run <code>anyscribe ui</code> again — or click the menu-bar icon if you set up the tray. Your library, config, and API keys are untouched; nothing about stopping the server touches your data.</p>
-<p>See <a href="/docs/commands#anyscribe-tray">Commands → anyscribe tray</a> and <a href="/docs/commands#anyscribe-install-service">anyscribe install-service</a> for the full reference.</p>
+<p>It does three things:</p>
+<ol>
+<li><strong>Adds an anyscribe app.</strong> On macOS it's in the Applications folder inside your home folder (<code>~/Applications/anyscribe.app</code>, not the main Applications folder in Finder's sidebar); on Windows, in the Start menu; on Linux, in your app menu.</li>
+<li><strong>Starts anyscribe at login.</strong> A small icon sits in your menu bar (macOS) or system tray (Windows, Linux) with the dashboard's server running behind it. This is called a <em>login item</em>: a file your computer reads when you log in to decide what to start.</li>
+<li><strong>Starts it now and opens the dashboard</strong> at <code>http://127.0.0.1:8457</code>.</li>
+</ol>
+<p><strong>To open the dashboard:</strong> click the app, the way you open any other.</p>
+<ul>
+<li><strong>macOS:</strong> press ⌘ Space, type <code>anyscribe</code>, press Enter (or open the Applications folder inside your home folder: Finder → <strong>Go</strong> → <strong>Home</strong> → <strong>Applications</strong>)</li>
+<li><strong>Windows:</strong> Start menu → type <code>anyscribe</code> → click it</li>
+<li><strong>Linux:</strong> your app menu → <strong>anyscribe</strong></li>
+</ul>
+<p>Closing the browser tab leaves anyscribe running, so the next click opens instantly. If it wasn't running (you quit it earlier), clicking the app starts it first.</p>
+<p><strong>To stop it:</strong> click the tray icon → <strong>Quit</strong>. It starts again at your next login, or the next time you click the app.</p>
+<p><strong>To turn off start-at-login but keep the app:</strong> open the dashboard → <strong>Settings</strong> → <strong>Startup</strong> → switch off <strong>Start at login</strong>. (The CLI equivalents are <code>anyscribe uninstall-service</code> and <code>anyscribe install-service</code>.) This doesn't stop a copy that is already running; Quit it from the tray icon.</p>
+<blockquote>
+<p>If the tray extra isn't installed, the <strong>Start at login</strong> toggle refuses with a message telling you to run <code>pip install "anyscribe[tray]"</code> first — better than a login item that silently fails.</p>
+</blockquote>
+<p><strong>To check it:</strong></p>
+<pre><code class="language-bash">anyscribe desktop status
+</code></pre>
+<p>It says whether the app is installed, whether it's running, and, if something is wrong (say you reinstalled Python), what's wrong and the command that fixes it.</p>
+<p><strong>To remove it:</strong></p>
+<pre><code class="language-bash">anyscribe desktop uninstall
+</code></pre>
+<p>This stops anyscribe and prints: "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." It then removes the app, the login item and the icons. Your transcripts in <code>~/anyscribe/</code>, your settings and your API keys are left exactly as they were, and the <code>anyscribe</code> command keeps working.</p>
+<blockquote>
+<p><strong>Upgraded anyscribe with pip?</strong> Run <code>anyscribe desktop install</code> once afterwards. The app already runs the new code next time it starts, but a copy that is running right now is still the old version; this restarts it on the new one and rewrites the login item with the new version's settings.</p>
+</blockquote>
+<h3 id="cli-mode">CLI mode</h3>
+<pre><code class="language-bash">anyscribe ui
+</code></pre>
+<p><code>anyscribe ui</code> runs the dashboard from a terminal window, so it stops when you close that window (or press Ctrl+C, or click <strong>Shutdown</strong> in the sidebar). No app is added and nothing is added to your login items. Everything else (transcribing from the terminal, Claude Code, MCP) works exactly the same.</p>
+<p><strong>The way back in.</strong> Closed the tab, clicked Shutdown, or rebooted? Run <code>anyscribe ui</code> again, or click the anyscribe app if you're in desktop mode. Your library, config, and API keys are untouched; nothing about stopping the server touches your data.</p>
+<p>See <a href="/docs/commands#anyscribe-desktop">Commands → anyscribe desktop</a>, <a href="/docs/commands#anyscribe-tray">anyscribe tray</a> and <a href="/docs/commands#anyscribe-install-service">anyscribe install-service</a> for the full reference.</p>
 <h2 id="where-next">Where next</h2>
 <p>Three doors, depending on how you want to use anyscribe:</p>
 <ul>

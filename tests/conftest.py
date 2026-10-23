@@ -25,3 +25,49 @@ assert not any(m.startswith("anyscribe") for m in sys.modules), (
 _ISOLATED_HOME = tempfile.mkdtemp(prefix="ascli-test-home-")
 os.environ["HOME"] = _ISOLATED_HOME  # macOS / Linux
 os.environ["USERPROFILE"] = _ISOLATED_HOME  # Windows
+
+
+import json  # noqa: E402
+import threading  # noqa: E402
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture
+def health_server():
+    """A real local HTTP server on a free port answering /api/health with ``body``.
+
+    Yields a controller: ``.port``, ``.body`` (set it before requests), ``.posts``
+    (paths of every POST received). Defaults to a foreign program's answer.
+    """
+
+    class Ctl:
+        body: dict = {"version": "1"}
+        posts: list = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            data = json.dumps(Ctl.body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_POST(self):  # noqa: N802
+            Ctl.posts.append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    Ctl.posts = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Ctl.port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield Ctl
+    server.shutdown()
+    server.server_close()

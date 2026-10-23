@@ -1,6 +1,6 @@
 # Architecture
 
-**Last updated:** 2026-10-21 (v0.16.5)
+**Last updated:** 2026-10-22 (v0.18.0)
 
 ## Overview
 
@@ -58,8 +58,8 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 ### CLI Layer (`cli/`)
 - Typer app with `rich_markup_mode="rich"`, custom `DefaultToTranscribe(TyperGroup)` class for bare-URL routing
 - Primary command: `anyscribe` (aliases: `scribe`, `ascli` for backward compat)
-- Commands: `onboard`, `transcribe`, `download`, `batch`, `rm`, `logs`, `config`, `providers`, `local`, `model`, `ui`, `tray`, `install-service`, `uninstall-service`, `update`, `doctor`, `install-skill`, `migrate`
-- **Tray supervision model** (`cli/tray_cmd.py` + `core/tray.py`): `anyscribe tray` is a `pystray` menu-bar icon that supervises `anyscribe ui` as a subprocess — attaches to an already-running server instead of colliding (TCP connect-probe), guards against double-launch with a pidfile at `~/.anyscribe/tray.pid`, and tears down via a `signal.pthread_sigmask` + `signal.sigwait` watcher thread rather than a plain `signal.signal` handler (pystray's macOS Cocoa event loop can block Python bytecode from running, so a normal handler can miss SIGTERM/SIGINT). `core/service.py` registers a macOS launchd LaunchAgent (`anyscribe install-service`) that runs `{python} -m anyscribe tray` at login.
+- Commands: `onboard`, `transcribe`, `download`, `batch`, `rm`, `logs`, `config`, `providers`, `local`, `model`, `ui`, `tray`, `desktop` (`install`/`uninstall`/`status`/`open`), `install-service`, `uninstall-service`, `update`, `doctor`, `install-skill`, `migrate`
+- **Tray supervision model** (`cli/tray_cmd.py` + `core/tray.py`): `anyscribe tray` is a `pystray` menu-bar icon that supervises `anyscribe ui` as a subprocess — attaches only to a listener that identifies itself as anyscribe on `/api/health` (another program on the port is left alone), runs as a single instance by holding a lifetime OS lock on `~/.anyscribe/tray.lock` (not the pidfile, which only records the pid), and tears down via a `signal.pthread_sigmask` + `signal.sigwait` watcher thread rather than a plain `signal.signal` handler (pystray's macOS Cocoa event loop can block Python bytecode from running, so a normal handler can miss SIGTERM/SIGINT). The signal watcher and `preexec_fn` are POSIX-only and skipped on Windows (`os.name != "nt"`); a second tray exits 0 ("already running") so a `KeepAlive` login item does not relaunch-loop. `core/tray.py::stop_tray(port)` POSTs `/api/shutdown`, SIGTERMs the pidfile pid and the recorded server pid (`server.pid`), and removes both files. `core/service.py` writes the login item (`anyscribe install-service`) that runs `{python} -m anyscribe tray --port N` at login on macOS, Windows and Linux; see "Desktop surface" below.
 - Bare URL: `anyscribe "url"` auto-routes to transcribe (first arg not a known subcommand → prepend `transcribe`)
 - `--json` and `--quiet` available on main commands (transcribe, download, batch, config show, providers list)
 - `--json` for AI agent and scripting integration
@@ -101,6 +101,72 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - Server stashed on `app.state.server` for graceful `/shutdown` via `server.should_exit = True`
 - Busy port: `anyscribe ui` rolls forward up to 10 ports (clamped to 65535) and only errors when all are busy
 - Web tests: `tests/test_web*.py`, `test_autostart_route.py`, `test_keys_status.py`, `test_ui_port.py` (FastAPI TestClient)
+
+### Desktop surface (`cli/desktop_cmd.py` + `core/desktop.py`, `core/launcher.py`, `core/service.py`)
+
+Desktop mode makes the Web UI reachable without a terminal, using only the
+user's own machine: no downloaded app, no signing, no new runtime
+dependency. The chain is **launcher → `desktop open` → tray → ui**:
+
+- The **app launcher** (`core/launcher.py`) runs `<python> -m anyscribe desktop open`:
+  `~/Applications/anyscribe.app` (Info.plist with `LSUIElement`, a shell-script
+  executable, `.icns` made by Pillow + macOS's bundled `iconutil`), a Start-menu
+  `anyscribe.lnk` targeting `pythonw.exe` (created through PowerShell's
+  `WScript.Shell` COM object), or `~/.local/share/applications/anyscribe.desktop`.
+  Icons render from `assets/app-icon.png` into `~/.anyscribe/desktop/`.
+- **`desktop open`** (`core/desktop.py::open_dashboard`) opens the browser if
+  `/api/health` on the port answers as anyscribe; refuses (exit 1) if another
+  program holds the port; otherwise starts the tray (`launchctl kickstart`, no
+  `-k`, when the macOS login item serves the port; else spawns `anyscribe tray
+  --port N` detached, output to `~/.anyscribe/logs/tray.log`). A live tray whose
+  server is gone (dashboard Shutdown) gets `SIGUSR1`, which the tray's sigwait
+  loop turns into a server restart; it is stopped and replaced only if that
+  fails, and always on Windows (no signals). Then it falls back to a detached
+  `anyscribe ui --no-open` if the tray process dies (no display), waits for
+  health, then opens the browser or prints the URL to stderr.
+- **`desktop install`** (`core/desktop.py::install`) orders the steps by OS. On
+  macOS it writes the login item first (`launchctl load`, whose `RunAtLoad`
+  starts the tray launchd supervises, so `KeepAlive` restarts it after a crash),
+  then `open_dashboard(expect_external=True)` waits up to 10 s for that tray
+  before falling back to spawning one. On Windows and Linux the login item only
+  takes effect at the next login, so the tray is spawned detached first and the
+  login item written after. A reinstall (manifest present) runs `stop_tray`,
+  which waits for the old tray to exit and its port to free, then unloads and
+  reloads the login item; on macOS an existing plist with no manifest is also
+  unloaded first, since `load` on a still-loaded job is a no-op.
+- The **tray** supervises the **ui** server as before.
+- The **login item** (`core/service.py`) starts the tray at login: a launchd
+  LaunchAgent (`com.anyscribe.tray.plist`: `EnvironmentVariables.PATH` from
+  `service_path()`, `KeepAlive {SuccessfulExit: false}`, `ThrottleInterval 10`,
+  `ProcessType Interactive`, log to `tray.log`), a Startup-folder
+  `anyscribe tray.lnk`, or `~/.config/autostart/anyscribe-tray.desktop` with
+  `Exec=env PATH=…`. `service_path()` is the installing shell's PATH plus the
+  Homebrew, `/usr/local/bin`, `~/.deno/bin`, `~/.local/bin` and interpreter
+  directories, since login-started processes get a minimal PATH. Removing a
+  login item never stops a running tray (on macOS it skips `launchctl unload`
+  while a tray is alive, because unload would kill the dashboard the Startup
+  toggle sits in).
+- The **manifest** `~/.anyscribe/desktop.json` (`version`, `python`, `port`,
+  `launcher`, `login_item`, `installed_at`) is written last; `desktop status`
+  reads it and reports `healthy: false` with a reason (recorded Python gone,
+  launcher or login item missing, or a launcher/login item with no manifest:
+  "Partly installed").
+
+`desktop install` order: icons → launcher → then on macOS the login item first,
+and launchd starts the tray from it (so KeepAlive supervises it); on Windows and
+Linux the tray is spawned first (unless `--no-launch`), then the login item →
+manifest; a re-install first stops the old tray
+and removes the old login item. `desktop uninstall` stops the tray and server,
+then removes launcher, login item, icons and manifest; it never touches the
+vault, config or keys. The three core modules keep every artifact's text in a
+**pure render function** (`render_app_script`, `render_info_plist`,
+`render_desktop_entry`, `render_shortcut_script` in `launcher.py`;
+`render_plist`, `render_autostart_entry` in `service.py`), so each OS's output
+is unit-tested on every OS; `ci.yml`'s `desktop-platforms` job runs the
+real-OS tests (`iconutil`, `.lnk` creation) on macOS and Windows. The
+installers end with `desktop install --yes` unless `--no-desktop` /
+`-NoDesktop`. The skill and MCP server never depend on any of this: they run
+the pipeline in-process, and the dashboard reads history from the vault.
 
 ### Skill Layer (`skill/`)
 - Claude Code skill files bundled in package, auto-installed to `~/.claude/skills/anyscribe/`
@@ -172,6 +238,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - **SemVer**: 0.x for pre-stable, 1.0.0 when all platforms + providers stable
 - **Auto-migration**: Startup migrations handle legacy state transparently (app home `~/.anyscribecli` → `~/.anyscribe`, workspace rename, media → downloads, date-folder flattening, stale Sarvam model pin)
 - **CI + PyPI automation**: GitHub Actions runs lint, tests, package build, and frontend bundle freshness checks on pushes/PRs. Tag pushes publish to PyPI via trusted publishing; `scripts/release.sh` handles one-command releases. The same workflow also runs `gh release create --generate-notes` after publish, so every tag gets a GitHub Release automatically. CI also runs a fake-HOME migration rehearsal (`scripts/rehearse-migration.sh`) and a docs job (rendered-HTML freshness, version drift, MCP-tool and CHANGELOG gates).
+- **Desktop mode built on the user's machine, not downloaded** (0.18.0): the launcher and login item are plain files each OS already understands, written by `anyscribe desktop install`. The launcher is generated locally and needs no separately signed app download. It avoided Gatekeeper prompts in our Mac test; Windows click-through remains unverified. The signed downloadable app (Tauri) is parked in `BACKLOG.md`. Journal: `2026-10-22-desktop-mode.md`.
 - **Tray as a supervisor, not a rewrite**: `anyscribe tray` spawns/attaches to the existing `anyscribe ui` server rather than embedding a webview or rewriting the UI as a native app — the browser stays the UI surface, the tray only adds discoverability and process supervision.
 - **AI-first skill management**: Claude Code skill auto-installs and auto-updates on every CLI invocation. `.version` marker pattern borrowed from gitstow — one file read + string compare, never blocks CLI
 - **MCP server**: Thin wrapper around core modules. Both CLI and MCP use same orchestrator/providers/settings — only output format differs (Rich console vs JSON)
@@ -262,7 +329,8 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 | Self-update | ✓ (`anyscribe update`) | — | CLI-only. Updating a running server is weird |
 | Claude Code skill install | ✓ (`anyscribe install-skill`) | — | CLI-only; runs automatically anyway |
 | Menu-bar tray | ✓ (`anyscribe tray`) | — | CLI-only by nature — a tray icon isn't a Web UI concept; the tray supervises the Web UI server, it doesn't compete with it |
-| Login auto-start | ✓ (`install-service`/`uninstall-service`) | ✓ (Settings open-at-login toggle, macOS, needs `[tray]` extra) | Same `core/service.py` (`GET/PUT /api/autostart`) |
+| Desktop app (launcher + login item + manifest) | ✓ (`anyscribe desktop install/uninstall/status/open`) | — | CLI-only: it installs the thing that starts the Web UI. The installers run it. `core/desktop.py` |
+| Login auto-start | ✓ (`install-service`/`uninstall-service`) | ✓ (Settings → Startup → "Start at login", macOS/Windows/Linux, needs `[tray]` extra) | Same `core/service.py` (`GET/PUT /api/autostart`); the route writes the dashboard's own port |
 | Legacy config migration | ✓ (`anyscribe migrate`, `--dry-run`) | — | CLI-only. Automatic app-home migration is guarded once per process and invoked by load_config(), load_env() and ensure_app_dirs(); direct path reads do not trigger it. |
 | Drag-and-drop upload | — | ✓ | UI-only |
 | API key management | ✓ (`anyscribe config set <prov>_api_key`) | ✓ (inline per-provider with Test) | UI has richer UX |

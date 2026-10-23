@@ -354,7 +354,7 @@ If the server responds at `http://127.0.0.1:8457` but you can't find the wavefor
 
 ### "An anyscribe tray is already running"
 
-A tray is already active — its pidfile (`~/.anyscribe/tray.pid`) still points at a live process. This is by design: `anyscribe tray` refuses to start a second instance instead of colliding.
+A tray is already active: it holds the one-tray lock (`~/.anyscribe/tray.lock`) for as long as it runs, so a second `anyscribe tray` exits quietly with code 0. The OS releases the lock when that tray exits, however it exits, so there is no stale lock to clean up.
 
 **Fix:** Use the existing tray (check the menu bar), or quit it first (menu → Quit, or Ctrl+C in its terminal), then relaunch.
 
@@ -371,10 +371,26 @@ anyscribe tray --port 9000
 ### Fully removing the tray / menu-bar auto-start
 
 1. Quit the tray if it's running (menu → Quit).
-2. Remove login auto-start (macOS): `anyscribe uninstall-service --yes`
+2. Remove login auto-start: `anyscribe uninstall-service --yes`
 3. Optionally uninstall the extra: `pip uninstall pystray Pillow`
 
-`uninstall-service` unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither service command uninstalls anyscribe.
+`uninstall-service` removes the login item; a tray that is already running keeps running until you Quit it from its menu (or run `anyscribe desktop uninstall`, which stops it). Neither service command uninstalls anyscribe.
+
+### "ffmpeg not found" but only from the app / after login
+
+The tray started from the app icon or at login runs with the PATH recorded when the desktop app was installed. If ffmpeg or Deno was installed (or moved) later, that copy can't find it, while `anyscribe` in a terminal can.
+
+**Fix:** run `anyscribe desktop install --yes` again. It rewrites the login item with the current PATH and restarts the tray. The same fix applies after upgrading or reinstalling Python (`anyscribe desktop status --json` then reports `healthy: false` with a reason naming the Python path).
+
+### No tray icon on GNOME (Linux)
+
+Stock GNOME hides tray icons unless the AppIndicator extension is installed. The server still runs. **Fix:** open the dashboard with the **anyscribe** icon in the app menu (or `anyscribe desktop open`); stop it with `anyscribe desktop uninstall` or by installing the AppIndicator extension to get the Quit menu.
+
+### Installed over SSH / no desktop: no tray icon
+
+Expected: with no graphical session the tray cannot start, so the dashboard runs without it (install prints a `Tray icon: not running` line; `anyscribe desktop status --json` shows `tray_running: false`, `healthy: true` and a reason saying so) and the tray starts at the next graphical login; the one-line installer already skips desktop mode on a headless Linux box.
+
+The skill and the MCP server never need the desktop app running: they transcribe in-process, and the dashboard picks up their transcripts the next time it opens.
 
 ### Permission denied errors
 

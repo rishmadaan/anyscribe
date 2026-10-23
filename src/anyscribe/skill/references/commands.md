@@ -360,8 +360,9 @@ anyscribe tray --port 9000    # supervise a server on a different port
 Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (opens the GitHub releases page), Quit.
 
 - If a server is already listening on the port, `anyscribe tray` attaches to it instead of starting a second one.
-- If a tray is already running (pidfile at `~/.anyscribe/tray.pid`), a second `anyscribe tray` refuses to start rather than colliding.
-- Quit / SIGTERM / SIGINT all run the same teardown: stop the server *if the tray started it*, remove the pidfile.
+- If a tray is already running (it holds the lock on `~/.anyscribe/tray.lock`), a second `anyscribe tray` prints *already running* and exits 0 rather than colliding.
+- Works on Windows and Linux too, not only macOS.
+- Menu Quit performs teardown: stop the server *if the tray started it*, remove the pidfile. On macOS and Linux, SIGTERM/SIGINT do too; on Windows, desktop uninstall separately terminates the recorded server.
 
 ### Flags
 
@@ -371,14 +372,67 @@ Menu: Open UI, Status (running/stopped), Restart server, Check for updates… (o
 
 ---
 
-## anyscribe install-service / anyscribe uninstall-service
+## anyscribe desktop
 
-Auto-start `anyscribe tray` at login. **macOS only for now** — other platforms get a clean "not supported yet" error, not a crash.
+Desktop mode in one command: an **anyscribe** app icon (`~/Applications` on macOS, the Start menu on Windows, the app menu on Linux), the menu-bar tray started at login, and the dashboard opened now. **Needs the `[tray]` extra**: `pip install -U "anyscribe[tray]"`. The skill and the MCP server never need the desktop app running.
 
 ```bash
-anyscribe install-service --yes --json     # writes + loads ~/Library/LaunchAgents/com.anyscribe.tray.plist
-anyscribe uninstall-service --yes --json   # unloads + deletes it
+anyscribe desktop install --yes --json            # icon + login item + start now + open dashboard
+anyscribe desktop install --yes --no-launch --json
+anyscribe desktop install --port 9000 --yes --json
+anyscribe desktop status --json
+anyscribe desktop uninstall --yes --json
+anyscribe desktop open                            # what the app icon runs
 ```
+
+| Subcommand | What it does |
+|-----------|--------------|
+| `install` | Renders the icons into `~/.anyscribe/desktop/`, writes the app launcher and the login item, starts the tray and opens the dashboard (unless `--no-launch`), and records everything in `~/.anyscribe/desktop.json`. On macOS the login item is written first and launchd starts the tray, so a crash is restarted from the first session; on Windows and Linux the tray is started directly and the login item takes effect at the next login. Running it again is a clean reinstall: it stops the old tray and replaces both files (this is also the fix after upgrading Python or for a stale PATH). |
+| `uninstall` | Stops the tray and its server (with nothing installed and no tray running, a hand-started `anyscribe ui` is left alone), removes the launcher, login item, icons and manifest. `~/.anyscribe/tray.lock` is a zero-byte file the running tray holds a lock on; it stays after uninstall and is harmless (its presence does not mean a tray is running). A running transcription is stopped too (the server process is stopped by its pid). It prints: "Stopped anyscribe. If a transcription was running, run it again. Saved chunks may be reused; unfinished work may run again." Never touches `~/anyscribe/`, config or keys. |
+| `status` | Reports what is installed, whether the tray and server are running, and `healthy` with a `reason` when not. `healthy` is true only when the app is installed and its dashboard answers; a dashboard answering without its tray icon (no graphical session) is still healthy, with a `reason` saying so. Read-only. |
+| `open` | Opens the dashboard, starting the tray first if nothing is serving (falls back to a bare `anyscribe ui --no-open` when the tray cannot run, e.g. no display). |
+
+Launcher and login item per OS:
+
+| OS | App launcher | Login item |
+|----|--------------|------------|
+| macOS | `~/Applications/anyscribe.app` | `~/Library/LaunchAgents/com.anyscribe.tray.plist` (loading it starts the tray at once, even with `--no-launch`) |
+| Windows | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\anyscribe.lnk` | `...\Start Menu\Programs\Startup\anyscribe tray.lnk` |
+| Linux | `~/.local/share/applications/anyscribe.desktop` | `~/.config/autostart/anyscribe-tray.desktop` |
+
+### Flags
+
+| Flag | On | Description | Default |
+|------|----|-------------|---------|
+| `--port` / `-p` | `install`, `open` | Dashboard port, stored in the manifest and used by the launcher and login item (`open` defaults to the installed port) | `8457` |
+| `--no-launch` | `install` | Do not open the dashboard now. On macOS, registering the login item still starts the tray; on Windows and Linux this also skips starting it now. | Off |
+| `--yes` / `-y` | `install`, `uninstall` | Skip confirmation. Required in non-TTY (agent) contexts unless `--json` is given | Off |
+| `--json` / `-j` | `install`, `uninstall`, `status` | `{"success", "data", "error"}` envelope | Off |
+
+JSON `data`:
+
+- `install`: the manifest, `{"version", "python", "port", "launcher", "login_item", "installed_at"}`.
+- `uninstall`: `{"stopped": bool, "launcher": bool, "login_item": bool}` (each `true` if it was there).
+- `status`: `{"platform", "supported", "installed", "launcher", "login_item", "python", "port", "tray_running", "server_running", "healthy", "reason"}`. `reason` is `null` when healthy (or, while healthy, says the dashboard is running without its tray icon), otherwise a sentence ending in the fix (e.g. the recorded Python no longer exists → `anyscribe desktop install`; installed but the dashboard not answering → `anyscribe desktop open`).
+
+Exit codes: `0` ok; `1` refused or failed (tray extra missing, port in use by another program, the server did not start); `2` unsupported platform. A port held by another program fails with `Port N is in use by another program. Run: anyscribe desktop install --port <free port>`. `open --port B` while desktop mode is installed on port A refuses (exit 1, nothing stopped): `` anyscribe is installed on port A. Run `anyscribe desktop open` (no --port) to open it, or `anyscribe desktop install --port B` to move it. `` `open` also appends its errors to `~/.anyscribe/logs/tray.log`, since from the app icon there is no terminal. With no browser available (SSH, headless), the dashboard URL is printed on stderr, so `--json` stdout stays a single envelope.
+
+---
+
+## anyscribe install-service / anyscribe uninstall-service
+
+Auto-start `anyscribe tray` at login on macOS, Windows and Linux. Other platforms get a clean "not supported" error, not a crash. `install-service` refuses (exit 1) until the tray extra is installed: `pip install "anyscribe[tray]"`.
+
+```bash
+anyscribe install-service --yes --json     # writes the login item for this OS
+anyscribe uninstall-service --yes --json   # removes it
+```
+
+| OS | Login item |
+|----|-----------|
+| macOS | `~/Library/LaunchAgents/com.anyscribe.tray.plist` (loaded immediately; restarts the tray after a crash) |
+| Windows | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\anyscribe tray.lnk` (runs at next login; no crash restart) |
+| Linux | `~/.config/autostart/anyscribe-tray.desktop` (or `$XDG_CONFIG_HOME/autostart/`; runs at next login) |
 
 ### Flags
 
@@ -387,7 +441,7 @@ anyscribe uninstall-service --yes --json   # unloads + deletes it
 | `--yes` | `-y` | Skip confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json` | `-j` | Output result as JSON: `{"success": true, "data": {...}, "error": null}` |
 
-`install-service` returns `{"plist": "<path>"}`; `uninstall-service` returns `{"removed": true|false}`. Installation loads the LaunchAgent and can start the tray immediately as well as at login. Removal unloads the LaunchAgent and can stop a tray it manages, including the server that tray started. A manually launched tray must be quit separately. Neither command uninstalls anyscribe.
+`install-service` returns `{"path": "<login item>", "plist": "<same path>"}` (`plist` is kept for older agents); `uninstall-service` returns `{"removed": true|false}`. On macOS, installation loads the LaunchAgent and can start the tray immediately as well as at login. Removal removes the login item; a tray that is already running keeps running until you Quit it from its menu (or run `anyscribe desktop uninstall`, which stops it). Neither command uninstalls anyscribe.
 
 ---
 

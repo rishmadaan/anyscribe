@@ -242,3 +242,101 @@ def test_home_deno_banner_cases(tmp_path, banner, expected):
     deno.chmod(0o755)
     out = _js_runtime_verdict(tmp_path, "")
     assert f"verdict: {expected}" in out
+
+
+def run_installer_dry(tmp_path, *args, dry_run=True, setup=""):
+    """Run install.sh's main with the dependency checks stubbed out; returns stdout+stderr."""
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash not available")
+    harness = (
+        'eval "$(sed \'$d\' "$SCRIPT")"\n'  # load everything except the final `main` call
+        "install_brew_if_needed(){ :; }; check_python(){ :; }; check_ytdlp(){ :; }\n"
+        "check_ffmpeg(){ :; }; check_js_runtime(){ :; }\n" + setup + "\nmain\n"
+    )
+    flags = (["--dry-run"] if dry_run else []) + list(args)
+    out = subprocess.run(
+        [bash, "-c", harness, "install.sh", *flags],
+        # A graphical session by default, so a headless CI box still takes the desktop path.
+        env={**os.environ, "SCRIPT": str(SCRIPT), "DISPLAY": os.environ.get("DISPLAY", ":0")},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return out.stdout + out.stderr
+
+
+def test_dry_run_installs_desktop_by_default(tmp_path):
+    out = run_installer_dry(tmp_path)
+    assert "desktop install --yes" in out
+
+
+def test_no_desktop_flag_skips_it(tmp_path):
+    out = run_installer_dry(tmp_path, "--no-desktop")
+    assert "desktop install" not in out and "anyscribe ui" in out
+
+
+def test_git_method_skips_desktop_and_says_why(tmp_path):
+    out = run_installer_dry(tmp_path, "--method", "git")
+    # The skip notice names the retry command, so check that nothing ran it.
+    assert "[dry-run]" in out and "desktop install --yes" not in out
+    assert "Desktop mode skipped" in out and "[tray]" in out
+
+
+def test_headless_linux_skips_desktop_and_says_why(tmp_path):
+    out = run_installer_dry(tmp_path, setup="OS=linux; unset DISPLAY WAYLAND_DISPLAY")
+    assert "[dry-run]" in out and "desktop install --yes" not in out
+    assert (
+        "Desktop mode skipped: no graphical session detected. "
+        "On a desktop, run: anyscribe desktop install"
+    ) in out
+    # Wayland alone is a graphical session.
+    out = run_installer_dry(tmp_path, setup="OS=linux; unset DISPLAY; export WAYLAND_DISPLAY=w0")
+    assert "desktop install --yes" in out
+
+
+def test_ps1_has_nodesktop_switch_and_desktop_step():
+    txt = (SCRIPT.parent / "install.ps1").read_text()
+    assert "[switch]$NoDesktop" in txt and "desktop install --yes" in txt
+
+
+def test_failed_desktop_install_does_not_claim_desktop_mode(tmp_path):
+    # A real (not dry) run where everything succeeds except `desktop install`.
+    setup = (
+        "install_anyscribe(){ :; }\n"
+        'python3(){ [[ "$*" == *"desktop install"* ]] && { echo "desktop boom"; return 1; }; return 0; }\n'
+    )
+    out = run_installer_dry(tmp_path, dry_run=False, setup=setup)
+    assert "desktop boom" in out  # its own output is shown
+    assert "Desktop mode was not set up (see above)" in out
+    assert "running in your" not in out  # no desktop-mode claim
+    assert "Next step:" in out and "anyscribe ui" in out
+
+
+def test_ui_flag_does_not_launch_ui_when_desktop_runs(tmp_path):
+    out = run_installer_dry(tmp_path, "--ui")
+    assert "desktop install --yes" in out
+    assert not [ln for ln in out.splitlines() if "[dry-run]" in ln and ln.rstrip().endswith(" ui")]
+
+
+def test_onboard_runs_before_desktop(tmp_path):
+    lines = run_installer_dry(tmp_path, "--onboard").splitlines()
+    onboard = next(
+        i for i, ln in enumerate(lines) if "[dry-run]" in ln and "onboard --skip-deps" in ln
+    )
+    desktop = next(
+        i for i, ln in enumerate(lines) if "[dry-run]" in ln and "desktop install --yes" in ln
+    )
+    assert onboard < desktop
+
+
+def test_pipx_hint_shows_after_default_desktop_run(tmp_path):
+    # The pipx PATH hint must not depend on which banner printed.
+    exe = tmp_path / "anyscribe"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    setup = f'install_anyscribe(){{ USED_PIPX=true; }}; pipx(){{ echo "{tmp_path}"; }}\n'
+    out = run_installer_dry(tmp_path, setup=setup)
+    assert "[dry-run]" in out and "desktop install --yes" in out
+    assert "anyscribe is ready!" in out
+    assert "pipx ensurepath" in out

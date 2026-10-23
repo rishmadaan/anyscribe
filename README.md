@@ -38,17 +38,19 @@ Shared backend, shared state: a transcription started from any surface is visibl
 
 ## Install
 
-**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe with the menu-bar app:
+**macOS / Linux** — installs Python, ffmpeg, yt-dlp, Deno (unless you have Node 22+), and anyscribe, then sets up **desktop mode**: an anyscribe app in `~/Applications` (the Applications folder inside your home folder; on Linux, your app menu), started at login, with the dashboard opened for you:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash
 ```
 
-**Windows** (PowerShell) — same, for Windows:
+**Windows** (PowerShell) — same, for Windows (the app goes in your Start menu):
 
 ```powershell
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
+
+Command-line tool only, no app or login item? Add `--no-desktop` (`... | bash -s -- --no-desktop`), or on Windows run `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1))) -NoDesktop`. Remove desktop mode later with `anyscribe desktop uninstall`; your transcripts, settings and keys stay.
 
 **Already have Python 3.11 or newer, ffmpeg, and Deno or Node 22+?**
 
@@ -59,7 +61,8 @@ pip install "anyscribe[tray]"
 Then start it:
 
 ```bash
-anyscribe ui    # opens the web dashboard — guides you through setup
+anyscribe ui                  # opens the web dashboard — guides you through setup
+anyscribe desktop install     # optional: the app icon + start at login, like the installer
 ```
 
 On first launch the web UI opens a full-screen onboarding wizard — pick a provider, paste the API key (with a Test key button), optionally enable offline transcription, confirm your workspace, done. Prefer the terminal? `anyscribe onboard` does the same thing with arrow keys, and `anyscribe onboard --provider openai --api-key "$OPENAI_API_KEY" --yes --json` does it headlessly for agents and CI.

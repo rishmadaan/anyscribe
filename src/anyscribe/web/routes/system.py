@@ -54,8 +54,15 @@ async def set_autostart(req: AutostartRequest, request: Request) -> dict:
 
 
 def tailnet_state(request: Request) -> dict:
-    """Live sharing state of this server, plus the saved setting (they differ after a one-off flag)."""
-    return {**request.app.state.tailnet.status.to_dict(), "saved": tailnet.saved_setting()}
+    """Live sharing state of this server, plus the saved setting (they differ after a one-off flag).
+
+    A config.yaml that can't be read gives saved None, never a 500: the live state still shows.
+    """
+    try:
+        saved = tailnet.saved_setting()
+    except Exception:
+        saved = None
+    return {**request.app.state.tailnet.status.to_dict(), "saved": saved}
 
 
 @router.get("/tailnet")

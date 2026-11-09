@@ -638,6 +638,17 @@ def test_a_live_share_whose_tailscale_is_down_reads_as_failed(client, fake, caus
     assert fake.config == OTHER
 
 
+def test_get_with_an_unreadable_config_shows_the_live_state(client, fake):
+    """C5 leftover: a broken config.yaml gives saved None, not a 500; the live share still shows."""
+    assert client.put("/api/tailnet", json={"enabled": True}).json()["active"] is True
+    CONFIG_FILE.write_text("tailnet: [\n")
+    r = client.get("/api/tailnet")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["saved"] is None and data["active"] is True
+    assert data["url"] == f"https://{HOST}:8467/"
+
+
 def test_get_with_sharing_off_never_calls_tailscale(client, fake):
     client.get("/api/tailnet")
     assert fake.calls == []

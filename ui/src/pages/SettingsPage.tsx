@@ -1533,7 +1533,13 @@ function TailnetCard() {
           </div>
         )}
 
-        {state.saved !== state.enabled && !busy && (
+        {state.saved === null && !busy && (
+          <p className="text-xs text-text-muted">
+            Couldn't read the saved setting (config.yaml has a mistake), so this shows only
+            the running dashboard.
+          </p>
+        )}
+        {state.saved !== null && state.saved !== state.enabled && !busy && (
           <p className="text-xs text-text-muted">
             Saved setting: {state.saved ? "on" : "off"}. This running dashboard:{" "}
             {state.active ? "shared" : "not shared"}. The switch changes both.

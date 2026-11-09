@@ -199,7 +199,7 @@ export type TailnetState = {
   fix: string | null;
   card_fix: string | null;
   note: string | null;
-  saved: boolean;
+  saved: boolean | null; // null: config.yaml could not be read
 };
 
 export const getTailnet = () => fetchJSON<TailnetState>("/tailnet");

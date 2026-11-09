@@ -138,6 +138,11 @@ def _set_scalar(key: str, value, data: dict) -> str:
         if key == "workspace_path" and typed:
             typed = str(Path(typed).expanduser())
     target[final] = typed
+    if key == "tailnet" and typed:
+        return (
+            f"Set {key} = {typed}\n"
+            "The web UI has no login: anyone on your tailnet can use it while it is shared."
+        )
     return f"Set {key} = {typed}"
 
 

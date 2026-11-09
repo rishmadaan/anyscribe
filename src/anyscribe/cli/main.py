@@ -234,7 +234,10 @@ def ui(
     port: int = typer.Option(8457, "--port", "-p", min=1, max=65535, help="Port to listen on."),
     no_open: bool = typer.Option(False, "--no-open", help="Don't auto-open browser."),
     share_tailnet: bool = typer.Option(
-        False, "--tailnet", help="Also share it on your tailnet for this run (needs Tailscale)."
+        False,
+        "--tailnet",
+        help="Also share it on your tailnet for this run (needs Tailscale). "
+        "No login: anyone on your tailnet can use it.",
     ),
     local_only: bool = typer.Option(
         False, "--local-only", help="Keep it on this computer for this run, even if tailnet is on."

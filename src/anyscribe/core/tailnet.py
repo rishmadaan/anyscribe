@@ -30,6 +30,7 @@ MAC_APP_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 run_override: bool | None = None
 
 HANDMADE = "A share you set up yourself; anyscribe will leave it in place."
+NO_LOGIN = "no login: anyone on your tailnet can use it"
 
 
 @dataclass
@@ -237,7 +238,8 @@ def stop(port: int) -> None:
 def describe(status: Status) -> str | None:
     """The one line the CLI prints; None when sharing is off."""
     if status.active:
-        return f"Shared on your tailnet → {status.url}"
+        line = f"Shared on your tailnet → {status.url} ({NO_LOGIN})"
+        return f"{line}. {status.note}" if status.note else line
     if status.enabled:
         return f"Tailnet sharing is on but not working: {status.reason} Fix: {status.fix}"
     return None

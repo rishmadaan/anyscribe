@@ -1471,7 +1471,7 @@ function TailnetCard() {
           <span>
             This page has no login. Anyone on your tailnet can use it while it is
             shared: change your API keys, run transcriptions that spend your credit,
-            and delete transcripts.
+            delete transcripts, or stop it.
           </span>
         </p>
       </div>

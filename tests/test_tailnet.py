@@ -107,7 +107,10 @@ def test_start_shares_the_port_and_reports_the_live_link(fake):
     assert status.active and status.url == f"https://{HOST}:8467/"
     assert bg_calls(fake) == [["serve", "--bg", "--https=8467", "http://127.0.0.1:8467"]]
     assert tailnet.port_state(fake.config, 8467) == "ours"
-    assert tailnet.describe(status) == f"Shared on your tailnet → https://{HOST}:8467/"
+    assert tailnet.describe(status) == (
+        f"Shared on your tailnet → https://{HOST}:8467/ "
+        "(no login: anyone on your tailnet can use it)"
+    )
 
 
 def test_not_installed_says_so_and_calls_nothing(monkeypatch):
@@ -321,7 +324,10 @@ def test_setting_on_shares_at_startup_and_unshares_at_shutdown(
     assert bg_calls(fake) == [["serve", "--bg", "--https=8467", "http://127.0.0.1:8467"]]
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
     assert fake.config == OTHER
-    assert f"Shared on your tailnet → https://{HOST}:8467/" in capsys.readouterr().out
+    assert (
+        f"Shared on your tailnet → https://{HOST}:8467/ "
+        "(no login: anyone on your tailnet can use it)" in capsys.readouterr().out
+    )
 
 
 # ── CLI flags ────────────────────────────────────────────────
@@ -371,6 +377,11 @@ def test_local_only_flag_beats_the_setting_and_calls_nothing(fake, lifecycle, co
     assert load_config().tailnet is True
 
 
+def test_tailnet_flag_help_says_there_is_no_login():
+    result = runner.invoke(cli_app, ["ui", "--help"], env={"COLUMNS": "200"})
+    assert "No login: anyone on your tailnet can use it." in result.output
+
+
 def test_both_flags_is_an_error_and_starts_nothing(fake, lifecycle):
     result = runner.invoke(cli_app, ["ui", "--no-open", "--tailnet", "--local-only"])
     assert result.exit_code == 2
@@ -384,6 +395,8 @@ def test_both_flags_is_an_error_and_starts_nothing(fake, lifecycle):
 def test_config_set_accepts_boolean_spellings(raw, expected, config_restored):
     result = runner.invoke(cli_app, ["config", "set", "tailnet", raw])
     assert result.exit_code == 0, result.output
+    # C2: turning it on says, once, that the page has no login; turning it off does not.
+    assert ("no login: anyone on your tailnet can use it" in result.output) is expected
     from anyscribe.config.settings import load_config
 
     assert load_config().tailnet is expected

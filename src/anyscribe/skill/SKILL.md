@@ -354,7 +354,7 @@ When something goes wrong:
 3. **Never hardcode API keys** in commands or output
 4. **Never run `anyscribe onboard` without `--yes`** (interactive, takes over the terminal). Tell the user before running the headless form, since it writes config and keys
 5. **Warn before `anyscribe update`** — it modifies the installed package
-6. **Never switch tailnet sharing on unasked** (`config set tailnet on`, `ui --tailnet`, or the Settings switch). The dashboard has no login, so sharing lets every device on the user's tailnet change their API keys, spend their credit and delete transcripts. When the user asks, say that in one line first. It is never on the public internet, and turning it off (`config set tailnet off`) is always safe
+6. **Never switch tailnet sharing on unasked** (`config set tailnet on`, `ui --tailnet`, or the Settings switch). The dashboard has no login, so sharing lets every device on the user's tailnet change their API keys, spend their credit, delete transcripts or stop it. When the user asks, say that in one line first. It is never on the public internet, and turning it off (`config set tailnet off`) is always safe
 
 ## Configuration
 

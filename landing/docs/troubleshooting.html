@@ -546,14 +546,35 @@ won't replace its rule. Start the dashboard on a different port:</p>
 </code></pre>
 <p>(<code>tailscale serve status</code> shows what holds each port.)</p>
 <h3 id="the-link-says-bad-gateway-or-doesnt-load">The link says "bad gateway" or doesn't load</h3>
-<p>The dashboard isn't running, but its Tailscale rule is still there. That happens
-only if anyscribe was killed hard (power loss, <code>kill -9</code>), because a normal stop
-(Ctrl+C, the <strong>Shutdown</strong> button, quitting the tray) removes the rule. Start
-<code>anyscribe ui</code> again with sharing on and the same link works, or remove the leftover
-rule yourself (use your port number):</p>
+<p>The dashboard isn't running, but its Tailscale rule is still there. A normal stop
+(Ctrl+C, the <strong>Shutdown</strong> button, quitting the tray) removes the rule. It stays
+behind if anyscribe was killed hard (power loss, <code>kill -9</code>), and it can stay behind
+if Tailscale itself is stuck when you quit the tray, because the tray force-stops
+the dashboard after about 8 seconds. Start <code>anyscribe ui</code> again with sharing on:
+the same link works, and the next clean stop removes the rule. Or remove the
+leftover rule yourself (use your port number):</p>
 <pre><code class="language-bash">tailscale serve --https=8457 off
 </code></pre>
 <p>With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.</p>
+<h3 id="the-share-was-removed-outside-anyscribe"><code>The share was removed outside anyscribe.</code></h3>
+<p>The Settings card shows this when the dashboard was shared but its Tailscale rule
+has gone (someone ran <code>tailscale serve reset</code> or <code>--https=&lt;port&gt; off</code>). The page
+re-checks each time you open it or come back to the window. Flip the switch off
+and on to share it again.</p>
+<h3 id="a-share-you-set-up-yourself-anyscribe-will-leave-it-in-place"><code>A share you set up yourself; anyscribe will leave it in place.</code></h3>
+<p>Not an error. You had already made the same <code>tailscale serve</code> rule by hand, so
+anyscribe uses it for the link and does not remove it when it stops. Remove it
+yourself with <code>tailscale serve --https=&lt;port&gt; off</code> when you no longer want it.</p>
+<h3 id="anyscribe-only-answers-on-this-computers-own-address">"anyscribe only answers on this computer's own address..."</h3>
+<p>You opened the dashboard under a name it doesn't know: anything other than
+<code>127.0.0.1</code>, <code>localhost</code>, or its tailnet address while sharing is on. This blocks
+web pages from reaching it under their own name. If you shared it by hand with
+<code>tailscale serve</code> while the <code>tailnet</code> setting is off, turn the setting on instead
+(<code>anyscribe config set tailnet on</code>); anyscribe then uses your rule.</p>
+<h3 id="couldnt-read-your-anyscribe-config-so-tailnet-sharing-is-off-for-this-run"><code>Couldn't read your anyscribe config, so tailnet sharing is off for this run.</code></h3>
+<p><code>~/.anyscribe/config.yaml</code> has a mistake in it, so anyscribe can't tell whether
+sharing is on. The dashboard starts on your own computer. Fix the file (or see
+<code>anyscribe config path</code>), then restart <code>anyscribe ui</code>.</p>
 <hr />
 <h2 id="last-resort">Last resort</h2>
 <h3 id="config-or-workspace-looks-corrupted">Config or workspace looks corrupted</h3>

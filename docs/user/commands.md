@@ -890,7 +890,7 @@ anyscribe ui --tailnet
 anyscribe ui --local-only
 ```
 
-> **Local only by default.** The web UI binds to `127.0.0.1` — it's only accessible from your machine. No auth needed. Stop it with Ctrl+C.
+> **Local only by default.** The web UI binds to `127.0.0.1` — it's only accessible from your machine. No auth needed. Stop it with Ctrl+C. It also answers only to the names `127.0.0.1`, `localhost` and (while shared) its own tailnet address, so a web page can't reach it under another name.
 
 ### Share it on your tailnet
 
@@ -903,16 +903,19 @@ If you use [Tailscale](https://tailscale.com), you can open the dashboard from y
 
 ```
 anyscribe ui → http://127.0.0.1:8457
-Shared on your tailnet → https://my-laptop.tail1234.ts.net:8457/
+Asking Tailscale to share it...
+Shared on your tailnet → https://my-laptop.tail1234.ts.net:8457/ (no login: anyone on your tailnet can use it)
 ```
 
 The link uses HTTPS and the same port number as the local address. It works only on devices signed in to your tailnet: it is never on the public internet (anyscribe never uses Tailscale Funnel). You can also switch it in the Web UI under **Settings → Sharing**; that saves the setting and applies it to the running dashboard straight away. While it is shared, the sidebar shows the link with a copy button on every page.
 
-> **Warning: the dashboard has no login.** Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, and delete transcripts. Only switch it on if you trust every device and person on your tailnet.
+> **Warning: the dashboard has no login.** Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, delete transcripts, or stop it. Only switch it on if you trust every device and person on your tailnet.
 
 If sharing is on but can't work (Tailscale missing, not signed in, and so on), the dashboard still starts on your own computer and prints one line saying why and how to fix it. [Troubleshooting](troubleshooting.md#tailnet-sharing) lists each message.
 
-> **What anyscribe changes in Tailscale.** It adds one `tailscale serve` rule for its own port when it starts and removes that rule when it stops. It never replaces a rule that something else already has on that port. If the dashboard is killed hard (power loss, `kill -9`), the rule can stay behind and answer "bad gateway"; the next `anyscribe ui` with sharing on reuses it, or remove it yourself with `tailscale serve --https=8457 off`. With sharing off, anyscribe doesn't touch Tailscale at all, not even to clean up.
+> **What anyscribe changes in Tailscale.** It adds one `tailscale serve` rule for its own port once the dashboard is listening, and notes that port in `~/.anyscribe/tailnet-owned.json`. On a normal stop it removes only a rule it noted that still points at the dashboard. If you already made the same rule yourself (`tailscale serve --bg --https=8457 http://127.0.0.1:8457`), anyscribe uses it for the link and leaves it in place. It never replaces a rule that points anywhere else. If the dashboard is killed hard (power loss, `kill -9`), or Tailscale is stuck when the tray force-stops it, its rule stays behind and answers "bad gateway"; the next `anyscribe ui` with sharing on reuses it and removes it on its next clean stop, or remove it yourself with `tailscale serve --https=8457 off`. With sharing off, anyscribe doesn't touch Tailscale at all, not even to clean up.
+>
+> A share you make by hand while the setting is off now gets a "only answers on this computer's own address" page, because the dashboard refuses names it doesn't know. Turn the setting on instead: anyscribe then uses your rule and leaves it in place.
 
 > **Want it without a terminal?** `anyscribe desktop install` gives you an app icon that opens this same dashboard and keeps it running in the background. See [anyscribe desktop](#anyscribe-desktop).
 

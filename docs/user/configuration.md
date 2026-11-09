@@ -337,9 +337,9 @@ Your **tailnet** is the private network of devices signed in to your [Tailscale]
 
 You can also flip it in the Web UI under **Settings → Sharing**, which saves the setting and applies it to the running dashboard straight away. For a single run without changing the setting, use `anyscribe ui --tailnet` or `anyscribe ui --local-only`.
 
-> **The dashboard has no login.** Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, and delete transcripts. Leave this off unless you trust every device on your tailnet.
+> **The dashboard has no login.** Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, delete transcripts, or stop it. Leave this off unless you trust every device on your tailnet. Turning it on with `anyscribe config set tailnet on` prints the same warning.
 
-> **Needs Tailscale.** Without it (or when it is signed out), the dashboard starts on your computer as usual and prints one line saying why sharing didn't happen. See [Troubleshooting](troubleshooting.md#tailnet-sharing).
+> **Needs Tailscale.** Without it (or when it is signed out), the dashboard starts on your computer as usual and prints one line saying why sharing didn't happen. See [Troubleshooting](troubleshooting.md#tailnet-sharing). If `config.yaml` can't be read at all, `anyscribe ui` still starts on your computer only and says so in one line.
 
 ### Instagram cookies (`instagram.browser`)
 

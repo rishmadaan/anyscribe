@@ -80,8 +80,7 @@ partial output and passes the link through); port taken by another rule.
 - A hard kill (SIGKILL, power loss) skips the shutdown handler and leaves the
   rule, which answers "bad gateway". The next start with sharing on reuses it;
   with sharing off anyscribe never cleans it up. Documented in the user docs.
-- If sharing fails while it was already live (Tailscale stops mid-run and the
-  user flips the switch on again), the old rule is no longer tracked and stays.
+- (Fixed in review round 1: a failed repeat "on" no longer orphans the rule.)
 - The dashboard has no login, so sharing hands every tailnet device full
   control. The Settings card, docs and the skill (Safety Rule 6) say so;
   auth is out of scope.
@@ -96,3 +95,36 @@ link answered 200 from the box and from a Mac on the tailnet, the transcription
 WebSocket upgraded (101) through the link, the rule was removed on SIGTERM,
 SIGINT and `/api/shutdown`, the Settings switch toggled the rule live, and the
 other rules were byte-identical before and after.
+
+## Review round 1 fixes (same day)
+
+An independent review (correctness and fit) upheld 15 findings. What changed:
+
+- **Ownership is recorded, not inferred.** The first cut called any
+  `https=N -> http://127.0.0.1:N` rule "ours" and removed it on stop, which
+  would have deleted a rule the user made by hand (the exact command this
+  feature grew out of) or another app's same-shape rule. Now anyscribe writes
+  the port to `~/.anyscribe/tailnet-owned.json` only after its own
+  `serve --bg` succeeded and reads back, and removes a rule only if it is
+  recorded and still matches. A matching unrecorded rule is used for the link
+  and left in place. `Share` tracks "this process owns a live rule" apart from
+  the displayed status, so a failed repeat "on" cannot orphan the rule.
+- **Share after the bind.** uvicorn runs startup handlers before it binds and
+  shutdown handlers on a bind failure, so the old startup hook could share,
+  then unshare a port a second server was serving. A thread now waits for
+  `server.started` first; a failed bind never touches Tailscale.
+- **No stale link.** `GET /api/tailnet` re-reads the serve config while live
+  and reports "The share was removed outside anyscribe." if the rule is gone;
+  the UI re-reads on window focus.
+- **Host check.** A pure ASGI middleware refuses any Host but the local names
+  and, while shared, the tailnet name (HTTP and WebSocket), so a DNS-rebinding
+  page cannot switch sharing on. Side effect: a share made by hand with the
+  setting off now gets a 403; the docs say to turn the setting on instead.
+- **No login, said everywhere:** the CLI's shared line, `config set tailnet
+  on`, the `--tailnet` help and the card ("or stop it").
+- Smaller: a broken `config.yaml` starts local-only with one line; a quoted
+  `"false"` is off; save and apply share one lock and the card's note is worded
+  from the data; `/api/shutdown` unshares before shutting down; the card says
+  "flip this switch" where the CLI names a command; switching off from another
+  device asks first; the card moved below the daily settings; the CLI prints
+  "Asking Tailscale to share it..." before the wait.

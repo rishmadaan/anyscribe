@@ -23,7 +23,7 @@ export function TailnetLink({ url, compact = false }: { url: string; compact?: b
         target="_blank"
         rel="noopener noreferrer"
         title={url}
-        className={`font-mono text-amber hover:underline truncate ${compact ? "text-[11px]" : "text-xs"}`}
+        className={`font-mono text-amber hover:underline ${compact ? "text-[11px] break-all" : "text-xs truncate"}`}
       >
         {compact ? url.replace(/^https:\/\//, "").replace(/\/$/, "") : url}
       </a>

@@ -81,10 +81,10 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Bottom — tailnet indicator, branding, shutdown */}
-        <div className="mt-auto px-3 pb-4 space-y-2">
+        {/* Tailnet indicator, under the nav so it is visible without scrolling on every page */}
+        <div className="px-3 mt-4">
           {tailnet?.active && tailnet.url ? (
-            <div className="mx-1 rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-2">
+            <div className="rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-2">
               <p className="flex items-center gap-1.5 text-xs text-text-secondary mb-0.5">
                 <Share2 className="w-3 h-3 text-green" />
                 Shared on your tailnet
@@ -94,12 +94,16 @@ export default function Layout() {
           ) : tailnet?.enabled ? (
             <Link
               to="/settings"
-              className="mx-1 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red hover:bg-surface-hover"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red hover:bg-surface-hover"
             >
               <Share2 className="w-3 h-3" />
               Tailnet sharing isn't working
             </Link>
           ) : null}
+        </div>
+
+        {/* Bottom — branding + shutdown */}
+        <div className="mt-auto px-3 pb-4 space-y-2">
           <div className="px-3 py-2 text-xs text-text-secondary space-y-1">
             <p>&copy; 2026 Rishabh Madaan</p>
             <a href="https://github.com/rishmadaan/anyscribe#license" target="_blank" rel="noopener noreferrer" className="block hover:text-text underline">

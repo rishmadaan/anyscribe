@@ -484,6 +484,11 @@ def test_config_set_accepts_boolean_spellings(raw, expected, config_restored):
     assert result.exit_code == 0, result.output
     # C2: turning it on says, once, that the page has no login; turning it off does not.
     assert ("no login: anyone on your tailnet can use it" in result.output) is expected
+    # R2-fF5: both ways say when it takes effect.
+    assert (
+        "Takes effect the next time you start anyscribe ui (or flip it in Settings)."
+        in result.output
+    )
     from anyscribe.config.settings import load_config
 
     assert load_config().tailnet is expected

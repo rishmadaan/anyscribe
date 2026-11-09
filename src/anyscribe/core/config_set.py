@@ -143,10 +143,15 @@ def _set_scalar(key: str, value, data: dict) -> str:
         if key == "workspace_path" and typed:
             typed = str(Path(typed).expanduser())
     target[final] = typed
-    if key == "tailnet" and typed:
+    if key == "tailnet":
+        warn = (
+            "\nThe web UI has no login: anyone on your tailnet can use it while it is shared."
+            if typed
+            else ""
+        )
         return (
-            f"Set {key} = {typed}\n"
-            "The web UI has no login: anyone on your tailnet can use it while it is shared."
+            f"Set {key} = {typed}{warn}\n"
+            "Takes effect the next time you start anyscribe ui (or flip it in Settings)."
         )
     return f"Set {key} = {typed}"
 

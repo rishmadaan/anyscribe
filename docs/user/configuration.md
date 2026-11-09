@@ -333,7 +333,7 @@ anyscribe config set tailnet on      # share from now on
 anyscribe config set tailnet off     # back to this computer only
 ```
 
-Your **tailnet** is the private network of devices signed in to your [Tailscale](https://tailscale.com) account. When this is `true`, the dashboard still listens only on `127.0.0.1`, and anyscribe asks Tailscale to pass requests from your tailnet through to it at `https://<your-machine>.<your-tailnet>.ts.net:<port>/`. It is never on the public internet. `on`, `yes`, `true` and `1` all mean on; anything else means off.
+Your **tailnet** is the private network of devices signed in to your [Tailscale](https://tailscale.com) account. When this is `true`, the dashboard still listens only on `127.0.0.1`, and anyscribe asks Tailscale to pass requests from your tailnet through to it at `https://<your-machine>.<your-tailnet>.ts.net:<port>/`. It is never on the public internet. `on`, `yes`, `true` and `1` all mean on; anything else means off. Set from the terminal, it takes effect the next time you start `anyscribe ui` (or flip it in Settings); a dashboard that is already running keeps its current state until then.
 
 You can also flip it in the Web UI under **Settings → Sharing**, which saves the setting and applies it to the running dashboard straight away. For a single run without changing the setting, use `anyscribe ui --tailnet` or `anyscribe ui --local-only`.
 

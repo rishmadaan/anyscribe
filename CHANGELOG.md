@@ -11,6 +11,25 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.18.1 — 2026-11-09
+
+**Fixed**
+- **Downloading a local model from the dashboard failed** with
+  `'_ProgressTqdm' object has no attribute 'unit'`. New installs pick up a
+  newer version of the Hugging Face download library, which switches its
+  progress bars off when there's no terminal window, and anyscribe's progress
+  tracking didn't expect that. Downloads now finish, and the progress bar
+  shows the model's real size instead of roughly double it. If a download
+  failed for you, update and press Install again.
+
+**Added**
+- Every local model now says what it's for ("Use it for everyday podcasts,
+  interviews and talks with clear audio. Start here") in the dashboard's model
+  picker, first-run setup and `anyscribe onboard`, next to the existing
+  **recommended** tag on `base`.
+
+---
+
 ## 0.18.0 — 2026-10-22
 
 **Added**

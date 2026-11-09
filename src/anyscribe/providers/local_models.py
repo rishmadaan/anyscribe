@@ -41,6 +41,7 @@ MODEL_REPOS: dict[str, str] = {
 }
 
 # Approximate figures used by the UI (CLI + Web) to help the user pick a size.
+# ``use_for`` completes the sentence "Use it for ..." shown under each size.
 # Download sizes are what HF reports for the int8 CTranslate2 weights; RAM
 # numbers are typical peak usage during transcription on CPU.
 MODEL_SPECS: dict[str, dict[str, Any]] = {
@@ -49,42 +50,49 @@ MODEL_SPECS: dict[str, dict[str, Any]] = {
         "ram_mb": 400,
         "relative_speed": "~10x realtime (CPU)",
         "quality": "lowest",
+        "use_for": "quick rough drafts on an old or slow computer",
     },
     "base": {
         "download_mb": 145,
         "ram_mb": 600,
         "relative_speed": "~7x realtime (CPU)",
         "quality": "good for most use cases",
+        "use_for": "everyday podcasts, interviews and talks with clear audio. Start here",
     },
     "small": {
         "download_mb": 480,
         "ram_mb": 1200,
         "relative_speed": "~4x realtime (CPU)",
         "quality": "noticeably better than base",
+        "use_for": "accents, background noise or jargon that base gets wrong",
     },
     "medium": {
         "download_mb": 1500,
         "ram_mb": 2500,
         "relative_speed": "~2x realtime (CPU)",
         "quality": "near-large for many languages",
+        "use_for": "non-English audio, if you can wait longer",
     },
     "large-v3": {
         "download_mb": 3000,
         "ram_mb": 5000,
         "relative_speed": "~1x realtime (CPU); fast on GPU",
         "quality": "highest",
+        "use_for": "the most accurate transcript, on a computer with a graphics card (GPU)",
     },
     "large-v3-turbo": {
         "download_mb": 1600,
         "ram_mb": 3000,
         "relative_speed": "~6x realtime (CPU)",
         "quality": "near large-v3, much faster",
+        "use_for": "near-best accuracy at good speed, if you have 4 GB of memory to spare",
     },
     "distil-large-v3.5": {
         "download_mb": 1500,
         "ram_mb": 2800,
         "relative_speed": "~6x realtime (CPU)",
         "quality": "near large-v3 for English; weaker multilingual",
+        "use_for": "English-only audio where you want near-best accuracy, fast",
     },
 }
 
@@ -175,20 +183,20 @@ def any_model_cached() -> bool:
 
 
 def _progress_tqdm_class(progress_cb: Callable[[int, int], None]):
-    """Build a tqdm subclass that reports summed byte progress to ``progress_cb``.
+    """Build a tqdm subclass that reports byte progress to ``progress_cb``.
 
-    huggingface_hub's ``snapshot_download`` spawns one tqdm bar per file (plus a
-    files-count bar we ignore). Each byte-progress bar has ``unit == "B"``. We
-    aggregate ``total`` and ``n`` across all live byte bars into shared counters
-    and hand ``(downloaded, total)`` to the callback on every update — that's the
-    number the UI wants. ``huggingface_hub.utils.tqdm`` is the base so tqdm's own
-    ``HF_HUB_DISABLE_PROGRESS_BARS`` env respect is preserved.
+    huggingface_hub >= 1.x hands ``tqdm_class`` two whole-snapshot byte bars
+    (``unit == "B"``): network bytes and bytes written to disk, each totalling
+    the full download, plus a files-count bar we ignore. Summing would double
+    the size, so we report the furthest bar as ``(downloaded, total)``. Older
+    versions give us only the files bar, so the UI falls back to the spinner.
 
     Returns ``None`` if the tqdm base can't be imported — caller then downloads
     without a progress hook (UI falls back to the spinner).
     """
     try:
         from huggingface_hub.utils import tqdm as hf_tqdm  # type: ignore[import-not-found]
+        from tqdm import tqdm as base_tqdm
     except ImportError:
         return None
 
@@ -197,16 +205,32 @@ def _progress_tqdm_class(progress_cb: Callable[[int, int], None]):
 
     def _report() -> None:
         with lock:
-            downloaded = sum(n for n, _ in bars.values())
-            total = sum(t for _, t in bars.values())
+            downloaded = max((n for n, _ in bars.values()), default=0)
+            total = max((t for _, t in bars.values()), default=0)
+            if total:  # 1.x bars can disagree on the total
+                total = max(total, downloaded)
         try:
             progress_cb(downloaded, total)
         except Exception:
             pass
 
+    class _NullFile:
+        def write(self, _s):
+            pass
+
+        def flush(self):
+            pass
+
     class _ProgressTqdm(hf_tqdm):  # type: ignore[misc, valid-type]
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+            # huggingface_hub >= 1.x passes disable=None (off with no TTY, e.g. the
+            # Web UI) and its base class forces disable=True under
+            # HF_HUB_DISABLE_PROGRESS_BARS; a disabled bar never sets .unit or
+            # counts .n. Skip the HF base init, keep the bar on, draw to nowhere.
+            kwargs.pop("name", None)
+            kwargs["disable"] = False
+            kwargs["file"] = _NullFile()
+            base_tqdm.__init__(self, *args, **kwargs)
             if self.unit == "B":
                 with lock:
                     bars[id(self)] = (self.n, self.total or 0)

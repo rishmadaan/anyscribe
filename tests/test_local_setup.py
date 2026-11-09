@@ -101,29 +101,27 @@ def test_local_ready_false_when_no_models_cached():
                 assert local_setup.local_ready() is False
 
 
-def test_progress_tqdm_class_aggregates_bytes(monkeypatch):
-    """The tqdm subclass sums byte-bars and reports (downloaded, total)."""
+def test_progress_tqdm_class_reports_bytes_when_hf_disables_bars(monkeypatch):
+    """huggingface_hub disables its bars with no TTY (the Web UI) or under
+    HF_HUB_DISABLE_PROGRESS_BARS; a disabled tqdm has no .unit, which crashed
+    the download ("'_ProgressTqdm' object has no attribute 'unit'"). Its two
+    whole-snapshot byte bars must not be summed into double the size."""
     import sys
     import types
 
+    real_tqdm = pytest.importorskip("tqdm").tqdm
     from anyscribe.providers import local_models
 
-    # Minimal tqdm base standing in for huggingface_hub.utils.tqdm.
-    class FakeTqdm:
-        def __init__(self, *args, unit=None, total=None, **kwargs):
-            self.unit = unit
-            self.total = total
-            self.n = 0
-
-        def update(self, n=1):
-            self.n += n
-
-        def close(self):
-            pass
+    # Stands in for huggingface_hub.utils.tqdm: always forces disable=True.
+    class HfTqdm(real_tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop("name", None)
+            kwargs["disable"] = True
+            super().__init__(*args, **kwargs)
 
     fake_hub = types.ModuleType("huggingface_hub")
     fake_hub_utils = types.ModuleType("huggingface_hub.utils")
-    fake_hub_utils.tqdm = FakeTqdm
+    fake_hub_utils.tqdm = HfTqdm
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
     monkeypatch.setitem(sys.modules, "huggingface_hub.utils", fake_hub_utils)
 
@@ -131,9 +129,17 @@ def test_progress_tqdm_class_aggregates_bytes(monkeypatch):
     cls = local_models._progress_tqdm_class(lambda d, t: reports.append((d, t)))
     assert cls is not None
 
-    bar = cls(unit="B", total=100)
-    bar.update(40)
+    files = cls(total=6, name="huggingface_hub.snapshot_download")  # unit "it"
+    transfer = cls(unit="B", total=100, name="huggingface_hub.snapshot_download.transfer")
+    disk = cls(unit="B", total=100, name="huggingface_hub.snapshot_download")
+    transfer.update(40)
+    disk.update(30)
     assert reports[-1] == (40, 100)
+    files.update(6)
+    assert reports[-1] == (40, 100)
+    for bar in (transfer, disk, files):
+        bar.close()
+    assert reports[-1] == (100, 100)
 
 
 def test_pull_model_passes_tqdm_class_when_progress_cb_given():

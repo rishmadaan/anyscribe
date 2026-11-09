@@ -407,7 +407,8 @@ class Share:
     def save_and_apply(self, wanted: bool):
         """Save the setting and apply it under one lock, so saved and live cannot drift apart.
 
-        Returns config_set's SetOutcome; nothing is applied when the save failed.
+        Returns config_set's SetOutcome. Switching off revokes before saving, so a failed
+        save still leaves sharing off; switching on applies only after the save succeeded.
         """
         from anyscribe.core.config_set import SetOutcome, set_value
 

@@ -130,7 +130,7 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
             )
     if req.tailnet is not None:  # same save + live apply as PUT /api/tailnet, under one lock
         outcome = await run_in_threadpool(request.app.state.tailnet.save_and_apply, req.tailnet)
-        if not outcome.ok:  # nothing was applied live; undo the fields saved above too
+        if not outcome.ok:  # on: nothing applied; off: already revoked. Undo the fields above
             rollback()
             return JSONResponse(status_code=422, content={"success": False, "error": outcome.error})
     return _config_payload()

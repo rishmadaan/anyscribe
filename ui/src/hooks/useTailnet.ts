@@ -33,9 +33,17 @@ export function useTailnet() {
   }, []);
 
   const change = useCallback(async (enabled: boolean) => {
-    const next = await setTailnet(enabled);
-    window.dispatchEvent(new CustomEvent(EVENT, { detail: next }));
-    return next;
+    const broadcast = (s: TailnetState) =>
+      window.dispatchEvent(new CustomEvent(EVENT, { detail: s }));
+    try {
+      const next = await setTailnet(enabled);
+      broadcast(next);
+      return next;
+    } catch (err) {
+      // A failed switch-off has still revoked the link: show the live state, keep the error.
+      await getTailnet().then(broadcast, () => {});
+      throw err;
+    }
   }, []);
 
   return { state, change };

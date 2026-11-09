@@ -1,7 +1,7 @@
 ---
 type: feature
 tags: [web-ui, tailscale, networking, settings, security]
-tldr: "Optional tailnet sharing for the web UI: a `tailnet` setting (default off) plus one-run `ui --tailnet` / `--local-only`. The server still binds 127.0.0.1; core/tailnet.py asks `tailscale serve --bg --https=<port>` to proxy it, never overwrites another serve rule, removes only its own rule on stop, never uses Funnel, and with sharing off never calls Tailscale. Settings gets a live switch; the sidebar shows the link with a copy button while shared."
+tldr: "Optional tailnet sharing for the web UI: a `tailnet` setting (default off) plus one-run `ui --tailnet` / `--local-only`. The server still binds 127.0.0.1; core/tailnet.py asks `tailscale serve --bg --https=<port>` to proxy it, never overwrites another serve rule, removes only its own rule on stop, never uses Funnel, and with sharing off starts no Tailscale command. Settings gets a live switch; the sidebar shows the link with a copy button while shared."
 ---
 
 # Tailnet sharing for the web UI
@@ -60,8 +60,9 @@ The HTTPS port equals the local port, so the link is predictable
   message suggesting `--port`. An unreadable serve config also stops it.
 - **Remove only ours.** On stop it re-reads the config and runs
   `tailscale serve --https=<port> off` only if the port is still exactly ours.
-- **Off means off.** With sharing off nothing calls Tailscale, including stale
-  rule cleanup.
+- **Off means off.** With sharing off nothing starts a Tailscale command,
+  including stale rule cleanup (a read already running at switch-off finishes,
+  at most 3 s, and is discarded; round 4).
 - **Never show a dead link.** After `serve --bg` succeeds, anyscribe re-reads
   the serve config and reports the link only if the rule is there.
 

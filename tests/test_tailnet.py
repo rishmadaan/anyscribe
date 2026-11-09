@@ -694,6 +694,27 @@ def test_a_refresh_result_read_before_a_change_is_dropped(fake, monkeypatch, mea
         assert fake.config == OTHER
 
 
+def test_no_tailscale_command_starts_after_switch_off(fake, monkeypatch):
+    """R4-C2: switched off while refresh's first read runs: that read finishes and is dropped,
+    and no further Tailscale command starts once the switch-off has returned."""
+    share = tailnet.Share(8467)
+    share.apply(True)
+    real = tailnet._status_json
+    after_off = {}
+
+    def switch_off_during_the_read(cli, timeout=tailnet.TIMEOUT):
+        out = real(cli, timeout)  # a read already running finishes...
+        share.apply(False)  # ...while the switch-off lands
+        after_off["mark"] = len(fake.calls)
+        return out
+
+    monkeypatch.setattr(tailnet, "_status_json", switch_off_during_the_read)
+    share.refresh()
+    assert fake.calls[after_off["mark"] :] == []
+    assert share.held is None and share.status == tailnet.Status()
+    assert fake.config == OTHER
+
+
 def test_get_with_an_unreadable_config_shows_the_live_state(client, fake):
     """C5 leftover: a broken config.yaml gives saved None, not a 500; the live share still shows."""
     assert client.put("/api/tailnet", json={"enabled": True}).json()["active"] is True

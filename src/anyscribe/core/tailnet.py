@@ -4,7 +4,8 @@ The server always binds 127.0.0.1. When sharing is on, Tailscale proxies
 ``https://<machine>.<tailnet>.ts.net:<port>/`` to it: reachable from the user's
 own Tailscale devices only, never the public internet (no Funnel). The CLI,
 the tray/desktop server and the web toggle all go through ``Share`` so they
-cannot disagree. With sharing off, nothing here calls Tailscale.
+cannot disagree. With sharing off, nothing here starts a Tailscale command (a read already
+running at switch-off finishes, at most 3 s, and is discarded).
 """
 
 from __future__ import annotations
@@ -343,7 +344,8 @@ class Share:
         Not Running, or a read that fails or times out: show failed and keep holding (a passing
         hiccup must not cost a working share). Running and the rule is ours: show it live again.
         Running and the rule is gone: "removed outside anyscribe", and the hold is released.
-        Nothing held (including sharing off) = no Tailscale call at all.
+        Nothing held (including sharing off) = no Tailscale call. Switched off during a read:
+        that read finishes (at most 3 s) and is discarded, and none starts after it.
         """
         with self._lock:
             held, hold, port = self.held, self._hold, self.port
@@ -354,6 +356,9 @@ class Share:
         running = bool(cli) and (
             _status_json(cli, REFRESH_TIMEOUT).get("BackendState") == "Running"
         )
+        with self._lock:
+            if self._hold != hold:
+                return self.status  # released during the first read: start no second command
         config = _serve_config(cli, REFRESH_TIMEOUT) if running else None
         with self._lock:
             if self._hold != hold:

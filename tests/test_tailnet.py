@@ -72,8 +72,9 @@ class FakeTailscale:
 
 
 @pytest.fixture
-def fake(monkeypatch):
+def fake(monkeypatch, tmp_path):
     ts = FakeTailscale()
+    monkeypatch.setattr(tailnet, "OWNED_FILE", tmp_path / "tailnet-owned.json")
     monkeypatch.setattr(tailnet, "find_cli", lambda: "/usr/bin/tailscale")
     monkeypatch.setattr(tailnet.subprocess, "run", ts)
     monkeypatch.setattr(tailnet, "run_override", None)
@@ -187,12 +188,47 @@ def test_a_funnel_port_is_never_treated_as_ours(fake):
     assert tailnet.port_state(cfg, 8443) == "taken"
 
 
-def test_a_stale_rule_of_ours_is_reused(fake):
+def test_a_hand_made_matching_rule_is_used_but_never_removed(fake):
+    """C1: the exact rule from ask.md, made by hand, survives anyscribe's stop."""
     tcp, web = ours(8467)
     fake.config["TCP"]["8467"], fake.config["Web"][f"{HOST}:8467"] = tcp, web
-    status = tailnet.start(8467)
+    share = tailnet.Share(8467)
+    status = share.apply(True)
     assert status.active and status.url == f"https://{HOST}:8467/"
+    assert status.note == tailnet.HANDMADE and status.owned is False
     assert bg_calls(fake) == []
+    share.close()
+    assert off_calls(fake) == []
+    assert fake.config["TCP"]["8467"] == {"HTTPS": True}
+    assert fake.config["Web"][f"{HOST}:8467"] == {
+        "Handlers": {"/": {"Proxy": "http://127.0.0.1:8467"}}
+    }
+    assert tailnet._owned_ports() == set()
+
+
+def test_a_recorded_leftover_from_a_hard_kill_is_reused_then_removed(fake):
+    first = tailnet.Share(8467)
+    first.apply(True)  # creates and records the rule, then the process "dies" (no close)
+    assert tailnet._owned_ports() == {8467}
+    second = tailnet.Share(8467)
+    status = second.apply(True)
+    assert status.active and status.note is None
+    assert bg_calls(fake) == [["serve", "--bg", "--https=8467", "http://127.0.0.1:8467"]]
+    second.close()
+    assert off_calls(fake) == [["serve", "--https=8467", "off"]]
+    assert fake.config == OTHER and tailnet._owned_ports() == set()
+
+
+def test_a_failed_repeat_on_does_not_orphan_our_rule(fake):
+    """C6: a temporary failure on a second "on" must not make shutdown forget the rule."""
+    share = tailnet.Share(8467)
+    share.apply(True)
+    fake.backend = "Stopped"  # the repeat start fails before reaching serve
+    assert share.apply(True).active is False
+    fake.backend = "Running"
+    share.close()
+    assert off_calls(fake) == [["serve", "--https=8467", "off"]]
+    assert fake.config == OTHER
 
 
 def test_failure_line_is_one_line_with_reason_and_fix(fake):
@@ -211,6 +247,14 @@ def test_stop_removes_our_rule_and_leaves_every_other_rule_identical(fake):
     tailnet.stop(8467)
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
     assert fake.config == OTHER
+    assert tailnet._owned_ports() == set()
+
+
+def test_stop_never_removes_an_unrecorded_rule(fake):
+    tcp, web = ours(8467)
+    fake.config["TCP"]["8467"], fake.config["Web"][f"{HOST}:8467"] = tcp, web
+    tailnet.stop(8467)
+    assert off_calls(fake) == [] and fake.config["Web"][f"{HOST}:8467"] == web
 
 
 def test_stop_leaves_a_rule_that_now_points_elsewhere(fake):
@@ -362,6 +406,7 @@ def test_api_toggle_saves_and_applies_live(client, fake):
         "url": None,
         "reason": None,
         "fix": None,
+        "note": None,
         "saved": False,
     }
     on = client.put("/api/tailnet", json={"enabled": True}).json()

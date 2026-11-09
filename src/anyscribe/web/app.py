@@ -93,10 +93,10 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
             print(tailnet.describe(await run_in_threadpool(share.apply, True)), flush=True)
 
     # Shutdown runs on /api/shutdown, Ctrl+C and SIGTERM alike (uvicorn re-raises
-    # the signal only after it). A no-op unless sharing is live.
+    # the signal only after it). A no-op unless this process owns a live rule.
     @app.on_event("shutdown")
     async def _unshare() -> None:
-        await run_in_threadpool(share.apply, False)
+        await run_in_threadpool(share.close)
 
     if open_browser:
 

@@ -18,6 +18,9 @@ import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from anyscribe.config.paths import TAILNET_OWNED as OWNED_FILE
+from anyscribe.core.fileutil import atomic_write
+
 # Tailscale's CLI answers in well under a second; a wedged daemon, or `serve`
 # waiting for the admin to enable HTTPS, would otherwise block the server start.
 TIMEOUT = 10
@@ -25,6 +28,8 @@ MAC_APP_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 
 # One-run override set by `anyscribe ui --tailnet / --local-only`; None follows the setting.
 run_override: bool | None = None
+
+HANDMADE = "A share you set up yourself; anyscribe will leave it in place."
 
 
 @dataclass
@@ -34,9 +39,13 @@ class Status:
     url: str | None = None
     reason: str | None = None
     fix: str | None = None
+    note: str | None = None  # e.g. the link is a share the user made by hand
+    owned: bool = False  # anyscribe created this rule (recorded), so it may remove it
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        del data["owned"]
+        return data
 
 
 def find_cli() -> str | None:
@@ -83,6 +92,24 @@ def _serve_config(cli: str) -> dict | None:
     except ValueError:
         return None
     return data if isinstance(data, dict) else None
+
+
+def _owned_ports() -> set[int]:
+    """Ports whose serve rule anyscribe created. Unreadable = none (then nothing is ever removed)."""
+    try:
+        return {int(p) for p in json.loads(OWNED_FILE.read_text())}
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def _record(port: int, owned: bool) -> None:
+    # shortcut: read-modify-write without a cross-process lock; two servers toggling at the
+    # same instant can drop an entry, which only leaves a rule in place (never removes one).
+    ports = _owned_ports()
+    if (port in ports) == owned:
+        return
+    ports = ports | {port} if owned else ports - {port}
+    atomic_write(OWNED_FILE, json.dumps(sorted(ports)))
 
 
 def _on_port(mapping: dict | None, port: int) -> list:
@@ -160,6 +187,10 @@ def start(port: int) -> Status:
             "Check that `tailscale serve status` works, then restart anyscribe ui.",
         )
     state = port_state(config, port)
+    recorded = port in _owned_ports()
+    if recorded and state != "ours":
+        _record(port, False)  # our old rule is gone (or replaced): forget it
+        recorded = False
     if state == "taken":
         return _failed(
             f"Port {port} is already shared on your tailnet by something else; "
@@ -176,17 +207,31 @@ def start(port: int) -> Status:
                 "Tailscale accepted the request but the share isn't showing up.",
                 f"Check with: tailscale serve status (port {port}).",
             )
-    return Status(enabled=True, active=True, url=f"https://{dns}:{port}/")
+        _record(port, True)  # only now: our own serve succeeded and reads back as ours
+        recorded = True
+    # A matching rule nobody recorded was made by hand: use it for the link, never remove it.
+    return Status(
+        enabled=True,
+        active=True,
+        url=f"https://{dns}:{port}/",
+        note=None if recorded else HANDMADE,
+        owned=recorded,
+    )
 
 
 def stop(port: int) -> None:
-    """Remove the serve rule for ``port``, only while it is still anyscribe's own."""
+    """Remove the serve rule for ``port`` only if anyscribe recorded it AND it is still ours."""
     cli = find_cli()
-    if not cli:
+    if not cli or port not in _owned_ports():
         return
     config = _serve_config(cli)
-    if config is not None and port_state(config, port) == "ours":
-        _run(cli, "serve", f"--https={port}", "off")
+    if config is None:
+        return  # can't see it: keep the record, a later clean stop retries
+    if port_state(config, port) == "ours":
+        code, _, _ = _run(cli, "serve", f"--https={port}", "off")
+        if code != 0:
+            return
+    _record(port, False)
 
 
 def describe(status: Status) -> str | None:
@@ -203,20 +248,37 @@ class Share:
 
     def __init__(self, port: int | None = None) -> None:
         self.port = port
-        self.status = Status()
-        self._lock = threading.Lock()
+        self.status = Status()  # what the CLI and the UI show
+        self.owned = False  # this process holds a live rule anyscribe created; kept apart
+        # from `status` so a failed repeat "on" cannot make shutdown forget the rule
+        self.closed = False  # the server is stopping: never share again
+        self._lock = threading.RLock()
 
     def apply(self, wanted: bool) -> Status:
-        """Start or stop sharing now. Turning off touches Tailscale only if we were live."""
+        """Start or stop sharing now. Turning off touches Tailscale only if we own a rule."""
         with self._lock:
+            if self.closed:
+                return self.status
             if wanted and self.port is None:
                 self.status = _failed(
                     "This server's port is unknown.", "Start it with: anyscribe ui"
                 )
             elif wanted:
                 self.status = start(self.port)
+                self.owned = self.owned or self.status.owned
             else:
-                if self.status.active:
-                    stop(self.port)
+                self._release()
                 self.status = Status()
             return self.status
+
+    def _release(self) -> None:
+        if self.owned:
+            stop(self.port)
+            self.owned = False
+
+    def close(self) -> None:
+        """The server is stopping: remove our own rule and refuse any later share."""
+        with self._lock:
+            self._release()
+            self.closed = True
+            self.status = Status()

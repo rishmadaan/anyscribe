@@ -544,3 +544,18 @@ def test_get_with_sharing_off_never_calls_tailscale(client, fake):
     client.get("/api/tailnet")
     assert fake.calls == []
 
+
+def test_shutdown_removes_our_rule_before_the_server_stops(client, fake):
+    """C10: /api/shutdown unshares first, then asks uvicorn to exit."""
+    seen = []
+
+    class Server:
+        def __setattr__(self, name, value):
+            seen.append((name, copy.deepcopy(fake.config)))
+            object.__setattr__(self, name, value)
+
+    client.app.state.server = Server()
+    client.put("/api/tailnet", json={"enabled": True})
+    assert client.post("/api/shutdown").json()["ok"] is True
+    assert seen == [("should_exit", OTHER)]  # the rule was already gone when exit was asked
+    assert off_calls(fake) == [["serve", "--https=8467", "off"]]

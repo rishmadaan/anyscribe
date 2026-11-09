@@ -7,6 +7,7 @@ from importlib.util import find_spec
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from anyscribe.core import service, tailnet, tray
 from anyscribe.web.models import TailnetRequest
@@ -75,7 +76,10 @@ def set_tailnet(req: TailnetRequest, request: Request) -> dict:
 
 @router.post("/shutdown")
 async def shutdown(request: Request) -> dict:
-    """Gracefully shut down the server."""
+    """Gracefully shut down the server, removing anyscribe's tailnet rule first."""
+    # Before shutdown starts: uvicorn waits for in-flight work before its shutdown hook,
+    # and the tray force-stops the server a few seconds after this request.
+    await run_in_threadpool(request.app.state.tailnet.close)
     server = getattr(request.app.state, "server", None)
     if server:
         server.should_exit = True

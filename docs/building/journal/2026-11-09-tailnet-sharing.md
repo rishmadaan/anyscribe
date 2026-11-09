@@ -116,6 +116,16 @@ An independent review (correctness and fit) upheld 15 findings. What changed:
 - **No stale link.** `GET /api/tailnet` re-reads the serve config while live
   and reports "The share was removed outside anyscribe." if the rule is gone;
   the UI re-reads on window focus.
+- **The gate follows the held share, not the display** (review round 3). Round
+  2 made a live share drop to failed when Tailscale was down, and the Host gate
+  keyed on that display, so one slow or failed Tailscale read refused the
+  remote device until someone flipped the switch at the host. `Share.held` now
+  holds the link from a successful `start()` until switch-off, "removed outside
+  anyscribe" or close, and the gate answers its exact name. The re-check runs
+  while held, outside the lock with a 3 s timeout: not Running or a failed read
+  shows failed and keeps holding; Running with our rule shows it live again;
+  only Running with the rule gone releases the hold. Answering the name during
+  an outage costs nothing, because no tailnet request can arrive then.
 - **Host check.** A pure ASGI middleware (HTTP and WebSocket) answers the
   local names always, and the exact tailnet name of this server's share only
   while that share is live; anything else gets 403, so a DNS-rebinding page

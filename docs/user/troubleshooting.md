@@ -758,7 +758,13 @@ and on to share it again.
 The Settings card shows this when the dashboard was shared but Tailscale has since
 stopped or signed out (or its sharing settings can't be read). The link would not
 open, so the card stops showing it. Open Tailscale and sign in (or run
-`tailscale up`), then flip the switch off and on.
+`tailscale up`); the link comes back by itself, and the card shows it again the
+next time you open the page or come back to the window. A single slow or failed
+answer from Tailscale shows this too, and clears the same way.
+
+anyscribe keeps holding the share meanwhile, so it still answers its exact tailnet
+name during the outage (no request from your tailnet can arrive while Tailscale is
+down anyway).
 
 ### `A share you set up yourself; anyscribe will leave it in place.`
 
@@ -779,13 +785,20 @@ even if you have removed the rule since. To remove it, run
 
 You opened the dashboard under a name it doesn't answer. It answers only at
 `127.0.0.1` and `localhost` on this computer, and at its own tailnet link while
-anyscribe is sharing it. This blocks web pages from reaching it under their own
-name. Open it at `http://127.0.0.1:8457` on this computer.
+anyscribe holds its share (from a successful share until you switch it off, the
+share is removed outside anyscribe, or the dashboard stops; also while Tailscale is
+briefly down). This blocks web pages from reaching it under their own name. Open it
+at `http://127.0.0.1:8457` on this computer.
 
-If you see this on another device through a Tailscale link, sharing is off for this
-dashboard: the link is a rule left behind or one you made by hand with
-`tailscale serve`. Turn the `tailnet` setting on (or flip the switch in Settings);
-anyscribe then uses your rule and leaves it in place.
+If you see this on another device through a Tailscale link, one of two things
+happened:
+
+- Sharing is off for this dashboard: the link is a rule left behind or one you made
+  by hand with `tailscale serve`. Turn the `tailnet` setting on (or flip the switch
+  in Settings); anyscribe then uses your rule and leaves it in place.
+- Sharing is on, but the share was removed outside anyscribe (for example
+  `tailscale serve reset`), so anyscribe let go of it. Flip the switch off and on at
+  the computer running anyscribe (open it there at `http://127.0.0.1:8457`).
 
 If you reach the dashboard through another proxy, tunnel or hostname, it refuses that
 name; open it at 127.0.0.1, or share it with the tailnet setting.

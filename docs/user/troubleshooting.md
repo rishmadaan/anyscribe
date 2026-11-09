@@ -804,7 +804,9 @@ happened:
   the computer running anyscribe (open it there at `http://127.0.0.1:8457`).
 
 If you reach the dashboard through another proxy, tunnel or hostname, it refuses that
-name; open it at 127.0.0.1, or share it with the tailnet setting.
+name (a proxy that passes requests on as 127.0.0.1 or localhost still gets through,
+and the Settings card then warns you); open it at 127.0.0.1, or share it with the
+tailnet setting.
 
 ### `Couldn't read your anyscribe config, so tailnet sharing is off for this run.`
 

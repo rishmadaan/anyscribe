@@ -1526,8 +1526,8 @@ function TailnetCard() {
             {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
             {REMOTE && (
               <p className="text-xs text-amber">
-                You're viewing this through a tunnel or proxy anyscribe didn't set up. It has no
-                login.
+                But you're viewing this through a tunnel or proxy anyscribe didn't set up. It has
+                no login.
               </p>
             )}
           </div>

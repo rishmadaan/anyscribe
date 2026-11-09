@@ -138,7 +138,10 @@ An independent review (correctness and fit) upheld 15 findings. What changed:
   works once the setting is on (anyscribe adopts it and leaves it in place).
   Deliberate change for every install, setting on or off: a dashboard reached
   through another proxy, tunnel or hostname (Caddy, ngrok, a hosts-file alias)
-  is now refused; open it at 127.0.0.1 or use the tailnet setting.
+  is now refused; open it at 127.0.0.1 or use the tailnet setting. A proxy that
+  passes requests on as 127.0.0.1 or localhost (nginx's default `proxy_pass`,
+  `ssh -L`) still gets through, as before this change; the Settings card then
+  warns that the page is being viewed through a proxy.
 - **No login, said everywhere:** the CLI's shared line, `config set tailnet
   on`, the `--tailnet` help and the card ("or stop it").
 - Smaller: a broken `config.yaml` starts local-only with one line; a quoted

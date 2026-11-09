@@ -76,7 +76,7 @@ The `0.x` prefix means pre-stable — breaking changes are allowed between minor
 | 0.17.0 | **Python 3.11 floor + Starlette security floor** (`requires-python>=3.11`, `starlette>=1.3.1`, `fastapi>=0.133`), carrying the 2026-10-21 staleness audit's five PRs (#15 UI deps, #16 installers/CI/pins, #17 user docs + landing, #18 skill + CLI strings, #19 building docs) | Released 2026-10-22 |
 | 0.17.1 | **JavaScript runtime for YouTube**: `yt-dlp[default]` (ships `yt-dlp-ejs`), `core/deps.py` finds Deno or Node 22+ and passes `--js-runtimes`, doctor row, installers add Deno when neither runtime exists | Released 2026-10-22 |
 | 0.18.0 | **Desktop mode**: `anyscribe desktop install/uninstall/status/open` (app launcher + login item + manifest on macOS, Windows, Linux), installers run it by default (`--no-desktop` / `-NoDesktop`), Start at login on all three OSes, tray fixed on Windows, login-started tray gets a full PATH and `ProcessType Interactive` | Released 2026-10-22 |
-| 0.18.1 | **Model download fix**: dashboard model downloads crashed on huggingface_hub >= 1.x (`_ProgressTqdm` has no `unit`); byte progress no longer doubled; "Use it for" line on every local model | Released 2026-11-09 (current) |
+| 0.18.1 | **Model download fix**: dashboard model downloads crashed on huggingface_hub >= 1.x (`_ProgressTqdm` has no `unit`); byte progress no longer doubled; "Use it for" line on every local model; recommended model `base` → `large-v3-turbo` | Released 2026-11-09 (current) |
 | 1.0.0 | Stable: broader test coverage and release hardening | Future |
 
 ### How to bump versions
@@ -643,6 +643,7 @@ Journal: `docs/building/journal/2026-11-09-hf-hub-progress-bar-crash.md`.
 
 - [x] `_progress_tqdm_class`: skip the HF tqdm init (which disables bars with no TTY or under `HF_HUB_DISABLE_PROGRESS_BARS`), draw to a null file, report the furthest byte bar instead of the sum. Verified by real `tiny` downloads on huggingface_hub 0.36, 1.2 and 2.4.
 - [x] Regression test on a real tqdm base that forces `disable=True`; fails on the old code with the user's error.
+- [x] `RECOMMENDED_MODEL` → `large-v3-turbo` (owner decision 2026-11-09); `Settings.local_model` default stays `base`, so no existing setup changes.
 - [x] `MODEL_SPECS[*]["use_for"]`, shown in LocalSetupModal, OnboardingWizard and `anyscribe onboard`.
 
 ---

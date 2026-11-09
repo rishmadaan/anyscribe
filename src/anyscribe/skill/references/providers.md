@@ -199,7 +199,7 @@ Routes to various AI models via a unified API. Uses audio-capable chat models wi
 Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached size can trigger a download on the next local run. Installation is **opt-in** through `anyscribe local setup`, onboarding with the local provider, or the Web UI's local setup flow.
 
 - **Engine:** faster-whisper (CTranslate2-based, up to 4x faster than original Whisper)
-- **Recommended model:** `base` (~145 MB, good quality for most use cases)
+- **Recommended model:** `large-v3-turbo` (~1.6 GB, near `large-v3` quality at ~6x realtime on CPU, ~3 GB RAM). `base` (~145 MB) for older or low-memory machines
 - **All sizes:** `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`
 - **Also needs:** `ffmpeg` on the system PATH (local setup does not install ffmpeg)
 - **GPU:** auto-detects NVIDIA CUDA; falls back to CPU
@@ -225,14 +225,14 @@ Idempotent — re-running with an already-set-up model just updates the default.
 | Size | Download | RAM (peak) | Relative speed (CPU) | Quality |
 |------|----------|------------|----------------------|---------|
 | `tiny` | ~75 MB | ~400 MB | ~10x realtime | lowest — only use for drafts |
-| `base` **(recommended)** | ~145 MB | ~600 MB | ~7x realtime | good for most podcasts/interviews |
+| `base` | ~145 MB | ~600 MB | ~7x realtime | good for most podcasts/interviews |
 | `small` | ~480 MB | ~1.2 GB | ~4x realtime | noticeably better for accents / fast speech |
 | `medium` | ~1.5 GB | ~2.5 GB | ~2x realtime | near-large for many languages |
 | `large-v3` | ~3 GB | ~5 GB | ~1x realtime (CPU); fast on GPU | highest quality |
-| `large-v3-turbo` | ~1.6 GB | ~3 GB | ~6x realtime | near `large-v3`, all languages — best quality-per-second on CPU |
+| `large-v3-turbo` **(recommended)** | ~1.6 GB | ~3 GB | ~6x realtime | near `large-v3`, all languages — best quality-per-second on CPU |
 | `distil-large-v3.5` | ~1.5 GB | ~2.8 GB | ~6x realtime | near `large-v3` **for English**; weaker multilingual |
 
-**Default guidance:** `base`. Only escalate if the user specifically mentions accents, low-quality audio, critical recordings, or a non-English language the user cares about — try `small` first, then `large-v3-turbo`, which is roughly `large-v3` quality at ~6x the CPU speed and half the download. Pick `distil-large-v3.5` only for English-only workloads; it's weaker on other languages. Reserve `large-v3` for a GPU or when nothing else is good enough — on CPU it's ~1x realtime.
+**Default guidance:** `large-v3-turbo`, roughly `large-v3` quality at ~6x the CPU speed and half the download. Drop to `base` (or `small`) on an older laptop, under ~4 GB free memory, or when a 1.6 GB download is a problem. Pick `distil-large-v3.5` only for English-only workloads; it's weaker on other languages. Reserve `large-v3` for a GPU or when nothing else is good enough — on CPU it's ~1x realtime.
 
 ### Cache management (after setup)
 

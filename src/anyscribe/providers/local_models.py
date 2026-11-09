@@ -25,7 +25,7 @@ MODEL_SIZES: list[str] = [
     "distil-large-v3.5",
 ]
 
-RECOMMENDED_MODEL: str = "base"
+RECOMMENDED_MODEL: str = "large-v3-turbo"
 
 # faster-whisper loads these HF repos directly. Keep the keys in lockstep with
 # MODEL_SIZES; the size string is also what we accept on the CLI and store
@@ -57,7 +57,7 @@ MODEL_SPECS: dict[str, dict[str, Any]] = {
         "ram_mb": 600,
         "relative_speed": "~7x realtime (CPU)",
         "quality": "good for most use cases",
-        "use_for": "everyday podcasts, interviews and talks with clear audio. Start here",
+        "use_for": "clear everyday audio on an older laptop, or when a small download matters",
     },
     "small": {
         "download_mb": 480,
@@ -85,7 +85,7 @@ MODEL_SPECS: dict[str, dict[str, Any]] = {
         "ram_mb": 3000,
         "relative_speed": "~6x realtime (CPU)",
         "quality": "near large-v3, much faster",
-        "use_for": "near-best accuracy at good speed, if you have 4 GB of memory to spare",
+        "use_for": "most people: near-best accuracy at good speed. Start here (needs ~3 GB free memory)",
     },
     "distil-large-v3.5": {
         "download_mb": 1500,

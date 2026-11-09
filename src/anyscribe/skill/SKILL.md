@@ -115,7 +115,7 @@ The `--json` result reports what landed: `{"status", "provider", "quality", "mod
 
 **Prefer env vars over `--api-key` on argv** — argv leaks into shell history. Reference the env var by name (`"$OPENAI_API_KEY"`) in examples you give the user.
 
-**Don't guess missing flags.** If the user hasn't told you which provider or model to use, ask them — don't default to one silently. The recommended model for `--provider local` is `base` per [`references/providers.md`](references/providers.md); other defaults (workspace, language, output format) are sane and the user can adjust them in Settings later.
+**Don't guess missing flags.** If the user hasn't told you which provider or model to use, ask them — don't default to one silently. The recommended model for `--provider local` is `large-v3-turbo` per [`references/providers.md`](references/providers.md); other defaults (workspace, language, output format) are sane and the user can adjust them in Settings later.
 
 **Already configured?** `anyscribe onboard --yes` without `--force` exits 2 when `~/.anyscribe/config.yaml` exists. If the user wants to reconfigure, pass `--force`.
 
@@ -123,7 +123,7 @@ The `--json` result reports what landed: `{"status", "provider", "quality", "mod
 
 The `local` provider runs Whisper on the user's own machine via `faster-whisper` — no API, no network. It's **opt-in** and requires a one-time setup that installs `faster-whisper` and downloads a Whisper model.
 
-**Critical rule — you must pass `--model` explicitly.** `anyscribe local setup` refuses to pick a model silently; it exits 2 with a hint if `--model` is omitted. When the user hasn't specified a size, default to the recommended model: **`base`**. It's a ~145 MB download, runs on modest CPUs, and produces good results for most content. Only escalate if the user mentions quality is insufficient, tricky accents, or critical recordings — try `small` first, then `large-v3-turbo` (~1.6 GB, near `large-v3` quality at ~6x realtime on CPU) or `distil-large-v3.5` (~1.5 GB, near `large-v3` for English only). `large-v3` is the ceiling but the slowest on CPU.
+**Critical rule — you must pass `--model` explicitly.** `anyscribe local setup` refuses to pick a model silently; it exits 2 with a hint if `--model` is omitted. When the user hasn't specified a size, default to the recommended model: **`large-v3-turbo`** (~1.6 GB, ~3 GB RAM, near `large-v3` quality at ~6x realtime on CPU). On an older or low-memory machine, or when the download size matters, use `base` (~145 MB) instead. `distil-large-v3.5` (~1.5 GB) is near `large-v3` for English only. `large-v3` is the ceiling but the slowest on CPU.
 
 **Setup from agent context:**
 

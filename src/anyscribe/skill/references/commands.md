@@ -599,11 +599,11 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--model` | `-m` | **Required.** `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `base`. | *none — must specify* |
+| `--model` | `-m` | **Required.** `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). | *none — must specify* |
 | `--yes` | `-y` | Skip confirmation. Required in non-TTY contexts. | Off |
 | `--json` | `-j` | NDJSON progress events on stdout. | Off |
 
-**Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `base` unless the user asks otherwise.
+**Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `large-v3-turbo` unless the user asks otherwise or is on an older, low-memory machine (then `base`).
 
 **Setup does not switch the provider.** Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: (1) if the user already uses another provider, ask first; (2) if `diarize` is true in `anyscribe config --json`, run `anyscribe config set diarize false` (local has no speaker labels; otherwise runs still go to Deepgram when a key is set); (3) run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`. Confirm `resolved.provider` is `local`.
 
@@ -668,7 +668,7 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json # set a ti
 | `--yes` / `-y` | yes (to opt in) | off | Turn on headless mode. |
 | `--provider` / `-p` | yes | none | `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or env var) | none | Stored in `.env`. Prefer the env-var form. |
-| `--local-model` | yes when `--provider=local` | none | `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `base`. |
+| `--local-model` | yes when `--provider=local` | none | `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). |
 | `--model` | no | provider default | Pin `--provider`'s model (writes `provider_models.<provider>`). Exit 2 with the valid list if the provider doesn't offer it. Not for `local`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, `custom`. **Omitting it writes `custom`**, so `--provider` is what runs. Only pass it if the user asked for a tier. |
 | `--workspace` | no | `~/anyscribe` | Obsidian vault path. |

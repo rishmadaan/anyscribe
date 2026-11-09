@@ -566,6 +566,11 @@ from its own and removes it on its next clean stop.</p>
 has gone (someone ran <code>tailscale serve reset</code> or <code>--https=&lt;port&gt; off</code>). The page
 re-checks each time you open it or come back to the window. Flip the switch off
 and on to share it again.</p>
+<h3 id="tailscale-is-not-running-or-signed-out-so-the-link-does-not-work-right-now"><code>Tailscale is not running or signed out, so the link does not work right now.</code></h3>
+<p>The Settings card shows this when the dashboard was shared but Tailscale has since
+stopped or signed out (or its sharing settings can't be read). The link would not
+open, so the card stops showing it. Open Tailscale and sign in (or run
+<code>tailscale up</code>), then flip the switch off and on.</p>
 <h3 id="a-share-you-set-up-yourself-anyscribe-will-leave-it-in-place"><code>A share you set up yourself; anyscribe will leave it in place.</code></h3>
 <p>Not an error. You had already made the same <code>tailscale serve</code> rule by hand, so
 anyscribe uses it for the link and does not remove it when it stops. Remove it

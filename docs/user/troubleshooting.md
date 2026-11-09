@@ -753,6 +753,13 @@ has gone (someone ran `tailscale serve reset` or `--https=<port> off`). The page
 re-checks each time you open it or come back to the window. Flip the switch off
 and on to share it again.
 
+### `Tailscale is not running or signed out, so the link does not work right now.`
+
+The Settings card shows this when the dashboard was shared but Tailscale has since
+stopped or signed out (or its sharing settings can't be read). The link would not
+open, so the card stops showing it. Open Tailscale and sign in (or run
+`tailscale up`), then flip the switch off and on.
+
 ### `A share you set up yourself; anyscribe will leave it in place.`
 
 Not an error. You had already made the same `tailscale serve` rule by hand, so

@@ -40,6 +40,7 @@ class FakeTailscale:
         self.calls: list[list[str]] = []
         self.backend = "Running"
         self.status_rc = 0
+        self.serve_status_rc = 0  # nonzero: `serve status` fails (tailscaled stopped)
         self.serve_result: tuple[int, str, str] | None = None  # force a `serve --bg` outcome
         self.serve_timeout_output: bytes | None = None
 
@@ -51,7 +52,7 @@ class FakeTailscale:
             body = {"BackendState": self.backend, "Self": {"DNSName": HOST + "."}}
             return done(self.status_rc, json.dumps(body))
         if argv == ["serve", "status", "--json"]:
-            return done(0, json.dumps(self.config))
+            return done(self.serve_status_rc, json.dumps(self.config))
         if argv[:2] == ["serve", "--bg"]:
             if self.serve_timeout_output is not None:
                 raise subprocess.TimeoutExpired(args, timeout, output=self.serve_timeout_output)
@@ -559,6 +560,31 @@ def test_a_share_removed_outside_anyscribe_reads_as_failed(client, fake):
     assert data["active"] is False and data["url"] is None
     assert data["reason"] == "The share was removed outside anyscribe."
     assert tailnet._owned_ports() == set()
+
+
+@pytest.mark.parametrize("cause", ["Stopped", "NeedsLogin", "status fails", "config unreadable"])
+def test_a_live_share_whose_tailscale_is_down_reads_as_failed(client, fake, cause):
+    """R2-C5: Tailscale stopped or signed out while shared: no dead link, the rule kept owned."""
+    assert client.put("/api/tailnet", json={"enabled": True}).json()["active"] is True
+    if cause == "status fails":
+        fake.status_rc = 1
+    elif cause == "config unreadable":
+        fake.serve_status_rc = 1
+    else:
+        fake.backend = cause
+    data = client.get("/api/tailnet").json()
+    assert data["active"] is False and data["url"] is None and data["enabled"] is True
+    assert data["reason"] == (
+        "Tailscale is not running or signed out, so the link does not work right now."
+    )
+    assert data["card_fix"] == (
+        "Open Tailscale and sign in (or run: tailscale up), then flip this switch off and on."
+    )
+    assert client.app.state.tailnet.owned and tailnet._owned_ports() == {8467}
+    # Tailscale is back: switching off removes our rule.
+    fake.backend, fake.status_rc, fake.serve_status_rc = "Running", 0, 0
+    client.put("/api/tailnet", json={"enabled": False})
+    assert fake.config == OTHER
 
 
 def test_get_with_sharing_off_never_calls_tailscale(client, fake):

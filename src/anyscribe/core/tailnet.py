@@ -100,6 +100,16 @@ def _serve_config(cli: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _status_json(cli: str) -> dict:
+    """`tailscale status --json`, or {} when it fails or is unreadable."""
+    code, out, _ = _run(cli, "status", "--json")
+    try:
+        data = json.loads(out) if code == 0 else {}
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _owned_ports() -> set[int]:
     """Ports whose serve rule anyscribe created. Unreadable = none (then nothing is ever removed)."""
     try:
@@ -179,11 +189,7 @@ def start(port: int) -> Status:
             "Install it from https://tailscale.com/download, or turn sharing off: "
             "anyscribe config set tailnet off",
         )
-    code, out, _ = _run(cli, "status", "--json")
-    try:
-        status = json.loads(out) if code == 0 else {}
-    except ValueError:
-        status = {}
+    status = _status_json(cli)
     dns = ((status.get("Self") or {}).get("DNSName") or "").rstrip(".")
     if status.get("BackendState") != "Running" or not dns:
         return _failed(
@@ -293,7 +299,8 @@ class Share:
             return self.status
 
     def refresh(self) -> Status:
-        """While live, re-read Tailscale: a rule removed outside anyscribe drops to a failed state.
+        """While live, re-read Tailscale: a removed rule, an unreadable serve config, or a
+        backend that is not Running drops to a failed state, so no dead link is shown.
 
         Not live (including sharing off) = no Tailscale call at all.
         """
@@ -302,15 +309,20 @@ class Share:
                 return self.status
             cli = find_cli()
             config = _serve_config(cli) if cli else None
-            if config is None or port_state(config, self.port) == "ours":
-                return self.status  # still there (or unreadable: claim nothing new)
-            if self.owned:
-                _record(self.port, False)
-            self.owned = False
-            self.status = _failed(
-                "The share was removed outside anyscribe.",
-                "Turn sharing off and on again to share it again.",
-            )
+            if config is not None and port_state(config, self.port) != "ours":
+                if self.owned:
+                    _record(self.port, False)
+                self.owned = False
+                self.status = _failed(
+                    "The share was removed outside anyscribe.",
+                    "Turn sharing off and on again to share it again.",
+                )
+            elif config is None or _status_json(cli).get("BackendState") != "Running":
+                # Keep self.owned: our rule may still be there, and close() retries removing it.
+                self.status = _failed(
+                    "Tailscale is not running or signed out, so the link does not work right now.",
+                    "Open Tailscale and sign in (or run: tailscale up), then restart anyscribe ui.",
+                )
             return self.status
 
     def save_and_apply(self, wanted: bool):

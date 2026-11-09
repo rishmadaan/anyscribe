@@ -590,7 +590,7 @@ the page.</p>
 <p>Not an error. You had already made the same <code>tailscale serve</code> rule by hand, so
 anyscribe uses it for the link and does not remove it when it stops. Remove it
 yourself with <code>tailscale serve --https=&lt;port&gt; off</code> when you no longer want it.</p>
-<h3 id="anyscribe-left-your-own-tailscale-rule-on-port-8457-in-place-and-now-refuses-it"><code>anyscribe left your own Tailscale rule on port 8457 in place and now refuses it.</code></h3>
+<h3 id="anyscribe-left-your-own-tailscale-rule-on-port-8457-in-place-but-no-longer-answers-through-it"><code>anyscribe left your own Tailscale rule on port 8457 in place, but no longer answers through it.</code></h3>
 <p>You switched sharing off while the dashboard was using a rule you made by hand.
 anyscribe never removes your rule, but it stops answering on the tailnet link, so
 your other devices get a refusal instead of the dashboard. With sharing off anyscribe

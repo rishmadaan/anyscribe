@@ -230,7 +230,8 @@ def test_switching_off_a_hand_made_share_says_anyscribe_left_it_in_place(fake):
     assert not off.enabled and not off.active and off.url is None
     # R3-cF1/fF3: a past event (anyscribe no longer looks), and no literal backticks on the card.
     assert off.note == (
-        "anyscribe left your own Tailscale rule on port 8467 in place and now refuses it. "
+        "anyscribe left your own Tailscale rule on port 8467 in place, but no longer answers "
+        "through it. "
         "To remove it: tailscale serve --https=8467 off"
     )
     assert off_calls(fake) == [] and tailnet.port_state(fake.config, 8467) == "ours"

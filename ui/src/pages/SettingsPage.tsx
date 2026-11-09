@@ -1398,6 +1398,18 @@ function ExtraModels({
   );
 }
 
+// A note ending in a command: keep the command on one line (it would break at its hyphens).
+function NoteText({ text }: { text: string }) {
+  const i = text.lastIndexOf("tailscale serve ");
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="whitespace-nowrap">{text.slice(i)}</span>
+    </>
+  );
+}
+
 function TailnetCard() {
   const { state, change } = useTailnet();
   const [busy, setBusy] = useState(false);
@@ -1417,7 +1429,11 @@ function TailnetCard() {
             Sharing is off. This device can no longer open the page. Turn it back on from
             the computer running anyscribe.
           </p>
-          {leftNote && <p className="text-xs text-text-muted mt-1">{leftNote}</p>}
+          {leftNote && (
+            <p className="text-xs text-text-muted mt-1">
+              <NoteText text={leftNote} />
+            </p>
+          )}
         </div>
       </section>
     );
@@ -1493,18 +1509,22 @@ function TailnetCard() {
         )}
         <p className="text-xs text-text-muted">
           Your tailnet is the private network of devices signed in to your
-          Tailscale account. Turned on, your other computers on it can open this
-          page too; it is laid out for a computer screen. It is never on the
-          public internet.
+          Tailscale account. Turned on, your other computers on your tailnet can
+          open this page too (it is laid out for a computer screen, not a phone).
+          It is never on the public internet.
         </p>
 
         {busy ? (
           <p className="text-xs text-text-secondary">Asking Tailscale…</p>
         ) : state.active && state.url ? (
           <div className="rounded-md border border-green/20 bg-green/5 px-3 py-2 space-y-1">
-            <p className="text-xs text-green">On. Open it from any of your Tailscale devices:</p>
+            <p className="text-xs text-green">On. Open it from your other computers on your tailnet:</p>
             <TailnetLink url={state.url} />
-            {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
+            {state.note && (
+              <p className="text-xs text-text-muted">
+                <NoteText text={state.note} />
+              </p>
+            )}
           </div>
         ) : state.enabled && REMOTE && state.held ? (
           // Tailscale delivered this very page, so the link works whatever the last check said.
@@ -1531,7 +1551,11 @@ function TailnetCard() {
             <p className="text-xs text-text-secondary">
               Off. This page only answers at 127.0.0.1 or localhost on this computer.
             </p>
-            {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
+            {state.note && (
+              <p className="text-xs text-text-muted">
+                <NoteText text={state.note} />
+              </p>
+            )}
             {REMOTE && (
               <p className="text-xs text-amber">
                 But you're viewing this through a tunnel or proxy anyscribe didn't set up. It has

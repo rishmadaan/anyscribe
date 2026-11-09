@@ -36,7 +36,8 @@ run_override: bool | None = None
 HANDMADE = "A share you set up yourself; anyscribe will leave it in place."
 # Past tense, no backticks: with sharing off anyscribe no longer looks, and the card shows plain text.
 LEFT_IN_PLACE = (
-    "anyscribe left your own Tailscale rule on port {port} in place and now refuses it. "
+    "anyscribe left your own Tailscale rule on port {port} in place, but no longer answers "
+    "through it. "
     "To remove it: tailscale serve --https={port} off"
 )
 NO_LOGIN = "no login: anyone on your tailnet can use it"

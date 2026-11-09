@@ -1426,7 +1426,11 @@ function TailnetCard() {
         <SettingRow label="Share on your tailnet">
           <div className="flex items-center gap-2">
             {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-text-muted" />}
-            <Toggle value={state.enabled} onChange={() => void flip()} />
+            <Toggle
+              value={state.enabled}
+              onChange={() => void flip()}
+              label="Share on your tailnet"
+            />
           </div>
         </SettingRow>
         <p className="text-xs text-text-muted">
@@ -1493,12 +1497,17 @@ function SettingRow({
 function Toggle({
   value,
   onChange,
+  label,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
+  label?: string;
 }) {
   return (
     <button
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
       onClick={() => onChange(!value)}
       className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${
         value ? "bg-amber" : "bg-border"

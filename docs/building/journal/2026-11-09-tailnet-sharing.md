@@ -116,12 +116,19 @@ An independent review (correctness and fit) upheld 15 findings. What changed:
 - **No stale link.** `GET /api/tailnet` re-reads the serve config while live
   and reports "The share was removed outside anyscribe." if the rule is gone;
   the UI re-reads on window focus.
-- **Host check.** A pure ASGI middleware refuses any Host but the local names
-  and `*.ts.net` names (HTTP and WebSocket), so a DNS-rebinding page cannot
-  switch sharing on. `*.ts.net` is allowed always, not only while shared:
-  Tailscale issues those names, so an attacker cannot point one at 127.0.0.1,
-  and a share made by hand with the setting off keeps working (an earlier
-  version refused it; changed in review).
+- **Host check.** A pure ASGI middleware (HTTP and WebSocket) answers the
+  local names always, and the exact tailnet name of this server's share only
+  while that share is live; anything else gets 403, so a DNS-rebinding page
+  cannot switch sharing on. An interim version allowed any `*.ts.net` name at
+  all times, so a share made by hand kept working with the setting off. Round 2
+  of review reverted it: with the setting off, a rule left behind by a hard
+  kill (or made by hand) then exposed the no-login page while the card said
+  "only this computer", and "Tailscale issues those names" does not stop a
+  hostile DNS resolver from rebinding a `.ts.net` name. A hand-made share now
+  works once the setting is on (anyscribe adopts it and leaves it in place).
+  Deliberate change for every install, setting on or off: a dashboard reached
+  through another proxy, tunnel or hostname (Caddy, ngrok, a hosts-file alias)
+  is now refused; open it at 127.0.0.1 or use the tailnet setting.
 - **No login, said everywhere:** the CLI's shared line, `config set tailnet
   on`, the `--tailnet` help and the card ("or stop it").
 - Smaller: a broken `config.yaml` starts local-only with one line; a quoted

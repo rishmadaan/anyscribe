@@ -1,4 +1,4 @@
-"""System endpoints — shutdown, autostart."""
+"""System endpoints — shutdown, autostart, tailnet sharing."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ from importlib.util import find_spec
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from anyscribe.config.settings import load_config
 from anyscribe.core import service, tray
+from anyscribe.core.config_set import set_value
+from anyscribe.web.models import TailnetRequest
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -49,6 +52,24 @@ async def set_autostart(req: AutostartRequest, request: Request) -> dict:
     else:
         service.uninstall_service()
     return _autostart_state()
+
+
+def tailnet_state(request: Request) -> dict:
+    """Live sharing state of this server, plus the saved setting (they differ after a one-off flag)."""
+    return {**request.app.state.tailnet.status.to_dict(), "saved": load_config().tailnet}
+
+
+@router.get("/tailnet")
+async def tailnet_status(request: Request) -> dict:
+    return tailnet_state(request)
+
+
+@router.put("/tailnet")
+def set_tailnet(req: TailnetRequest, request: Request) -> dict:
+    """Save the setting and apply it to this running server now (sync: runs in the threadpool)."""
+    set_value("tailnet", req.enabled)
+    request.app.state.tailnet.apply(req.enabled)
+    return tailnet_state(request)
 
 
 @router.post("/shutdown")

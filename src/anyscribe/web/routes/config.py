@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 
 import httpx
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from anyscribe.config.paths import get_workspace_dir
 from anyscribe.config.settings import (
@@ -96,7 +97,7 @@ async def get_config() -> dict:
 
 
 @router.put("/config")
-async def update_config(req: ConfigUpdateRequest):
+async def update_config(req: ConfigUpdateRequest, request: Request):
     from anyscribe.config.paths import CONFIG_FILE
 
     # set_value persists per field; snapshot config.yaml so a mixed
@@ -123,6 +124,8 @@ async def update_config(req: ConfigUpdateRequest):
                 status_code=422,
                 content={"success": False, "error": outcome.error, "choices": outcome.choices},
             )
+    if req.tailnet is not None:  # same live apply as PUT /api/tailnet, so the two cannot disagree
+        await run_in_threadpool(request.app.state.tailnet.apply, req.tailnet)
     return _config_payload()
 
 

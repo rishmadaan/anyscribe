@@ -8,8 +8,10 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from anyscribe import __version__
+from anyscribe.core import tailnet
 from anyscribe.core.tray import ensure_streams as _ensure_streams
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -44,6 +46,9 @@ def create_app() -> FastAPI:
     app.include_router(models_router)
     app.include_router(onboarding_router)
 
+    # Tailnet sharing state for this server; run() sets the port.
+    app.state.tailnet = tailnet.Share()
+
     # Serve built React SPA from static/
     if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
         # Mount static assets (JS, CSS, images)
@@ -72,6 +77,26 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
 
     # Stash server on app.state so /shutdown route can access it
     app.state.server = server
+
+    share = app.state.tailnet
+    share.port = port
+    wanted = tailnet.run_override
+    if wanted is None:
+        from anyscribe.config.settings import load_config
+
+        wanted = load_config().tailnet
+
+    if wanted:
+
+        @app.on_event("startup")
+        async def _share_on_tailnet() -> None:
+            print(tailnet.describe(await run_in_threadpool(share.apply, True)), flush=True)
+
+    # Shutdown runs on /api/shutdown, Ctrl+C and SIGTERM alike (uvicorn re-raises
+    # the signal only after it). A no-op unless sharing is live.
+    @app.on_event("shutdown")
+    async def _unshare() -> None:
+        await run_in_threadpool(share.apply, False)
 
     if open_browser:
 

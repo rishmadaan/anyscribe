@@ -47,6 +47,8 @@ class Settings:
     local_file_media: str = "skip"  # skip | copy | move | ask
     workspace_path: str = ""  # empty = ~/anyscribe (default)
     local_model: str = "base"  # any size in providers/local_models.py MODEL_SIZES
+    # Also share `anyscribe ui` on the user's tailnet via `tailscale serve` (core/tailnet.py).
+    tailnet: bool = False
     # provider name -> pinned model id (see providers.PROVIDER_MODELS).
     # Missing key = that provider's default model.
     provider_models: dict[str, str] = field(default_factory=dict)

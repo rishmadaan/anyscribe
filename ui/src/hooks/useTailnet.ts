@@ -10,6 +10,9 @@ import type { TailnetState } from "../api/client";
 
 const EVENT = "anyscribe:tailnet";
 
+/** Opened from another device, through the tailnet link (switching off removes this page). */
+export const REMOTE = !["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
+
 export function useTailnet() {
   const [state, setState] = useState<TailnetState | null>(null);
 

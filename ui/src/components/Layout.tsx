@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { Mic, Clock, Settings, Waves, Power, Share2 } from "lucide-react";
 import SetupBanner from "./SetupBanner";
 import { TailnetLink } from "./TailnetShare";
-import { useTailnet } from "../hooks/useTailnet";
+import { REMOTE, useTailnet } from "../hooks/useTailnet";
 
 const NAV = [
   { to: "/", icon: Mic, label: "Transcribe" },
@@ -91,13 +91,14 @@ export default function Layout() {
               </p>
               <TailnetLink url={tailnet.url} compact />
             </div>
-          ) : tailnet?.enabled ? (
+          ) : tailnet?.enabled && !(REMOTE && tailnet.held) ? (
+            // Read over the held link, it plainly works: no failure line.
             <Link
               to="/settings"
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red hover:bg-surface-hover"
             >
               <Share2 className="w-3 h-3" />
-              Tailnet sharing isn't working
+              {tailnet.held ? "Tailnet link isn't confirmed" : "Tailnet sharing isn't working"}
             </Link>
           ) : null}
         </div>

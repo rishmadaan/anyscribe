@@ -753,18 +753,30 @@ has gone (someone ran `tailscale serve reset` or `--https=<port> off`). The page
 re-checks each time you open it or come back to the window. Flip the switch off
 and on to share it again.
 
-### `Tailscale is not running or signed out, so the link does not work right now.`
+### `Tailscale says it is stopped or signed out on this computer, so other devices can't reach the link right now.`
 
 The Settings card shows this when the dashboard was shared but Tailscale has since
-stopped or signed out (or its sharing settings can't be read). The link would not
-open, so the card stops showing it. Open Tailscale and sign in (or run
-`tailscale up`); the link comes back by itself, and the card shows it again the
-next time you open the page or come back to the window. A single slow or failed
-answer from Tailscale shows this too, and clears the same way.
+stopped or signed out. The link can't open meanwhile, so the card stops showing it.
+Open Tailscale and sign in (or run `tailscale up`); the link comes back by itself,
+and the card shows it again the next time you open the page or come back to the
+window.
 
 anyscribe keeps holding the share meanwhile, so it still answers its exact tailnet
 name during the outage (no request from your tailnet can arrive while Tailscale is
-down anyway).
+stopped anyway).
+
+### `anyscribe couldn't get an answer from Tailscale, so it can't confirm the link works.`
+
+The Settings card shows this, under "On, but the link isn't confirmed right now.",
+when one check of Tailscale failed or was slow, or Tailscale was still starting.
+The link may not open, so the card hides it until the next check. Other devices may
+still be able to open the page meanwhile: anyscribe keeps holding the share, and the
+card never claims the page is only on this computer. It checks again when you come
+back to the page.
+
+Opened on another device through the link, the card says instead: "On. You're
+reading this over the tailnet link, so it works." That is true: Tailscale delivered
+the page.
 
 ### `A share you set up yourself; anyscribe will leave it in place.`
 

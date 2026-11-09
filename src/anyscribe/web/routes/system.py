@@ -62,12 +62,15 @@ def tailnet_state(request: Request) -> dict:
         saved = tailnet.saved_setting()
     except Exception:
         saved = None
-    return {**request.app.state.tailnet.status.to_dict(), "saved": saved}
+    share = request.app.state.tailnet
+    # held: the gate answers the tailnet name; the card's privacy line follows it, not `active`.
+    return {**share.status.to_dict(), "held": share.held is not None, "saved": saved}
 
 
 @router.get("/tailnet")
 def tailnet_status(request: Request) -> dict:
-    """Sync (threadpool): while live it re-reads Tailscale, so a removed share is not shown live."""
+    """Sync (threadpool): while a share is held it re-reads Tailscale, so a removed share is
+    not shown live."""
     request.app.state.tailnet.refresh()
     return tailnet_state(request)
 

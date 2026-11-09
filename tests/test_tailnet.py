@@ -534,13 +534,15 @@ def test_api_toggle_saves_and_applies_live(client, fake):
         "fix": None,
         "card_fix": None,
         "note": None,
+        "held": False,
         "saved": False,
     }
     on = client.put("/api/tailnet", json={"enabled": True}).json()
     assert on["active"] and on["url"] == f"https://{HOST}:8467/" and on["saved"] is True
+    assert on["held"] is True
     assert tailnet.port_state(fake.config, 8467) == "ours"
     off = client.put("/api/tailnet", json={"enabled": False}).json()
-    assert off["enabled"] is False and off["saved"] is False
+    assert off["enabled"] is False and off["saved"] is False and off["held"] is False
     assert fake.config == OTHER
 
 
@@ -644,13 +646,22 @@ def test_a_live_share_whose_tailscale_is_down_reads_as_failed(client, fake, caus
         fake.backend = cause
     data = client.get("/api/tailnet").json()
     assert data["active"] is False and data["url"] is None and data["enabled"] is True
-    assert data["reason"] == (
-        "Tailscale is not running or signed out, so the link does not work right now."
-    )
-    # R3-C1: it heals by itself once Tailscale is back, so no switch flip is asked for.
-    assert data["fix"] == (
-        "Open Tailscale and sign in (or run: tailscale up); the link comes back by itself."
-    )
+    assert data["held"] is True  # R4-F1: still held, so the card never says "only on this computer"
+    if cause in ("Stopped", "NeedsLogin"):  # a definite answer: nothing can reach it
+        assert data["reason"] == (
+            "Tailscale says it is stopped or signed out on this computer, so other devices "
+            "can't reach the link right now."
+        )
+        # R3-C1: it heals by itself once Tailscale is back, so no switch flip is asked for.
+        assert data["fix"] == (
+            "Open Tailscale and sign in (or run: tailscale up); the link comes back by itself."
+        )
+    else:  # no answer: it may well still work
+        assert data["reason"] == (
+            "anyscribe couldn't get an answer from Tailscale, so it can't confirm the link "
+            "works. Other devices may still be able to open it."
+        )
+        assert data["fix"] == "It checks again when you come back to this page."
     assert data["card_fix"] is None
     assert client.app.state.tailnet.owned and tailnet._owned_ports() == {8467}
     # Tailscale is back: switching off removes our rule.
@@ -838,6 +849,7 @@ def _assert_gate_matches_the_hold(app) -> tuple[bool, bool]:
         assert code == (200 if local or name == held_name else 403), (host, code, claim, held)
     if claim["active"]:
         assert claim["url"] == held
+    assert claim["held"] == (held is not None)  # R4-F1: the card's privacy line reads this
     return claim["active"], rows[f"{HOST}:8467"] == 200
 
 
@@ -950,6 +962,7 @@ def test_one_bad_tailscale_read_never_costs_the_remote_device_its_share(
         assert bad.status_code == 200, bad.text
         assert bad.json()["active"] is False and bad.json()["enabled"] is True
         assert bad.json()["url"] is None  # no link shown while it may not work
+        assert bad.json()["held"] is True  # R4-F1: so the card says it works for this device
         assert set(fake.timeouts) == {tailnet.REFRESH_TIMEOUT}  # a focus never waits 10 s
         inject(False)
         good = remote.get("/api/tailnet")

@@ -199,6 +199,7 @@ export type TailnetState = {
   fix: string | null;
   card_fix: string | null;
   note: string | null;
+  held: boolean; // the tailnet name is answered (the gate); the display may read failed meanwhile
   saved: boolean | null; // null: config.yaml could not be read
 };
 

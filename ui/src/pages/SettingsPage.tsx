@@ -29,7 +29,7 @@ import ModelInput from "../components/ModelInput";
 import { defaultModelFor, extraModelsFor, tierSummary } from "../api/models";
 import LocalSetupModal from "../components/LocalSetupModal";
 import { TailnetLink } from "../components/TailnetShare";
-import { useTailnet } from "../hooks/useTailnet";
+import { REMOTE, useTailnet } from "../hooks/useTailnet";
 import {
   Check,
   AlertCircle,
@@ -1398,9 +1398,6 @@ function ExtraModels({
   );
 }
 
-// Opened from another device (through the tailnet link), switching off removes this page.
-const REMOTE = !["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
-
 function TailnetCard() {
   const { state, change } = useTailnet();
   const [busy, setBusy] = useState(false);
@@ -1509,10 +1506,20 @@ function TailnetCard() {
             <TailnetLink url={state.url} />
             {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
           </div>
+        ) : state.enabled && REMOTE && state.held ? (
+          // Tailscale delivered this very page, so the link works whatever the last check said.
+          <div className="rounded-md border border-amber/30 bg-amber/5 px-3 py-2">
+            <p className="text-xs text-amber">
+              On. You're reading this over the tailnet link, so it works. anyscribe's last
+              check didn't confirm it.
+            </p>
+          </div>
         ) : state.enabled ? (
           <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 space-y-1">
             <p className="text-xs text-red">
-              On, but not working. This page is only on this computer right now.
+              {state.held
+                ? "On, but the link isn't confirmed right now."
+                : "On, but not working. This page is only on this computer right now."}
             </p>
             <p className="text-xs text-text-secondary">{state.reason}</p>
             <p className="text-xs text-text-secondary font-mono">
@@ -1543,7 +1550,7 @@ function TailnetCard() {
         {state.saved !== null && state.saved !== state.enabled && !busy && (
           <p className="text-xs text-text-muted">
             Saved setting: {state.saved ? "on" : "off"}. This running dashboard:{" "}
-            {state.active ? "shared" : "not shared"}. The switch changes both.
+            {state.held ? "shared" : "not shared"}. The switch changes both.
           </p>
         )}
         {err && <p className="text-xs text-red font-mono">{err}</p>}

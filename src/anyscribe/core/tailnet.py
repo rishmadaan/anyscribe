@@ -40,6 +40,8 @@ LEFT_IN_PLACE = (
     "To remove it: tailscale serve --https={port} off"
 )
 NO_LOGIN = "no login: anyone on your tailnet can use it"
+# BackendStates that definitely mean no tailnet traffic reaches this computer.
+STOPPED = ("Stopped", "NeedsLogin", "NeedsMachineAuth")
 CLEANUP_FAILED = (
     "Other devices are refused now. anyscribe couldn't remove its Tailscale rule ({error}); "
     "it retries on stop, or run: tailscale serve --https={port} off"
@@ -353,22 +355,27 @@ class Share:
             return self.status
         # Read outside the lock, so a page focus never makes a toggle or close() wait.
         cli = find_cli()
-        running = bool(cli) and (
-            _status_json(cli, REFRESH_TIMEOUT).get("BackendState") == "Running"
-        )
+        backend = _status_json(cli, REFRESH_TIMEOUT).get("BackendState") if cli else None
         with self._lock:
             if self._hold != hold:
                 return self.status  # released during the first read: start no second command
-        config = _serve_config(cli, REFRESH_TIMEOUT) if running else None
+        config = _serve_config(cli, REFRESH_TIMEOUT) if backend == "Running" else None
         with self._lock:
             if self._hold != hold:
                 return self.status  # switched off, re-shared or closed while we read
-            if config is None:
-                # Keep self.owned: our rule may still be there, and close() retries removing it.
+            # Either way keep the hold and self.owned: our rule may still be there.
+            if config is None and backend in STOPPED:
                 self.status = _failed(
-                    "Tailscale is not running or signed out, so the link does not work right now.",
+                    "Tailscale says it is stopped or signed out on this computer, so other "
+                    "devices can't reach the link right now.",
                     "Open Tailscale and sign in (or run: tailscale up); "
                     "the link comes back by itself.",
+                )
+            elif config is None:  # a failed or slow read, or Starting: no answer either way
+                self.status = _failed(
+                    "anyscribe couldn't get an answer from Tailscale, so it can't confirm the "
+                    "link works. Other devices may still be able to open it.",
+                    "It checks again when you come back to this page.",
                 )
             elif port_state(config, port) == "ours":
                 if not self.status.active:

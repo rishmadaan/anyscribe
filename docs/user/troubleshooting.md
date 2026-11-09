@@ -746,10 +746,11 @@ from its own and removes it on its next clean stop.
 
 With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.
 
-### `The share was removed outside anyscribe.`
+### `Tailscale no longer has the share (removed outside anyscribe, or cleared when Tailscale signed out).`
 
 The Settings card shows this when the dashboard was shared but its Tailscale rule
-has gone (someone ran `tailscale serve reset` or `--https=<port> off`). The page
+has gone (someone ran `tailscale serve reset` or `--https=<port> off`, or signing
+out of Tailscale cleared it). The page
 re-checks each time you open it or come back to the window. Flip the switch off
 and on to share it again.
 
@@ -811,8 +812,9 @@ happened:
   start), and anyscribe uses it and leaves it in place. A leftover from a hard stop:
   run `anyscribe ui --tailnet` and stop it normally to clear it (see
   [the link says "bad gateway"](#the-link-says-bad-gateway-or-doesnt-load)).
-- Sharing is on, but the share was removed outside anyscribe (for example
-  `tailscale serve reset`), so anyscribe let go of it. Flip the switch off and on at
+- Sharing is on, but Tailscale no longer has the share (removed outside anyscribe,
+  for example `tailscale serve reset`, or cleared when Tailscale signed out), so
+  anyscribe let go of it. Flip the switch off and on at
   the computer running anyscribe (open it there at `http://127.0.0.1:8457`).
 
 If you reach the dashboard through another proxy, tunnel or hostname, it refuses that

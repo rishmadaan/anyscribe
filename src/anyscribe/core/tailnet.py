@@ -390,7 +390,8 @@ class Share:
                 owned, self.owned = self.owned, False
                 self._set_held(None)  # revoke first: the record write below may fail
                 self.status = _failed(
-                    "The share was removed outside anyscribe.",
+                    "Tailscale no longer has the share (removed outside anyscribe, or cleared "
+                    "when Tailscale signed out).",
                     "Turn sharing off and on again to share it again.",
                 )
                 if owned:

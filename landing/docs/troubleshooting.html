@@ -561,9 +561,10 @@ number:</p>
 wrong: if you later make exactly the same rule by hand, anyscribe can't tell it apart
 from its own and removes it on its next clean stop.</p>
 <p>With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.</p>
-<h3 id="the-share-was-removed-outside-anyscribe"><code>The share was removed outside anyscribe.</code></h3>
+<h3 id="tailscale-no-longer-has-the-share-removed-outside-anyscribe-or-cleared-when-tailscale-signed-out"><code>Tailscale no longer has the share (removed outside anyscribe, or cleared when Tailscale signed out).</code></h3>
 <p>The Settings card shows this when the dashboard was shared but its Tailscale rule
-has gone (someone ran <code>tailscale serve reset</code> or <code>--https=&lt;port&gt; off</code>). The page
+has gone (someone ran <code>tailscale serve reset</code> or <code>--https=&lt;port&gt; off</code>, or signing
+out of Tailscale cleared it). The page
 re-checks each time you open it or come back to the window. Flip the switch off
 and on to share it again.</p>
 <h3 id="tailscale-says-it-is-stopped-or-signed-out-on-this-computer-so-other-devices-cant-reach-the-link-right-now"><code>Tailscale says it is stopped or signed out on this computer, so other devices can't reach the link right now.</code></h3>
@@ -612,8 +613,9 @@ happened:</p>
   start), and anyscribe uses it and leaves it in place. A leftover from a hard stop:
   run <code>anyscribe ui --tailnet</code> and stop it normally to clear it (see
   <a href="#the-link-says-bad-gateway-or-doesnt-load">the link says "bad gateway"</a>).</li>
-<li>Sharing is on, but the share was removed outside anyscribe (for example
-  <code>tailscale serve reset</code>), so anyscribe let go of it. Flip the switch off and on at
+<li>Sharing is on, but Tailscale no longer has the share (removed outside anyscribe,
+  for example <code>tailscale serve reset</code>, or cleared when Tailscale signed out), so
+  anyscribe let go of it. Flip the switch off and on at
   the computer running anyscribe (open it there at <code>http://127.0.0.1:8457</code>).</li>
 </ul>
 <p>If you reach the dashboard through another proxy, tunnel or hostname, it refuses that

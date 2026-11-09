@@ -630,7 +630,10 @@ def test_a_share_removed_outside_anyscribe_reads_as_failed(client, fake):
     fake.config["Web"].pop(f"{HOST}:8467")
     data = client.get("/api/tailnet").json()
     assert data["active"] is False and data["url"] is None
-    assert data["reason"] == "The share was removed outside anyscribe."
+    assert data["reason"] == (
+        "Tailscale no longer has the share (removed outside anyscribe, or cleared when "
+        "Tailscale signed out)."
+    )
     assert tailnet._owned_ports() == set()
 
 

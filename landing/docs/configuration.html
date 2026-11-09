@@ -154,6 +154,7 @@ extra_models: {}           # Your own OpenRouter model names, added to the picke
 quality: balanced          # accuracy | balanced | cost | free | custom — picks the provider
 language: auto             # Language for transcription
 local_model: base          # Offline Whisper size (local provider only)
+tailnet: false             # Also share `anyscribe ui` on your Tailscale tailnet
 keep_media: false          # Whether to save audio files
 output_format: clean       # How to format transcripts
 diarize: false             # Enable speaker diarization by default
@@ -528,6 +529,17 @@ the Web UI, and MCP results.</p>
 <blockquote>
 <p><strong>Not set until setup.</strong> This field has no effect until you run <code>anyscribe local setup --model &lt;size&gt;</code> (or the equivalent Web UI button). The field is still present in <code>config.yaml</code> with the default value of <code>base</code>.</p>
 </blockquote>
+<h4 id="tailnet">tailnet</h4>
+<p>Whether <code>anyscribe ui</code> (and the dashboard that desktop mode or the tray starts) is also shared on your Tailscale tailnet. Default: <code>false</code>.</p>
+<pre><code class="language-bash">anyscribe config set tailnet on      # share from now on
+anyscribe config set tailnet off     # back to this computer only
+</code></pre>
+<p>Your <strong>tailnet</strong> is the private network of devices signed in to your <a href="https://tailscale.com">Tailscale</a> account. When this is <code>true</code>, the dashboard still listens only on <code>127.0.0.1</code>, and anyscribe asks Tailscale to pass requests from your tailnet through to it at <code>https://&lt;your-machine&gt;.&lt;your-tailnet&gt;.ts.net:&lt;port&gt;/</code>. It is never on the public internet. <code>on</code>, <code>yes</code>, <code>true</code> and <code>1</code> all mean on; anything else means off.</p>
+<p>You can also flip it in the Web UI under <strong>Settings → Sharing</strong>, which saves the setting and applies it to the running dashboard straight away. For a single run without changing the setting, use <code>anyscribe ui --tailnet</code> or <code>anyscribe ui --local-only</code>.</p>
+<blockquote>
+<p><strong>The dashboard has no login.</strong> Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, and delete transcripts. Leave this off unless you trust every device on your tailnet.</p>
+<p><strong>Needs Tailscale.</strong> Without it (or when it is signed out), the dashboard starts on your computer as usual and prints one line saying why sharing didn't happen. See <a href="/docs/troubleshooting#tailnet-sharing">Troubleshooting</a>.</p>
+</blockquote>
 <h3 id="instagram-cookies-instagrambrowser">Instagram cookies (<code>instagram.browser</code>)</h3>
 <p>Tells anyscribe which browser to read Instagram cookies from. Cookies let anyscribe
 download reels that need a logged-in session — including private reels and
@@ -650,13 +662,13 @@ reliable, and changing them means editing anyscribe's source and reinstalling.</
    │ config.yaml settings     │         │ audio quality (16kHz/mono)   │
    │ .env API keys + secrets  │         │ how big files get split up   │
    │ --flags on commands      │         │ where app files live         │
-   │ the Web UI settings page │         │ Web UI is localhost-only     │
+   │ the Web UI settings page │         │ Web UI binds 127.0.0.1 only  │
    └──────────────────────────┘         └──────────────────────────────┘
    change anytime, no restart            changing these needs a code edit
 </code></pre>
 <p><strong>You can change anytime</strong> (this whole page): your provider, the model that
 provider uses, language, output format, diarization, whether media is kept, your
-workspace location, the local model, and all your API keys.</p>
+workspace location, the local model, tailnet sharing, and all your API keys.</p>
 <p><strong>Fixed in the code</strong> (and why):</p>
 <table>
 <thead>
@@ -690,7 +702,7 @@ workspace location, the local model, and all your API keys.</p>
 <tr>
 <td>Web UI address</td>
 <td><code>127.0.0.1</code> (your machine only)</td>
-<td>The Web UI has no password, so it only listens to your own computer. The port is changeable with <code>anyscribe ui --port 9000</code>.</td>
+<td>The Web UI has no password, so it only listens to your own computer. The port is changeable with <code>anyscribe ui --port 9000</code>. To reach it from your other devices, turn on <a href="#tailnet"><code>tailnet</code></a>: Tailscale then passes your tailnet's requests through to <code>127.0.0.1</code>, and the server itself still never listens on another address.</td>
 </tr>
 </tbody>
 </table>

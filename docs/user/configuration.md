@@ -49,6 +49,7 @@ extra_models: {}           # Your own OpenRouter model names, added to the picke
 quality: balanced          # accuracy | balanced | cost | free | custom — picks the provider
 language: auto             # Language for transcription
 local_model: base          # Offline Whisper size (local provider only)
+tailnet: false             # Also share `anyscribe ui` on your Tailscale tailnet
 keep_media: false          # Whether to save audio files
 output_format: clean       # How to format transcripts
 diarize: false             # Enable speaker diarization by default
@@ -323,6 +324,23 @@ Change it with `anyscribe config set local_model small` or from the default-mode
 
 > **Not set until setup.** This field has no effect until you run `anyscribe local setup --model <size>` (or the equivalent Web UI button). The field is still present in `config.yaml` with the default value of `base`.
 
+#### tailnet
+
+Whether `anyscribe ui` (and the dashboard that desktop mode or the tray starts) is also shared on your Tailscale tailnet. Default: `false`.
+
+```bash
+anyscribe config set tailnet on      # share from now on
+anyscribe config set tailnet off     # back to this computer only
+```
+
+Your **tailnet** is the private network of devices signed in to your [Tailscale](https://tailscale.com) account. When this is `true`, the dashboard still listens only on `127.0.0.1`, and anyscribe asks Tailscale to pass requests from your tailnet through to it at `https://<your-machine>.<your-tailnet>.ts.net:<port>/`. It is never on the public internet. `on`, `yes`, `true` and `1` all mean on; anything else means off.
+
+You can also flip it in the Web UI under **Settings → Sharing**, which saves the setting and applies it to the running dashboard straight away. For a single run without changing the setting, use `anyscribe ui --tailnet` or `anyscribe ui --local-only`.
+
+> **The dashboard has no login.** Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, and delete transcripts. Leave this off unless you trust every device on your tailnet.
+
+> **Needs Tailscale.** Without it (or when it is signed out), the dashboard starts on your computer as usual and prints one line saying why sharing didn't happen. See [Troubleshooting](troubleshooting.md#tailnet-sharing).
+
 ### Instagram cookies (`instagram.browser`)
 
 Tells anyscribe which browser to read Instagram cookies from. Cookies let anyscribe
@@ -480,14 +498,14 @@ reliable, and changing them means editing anyscribe's source and reinstalling.
    │ config.yaml settings     │         │ audio quality (16kHz/mono)   │
    │ .env API keys + secrets  │         │ how big files get split up   │
    │ --flags on commands      │         │ where app files live         │
-   │ the Web UI settings page │         │ Web UI is localhost-only     │
+   │ the Web UI settings page │         │ Web UI binds 127.0.0.1 only  │
    └──────────────────────────┘         └──────────────────────────────┘
    change anytime, no restart            changing these needs a code edit
 ```
 
 **You can change anytime** (this whole page): your provider, the model that
 provider uses, language, output format, diarization, whether media is kept, your
-workspace location, the local model, and all your API keys.
+workspace location, the local model, tailnet sharing, and all your API keys.
 
 **Fixed in the code** (and why):
 
@@ -497,7 +515,7 @@ workspace location, the local model, and all your API keys.
 | File-splitting limits | Most cloud providers split files over 25 MB or 30 min into pieces of about 18 min. Sarvam always uses 28-second pieces. OpenAI with `--diarize` refuses larger files instead of splitting them | Driven by the transcription APIs' own upload and timeout limits, not your preference. |
 | The list of models you can pick from | e.g. OpenAI offers `gpt-transcribe`, `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | Each provider's list is curated to models anyscribe knows how to read. You choose freely *within* the list via `provider_models` or `--model`; new entries arrive with anyscribe releases (`anyscribe update`). **OpenRouter is the exception** — it forwards any model name, so you can add your own with `extra_models.openrouter`. |
 | App folder location | `~/.anyscribe` | The fixed home for config, logs, and downloads. Your transcripts' location (`workspace_path`) *is* configurable. |
-| Web UI address | `127.0.0.1` (your machine only) | The Web UI has no password, so it only listens to your own computer. The port is changeable with `anyscribe ui --port 9000`. |
+| Web UI address | `127.0.0.1` (your machine only) | The Web UI has no password, so it only listens to your own computer. The port is changeable with `anyscribe ui --port 9000`. To reach it from your other devices, turn on [`tailnet`](#tailnet): Tailscale then passes your tailnet's requests through to `127.0.0.1`, and the server itself still never listens on another address. |
 
 > **Want one of these to be a real setting?** These are deliberate defaults, not
 > oversights — see the developer note in

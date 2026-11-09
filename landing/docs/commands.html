@@ -1301,8 +1301,21 @@ anyscribe model pull large-v3-turbo --json
 <td>Don't auto-open browser</td>
 <td>Off (opens automatically)</td>
 </tr>
+<tr>
+<td><code>--tailnet</code></td>
+<td></td>
+<td>Also share it on your tailnet for this run only (needs Tailscale; see <a href="#share-it-on-your-tailnet">Share it on your tailnet</a>)</td>
+<td>Follows the <code>tailnet</code> setting</td>
+</tr>
+<tr>
+<td><code>--local-only</code></td>
+<td></td>
+<td>Keep it on this computer for this run only, even if the <code>tailnet</code> setting is on</td>
+<td>Follows the <code>tailnet</code> setting</td>
+</tr>
 </tbody>
 </table>
+<p><code>--tailnet</code> and <code>--local-only</code> can't be used together. Neither one changes your saved setting.</p>
 <blockquote>
 <p><strong>Already got one open?</strong> If the port is taken, anyscribe doesn't stop — it looks at the next ten ports, takes the first free one, and tells you: <code>Port 8457 busy — using 8458</code>. You only see an error if all eleven are busy, and then it asks you to pick a port yourself with <code>--port</code>.</p>
 </blockquote>
@@ -1315,9 +1328,31 @@ anyscribe ui --port 9000
 
 # Start without opening browser
 anyscribe ui --no-open
+
+# Share on your tailnet for this run only
+anyscribe ui --tailnet
+
+# Sharing is on in config, but keep this run on this computer
+anyscribe ui --local-only
 </code></pre>
 <blockquote>
-<p><strong>Local only.</strong> The web UI binds to <code>127.0.0.1</code> — it's only accessible from your machine. No auth needed. Stop it with Ctrl+C.</p>
+<p><strong>Local only by default.</strong> The web UI binds to <code>127.0.0.1</code> — it's only accessible from your machine. No auth needed. Stop it with Ctrl+C.</p>
+</blockquote>
+<h3 id="share-it-on-your-tailnet">Share it on your tailnet</h3>
+<pre><code class="language-bash">anyscribe config set tailnet on     # every `anyscribe ui` from now on
+anyscribe ui --tailnet              # just this once
+</code></pre>
+<p>If you use <a href="https://tailscale.com">Tailscale</a>, you can open the dashboard from your phone or another computer too. Your <strong>tailnet</strong> is the private network of devices signed in to your Tailscale account. With sharing on, anyscribe still listens only on <code>127.0.0.1</code> and asks Tailscale to pass your tailnet's requests through to it. It prints the link when it starts:</p>
+<pre><code>anyscribe ui → http://127.0.0.1:8457
+Shared on your tailnet → https://my-laptop.tail1234.ts.net:8457/
+</code></pre>
+<p>The link uses HTTPS and the same port number as the local address. It works only on devices signed in to your tailnet: it is never on the public internet (anyscribe never uses Tailscale Funnel). You can also switch it in the Web UI under <strong>Settings → Sharing</strong>; that saves the setting and applies it to the running dashboard straight away. While it is shared, the sidebar shows the link with a copy button on every page.</p>
+<blockquote>
+<p><strong>Warning: the dashboard has no login.</strong> Anyone on your tailnet can use it while it is shared: change your API keys, run transcriptions that spend your credit, and delete transcripts. Only switch it on if you trust every device and person on your tailnet.</p>
+</blockquote>
+<p>If sharing is on but can't work (Tailscale missing, not signed in, and so on), the dashboard still starts on your own computer and prints one line saying why and how to fix it. <a href="/docs/troubleshooting#tailnet-sharing">Troubleshooting</a> lists each message.</p>
+<blockquote>
+<p><strong>What anyscribe changes in Tailscale.</strong> It adds one <code>tailscale serve</code> rule for its own port when it starts and removes that rule when it stops. It never replaces a rule that something else already has on that port. If the dashboard is killed hard (power loss, <code>kill -9</code>), the rule can stay behind and answer "bad gateway"; the next <code>anyscribe ui</code> with sharing on reuses it, or remove it yourself with <code>tailscale serve --https=8457 off</code>. With sharing off, anyscribe doesn't touch Tailscale at all, not even to clean up.</p>
 <p><strong>Want it without a terminal?</strong> <code>anyscribe desktop install</code> gives you an app icon that opens this same dashboard and keeps it running in the background. See <a href="#anyscribe-desktop">anyscribe desktop</a>.</p>
 </blockquote>
 <hr />

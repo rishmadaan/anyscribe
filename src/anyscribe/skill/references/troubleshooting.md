@@ -368,6 +368,22 @@ A tray is already active: it holds the one-tray lock (`~/.anyscribe/tray.lock`) 
 anyscribe tray --port 9000
 ```
 
+### "Tailnet sharing is on but not working: ..."
+
+Printed by `anyscribe ui` (and shown in Settings → Sharing) when the `tailnet` setting or `--tailnet` is on but sharing failed. The dashboard still runs on 127.0.0.1. The reason names the case:
+
+| Reason starts with | Fix |
+|---|---|
+| `Tailscale isn't installed` | Install Tailscale (tailscale.com/download), or `anyscribe config set tailnet off` |
+| `Tailscale is installed but not running or not signed in` | Open Tailscale and sign in, or `tailscale up` |
+| `Tailscale won't let your user change its sharing settings` | Linux, once: `sudo tailscale set --operator=$USER` (the user runs this; it needs their password) |
+| `HTTPS sharing (Serve) isn't enabled on your tailnet yet` | Open the `login.tailscale.com` link in the message and approve, or enable HTTPS certificates on the admin console's DNS page |
+| `Port N is already shared on your tailnet by something else` | Another program's `tailscale serve` rule holds that port; anyscribe won't replace it. `anyscribe ui --port <other>` |
+
+Then restart `anyscribe ui`, or flip the Settings switch off and on.
+
+**Link answers "bad gateway":** the server was killed hard (SIGKILL, power loss) so its rule stayed. Starting `anyscribe ui` with sharing on reuses it; or `tailscale serve --https=<port> off`. With sharing off anyscribe never touches Tailscale, so it won't clean it up.
+
 ### Fully removing the tray / menu-bar auto-start
 
 1. Quit the tray if it's running (menu → Quit).

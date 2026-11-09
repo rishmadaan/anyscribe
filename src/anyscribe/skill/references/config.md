@@ -19,6 +19,7 @@ provider: openai          # used when quality is `custom`: openai | deepgram | e
 provider_models: {}       # provider -> pinned model id; missing key = that provider's default
 extra_models: {}          # openrouter -> [user-added slugs], merged into the pickers
 local_model: base         # offline Whisper size (local provider only)
+tailnet: false            # also share `anyscribe ui` on the user's Tailscale tailnet
 quality: balanced         # accuracy | balanced | cost | free | custom — picks the provider
 language: auto            # auto | ISO code (en, es, fr, hi, hi-Latn, ar, zh, ja, ko...)
 keep_media: false         # Keep audio files after transcription
@@ -86,6 +87,8 @@ If the tier's provider has no key, anyscribe emits `WARNING: quality '<tier>' wa
 **prompt_download** — After each transcription: `never` (just transcribe), `ask` (prompt to download video/audio), `always` (auto-download video too).
 
 **local_file_media** — When transcribing local files: `skip` (leave original), `copy` (duplicate to downloads dir), `move` (relocate to downloads dir), `ask` (prompt each time).
+
+**tailnet** — When true, every `anyscribe ui` (and the server desktop mode / the tray starts) is also reachable from the user's other Tailscale devices at `https://<machine>.<tailnet>.ts.net:<port>/`, through `tailscale serve`; the server still binds 127.0.0.1 and it is never public (no Funnel). Default `false`. Set with `anyscribe config set tailnet on|off` (true/yes/1 also work), MCP `set_config`, or the Web UI **Settings → Sharing** switch, which also applies it to the running server at once. **Never switch it on unasked:** the dashboard has no login, so anyone on the tailnet could change keys, spend credit and delete transcripts. With it off anyscribe never calls Tailscale. Needs Tailscale installed and signed in; failures are reported, not hidden (troubleshooting.md).
 
 ### `instagram.browser`
 

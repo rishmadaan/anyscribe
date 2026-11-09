@@ -670,6 +670,76 @@ from its menu (menu → Quit). anyscribe itself stays installed either way.
 
 ---
 
+## Tailnet sharing
+
+These apply only when you've turned on sharing (`anyscribe config set tailnet on`,
+`anyscribe ui --tailnet`, or **Settings → Sharing**). In every case the dashboard
+still starts on your own computer; anyscribe prints one line starting
+`Tailnet sharing is on but not working:` and the Settings card shows the same
+reason and fix. Fix the cause, then restart `anyscribe ui` (or flip the switch in
+Settings off and on).
+
+### `Tailscale isn't installed on this computer.`
+
+anyscribe looks for the `tailscale` command (on a Mac, also inside the Tailscale
+app). Install Tailscale from [tailscale.com/download](https://tailscale.com/download)
+and sign in, or turn sharing off:
+
+```bash
+anyscribe config set tailnet off
+```
+
+### `Tailscale is installed but not running or not signed in.`
+
+Tailscale is there but not connected. Open the Tailscale app and sign in, or run:
+
+```bash
+tailscale up
+```
+
+### `Tailscale won't let your user change its sharing settings.`
+
+On Linux, Tailscale only lets root or its "operator" change sharing. Make your user
+the operator once:
+
+```bash
+sudo tailscale set --operator=$USER
+```
+
+### `HTTPS sharing (Serve) isn't enabled on your tailnet yet.`
+
+Your tailnet has to allow HTTPS certificates once. The message ends with a
+`login.tailscale.com` link: open it, approve, and restart `anyscribe ui`. If there's
+no link, turn on **HTTPS Certificates** on the DNS page of the Tailscale admin
+console.
+
+### `Port 8457 is already shared on your tailnet by something else; anyscribe left it alone.`
+
+Another program already uses that port number with `tailscale serve`, so anyscribe
+won't replace its rule. Start the dashboard on a different port:
+
+```bash
+anyscribe ui --port 9000
+```
+
+(`tailscale serve status` shows what holds each port.)
+
+### The link says "bad gateway" or doesn't load
+
+The dashboard isn't running, but its Tailscale rule is still there. That happens
+only if anyscribe was killed hard (power loss, `kill -9`), because a normal stop
+(Ctrl+C, the **Shutdown** button, quitting the tray) removes the rule. Start
+`anyscribe ui` again with sharing on and the same link works, or remove the leftover
+rule yourself (use your port number):
+
+```bash
+tailscale serve --https=8457 off
+```
+
+With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.
+
+---
+
 ## Last resort
 
 ### Config or workspace looks corrupted

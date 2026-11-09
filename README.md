@@ -12,7 +12,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 
 ### Private by default, local-first
 
-- **The Web UI is a local server, not a cloud service.** It runs at `127.0.0.1:8457` on your own machine. No account, no sign-up, no telemetry. There is no "anyscribe.com" backend.
+- **The Web UI is a local server, not a cloud service.** It runs at `127.0.0.1:8457` on your own machine. No account, no sign-up, no telemetry. There is no "anyscribe.com" backend. If you use Tailscale, you can opt in to opening it from your own other devices (`anyscribe config set tailnet on`, off by default); it stays off the public internet. The dashboard has no login, so anyone on your tailnet can use it while it is shared.
 - **Internet is only involved when *you* ask for it:**
   - **Downloading a YouTube or Instagram source** — obvious; you gave it the URL.
   - **Calling an API provider** (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — your audio goes to the provider you picked, and nothing else. Your data stays between you and them.

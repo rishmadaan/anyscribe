@@ -512,6 +512,49 @@ Optionally drop the extra packages afterwards: <code>pip uninstall pystray Pillo
 removes the login item. It never stops a tray that is already running; quit that
 from its menu (menu → Quit). anyscribe itself stays installed either way.</p>
 <hr />
+<h2 id="tailnet-sharing">Tailnet sharing</h2>
+<p>These apply only when you've turned on sharing (<code>anyscribe config set tailnet on</code>,
+<code>anyscribe ui --tailnet</code>, or <strong>Settings → Sharing</strong>). In every case the dashboard
+still starts on your own computer; anyscribe prints one line starting
+<code>Tailnet sharing is on but not working:</code> and the Settings card shows the same
+reason and fix. Fix the cause, then restart <code>anyscribe ui</code> (or flip the switch in
+Settings off and on).</p>
+<h3 id="tailscale-isnt-installed-on-this-computer"><code>Tailscale isn't installed on this computer.</code></h3>
+<p>anyscribe looks for the <code>tailscale</code> command (on a Mac, also inside the Tailscale
+app). Install Tailscale from <a href="https://tailscale.com/download">tailscale.com/download</a>
+and sign in, or turn sharing off:</p>
+<pre><code class="language-bash">anyscribe config set tailnet off
+</code></pre>
+<h3 id="tailscale-is-installed-but-not-running-or-not-signed-in"><code>Tailscale is installed but not running or not signed in.</code></h3>
+<p>Tailscale is there but not connected. Open the Tailscale app and sign in, or run:</p>
+<pre><code class="language-bash">tailscale up
+</code></pre>
+<h3 id="tailscale-wont-let-your-user-change-its-sharing-settings"><code>Tailscale won't let your user change its sharing settings.</code></h3>
+<p>On Linux, Tailscale only lets root or its "operator" change sharing. Make your user
+the operator once:</p>
+<pre><code class="language-bash">sudo tailscale set --operator=$USER
+</code></pre>
+<h3 id="https-sharing-serve-isnt-enabled-on-your-tailnet-yet"><code>HTTPS sharing (Serve) isn't enabled on your tailnet yet.</code></h3>
+<p>Your tailnet has to allow HTTPS certificates once. The message ends with a
+<code>login.tailscale.com</code> link: open it, approve, and restart <code>anyscribe ui</code>. If there's
+no link, turn on <strong>HTTPS Certificates</strong> on the DNS page of the Tailscale admin
+console.</p>
+<h3 id="port-8457-is-already-shared-on-your-tailnet-by-something-else-anyscribe-left-it-alone"><code>Port 8457 is already shared on your tailnet by something else; anyscribe left it alone.</code></h3>
+<p>Another program already uses that port number with <code>tailscale serve</code>, so anyscribe
+won't replace its rule. Start the dashboard on a different port:</p>
+<pre><code class="language-bash">anyscribe ui --port 9000
+</code></pre>
+<p>(<code>tailscale serve status</code> shows what holds each port.)</p>
+<h3 id="the-link-says-bad-gateway-or-doesnt-load">The link says "bad gateway" or doesn't load</h3>
+<p>The dashboard isn't running, but its Tailscale rule is still there. That happens
+only if anyscribe was killed hard (power loss, <code>kill -9</code>), because a normal stop
+(Ctrl+C, the <strong>Shutdown</strong> button, quitting the tray) removes the rule. Start
+<code>anyscribe ui</code> again with sharing on and the same link works, or remove the leftover
+rule yourself (use your port number):</p>
+<pre><code class="language-bash">tailscale serve --https=8457 off
+</code></pre>
+<p>With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.</p>
+<hr />
 <h2 id="last-resort">Last resort</h2>
 <h3 id="config-or-workspace-looks-corrupted">Config or workspace looks corrupted</h3>
 <pre><code class="language-bash">anyscribe doctor     # find out what's actually wrong first

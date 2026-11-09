@@ -803,6 +803,7 @@ def test_a_foreign_host_gets_403_on_every_route(served_app, fake):
     for method, path in [("get", "/api/tailnet"), ("get", "/"), ("put", "/api/tailnet")]:
         r = c.request(method.upper(), path, json={"enabled": True} if method == "put" else None)
         assert r.status_code == 403 and "only answers" in r.text, (method, path)
+        assert r.text.endswith("Open it on the computer running anyscribe to see why.")  # R4-fF4
     assert fake.calls == []  # the rebinding PUT never reached the toggle
 
 

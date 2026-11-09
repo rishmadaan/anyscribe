@@ -22,7 +22,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 WRONG_HOST = (
     "anyscribe only answers on this computer's own address (127.0.0.1 or localhost), "
-    "or on its own tailnet link while it is shared."
+    "or on its own tailnet link while it is shared. "
+    "Open it on the computer running anyscribe to see why."
 )
 
 

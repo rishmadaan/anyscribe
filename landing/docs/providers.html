@@ -574,7 +574,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 - <strong>Settings → Providers → Local → "Set up local transcription"</strong> at any time after onboarding.</p>
 <p>or during the terminal wizard, answer <strong>Yes</strong> when <code>anyscribe onboard</code> asks <em>"Also enable offline/local transcription?"</em>.</p>
 <p>Setup installs <code>faster-whisper</code> into the same Python environment as anyscribe, downloads the Whisper model you picked, and records it as your local default. After that, local transcription is fully offline.</p>
-<p><strong>Recommended model:</strong> <code>base</code> — good quality for most use cases, ~145 MB download, runs on modest CPUs. If a recording is critical (interviews, accents, lots of names), step up to <code>small</code>, then <code>large-v3-turbo</code>.</p>
+<p><strong>Recommended model:</strong> <code>large-v3-turbo</code> — close to the most accurate model while running about six times faster than real time on a CPU. It's a ~1.6 GB download and needs about 3 GB of free memory. On an older laptop, or if the download is too big, use <code>base</code> (~145 MB) instead.</p>
 <p><strong>Switching the default model:</strong></p>
 <pre><code class="language-bash">anyscribe config set local_model small
 </code></pre>
@@ -627,7 +627,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 <td>Lowest</td>
 </tr>
 <tr>
-<td><code>base</code> (recommended)</td>
+<td><code>base</code></td>
 <td>~145 MB</td>
 <td>~600 MB</td>
 <td>~7x realtime</td>
@@ -655,7 +655,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 <td>Highest</td>
 </tr>
 <tr>
-<td><code>large-v3-turbo</code></td>
+<td><code>large-v3-turbo</code> (recommended)</td>
 <td>~1.6 GB</td>
 <td>~3 GB</td>
 <td>~6x realtime</td>
@@ -671,7 +671,7 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 </tbody>
 </table>
 <blockquote>
-<p><strong>Best quality per minute of waiting: <code>large-v3-turbo</code>.</strong> It gets close to <code>large-v3</code> accuracy while running about six times faster on a CPU, at roughly half the download. That makes it the one to reach for when <code>base</code> or <code>small</code> isn't good enough but you don't want to wait through a real-time-speed transcription.</p>
+<p><strong>Best quality per minute of waiting: <code>large-v3-turbo</code>.</strong> It gets close to <code>large-v3</code> accuracy while running about six times faster on a CPU, at roughly half the download. That's why it's the recommended pick.</p>
 <p><strong><code>distil-large-v3.5</code> is English-only in practice.</strong> It's a slimmed-down model that keeps <code>large-v3</code>-level accuracy for English but gets noticeably worse in other languages. Pick it only if everything you transcribe is English; otherwise <code>large-v3-turbo</code> is the safer choice at the same speed and size.</p>
 </blockquote>
 <ul>

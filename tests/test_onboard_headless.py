@@ -35,7 +35,7 @@ def test_validation_requires_local_model_for_local_provider(tmp_path, monkeypatc
     with pytest.raises(onboard_headless.OnboardValidationError) as exc:
         onboard_headless.run_headless_onboard(provider="local")
     assert "local-model" in exc.value.payload["error"]
-    assert exc.value.payload["recommended"] == "base"
+    assert exc.value.payload["recommended"] == "large-v3-turbo"
 
 
 def test_validation_requires_api_key_for_api_provider(tmp_path, monkeypatch):

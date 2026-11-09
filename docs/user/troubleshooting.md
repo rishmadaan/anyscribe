@@ -448,7 +448,7 @@ downloads the model. The first download needs internet (~150 MB for `base`);
 everything after that is fully offline.
 
 > `--model` is deliberately required — anyscribe will never pick a model size for
-> you. `base` is the recommended starting point.
+> you. `large-v3-turbo` is the recommended pick; `base` suits older laptops.
 
 ### Checking what's actually installed
 

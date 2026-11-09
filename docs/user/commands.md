@@ -764,7 +764,7 @@ Installs faster-whisper into the same Python environment as anyscribe, downloads
 
 | Flag | Description |
 |------|-------------|
-| `--model`, `-m` | **Required.** Whisper size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `base`. No default — the CLI refuses to pick silently. |
+| `--model`, `-m` | **Required.** Whisper size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). No default — the CLI refuses to pick silently. |
 | `--yes`, `-y` | Skip the confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json`, `-j` | Stream NDJSON progress events to stdout (one JSON object per phase). |
 
@@ -1373,7 +1373,7 @@ anyscribe onboard \
 | `--yes` / `-y` | yes | off | Opt into headless mode. Without this, `anyscribe onboard` runs the interactive TUI. |
 | `--provider` / `-p` | **yes** | none | One of `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or use env var) | none | Stored in `~/.anyscribe/.env`. Prefer setting the env var (e.g. `OPENAI_API_KEY`) to avoid leaking keys into shell history. |
-| `--local-model` | **yes when `--provider=local`** | none | Whisper size. Recommended: `base`. |
+| `--local-model` | **yes when `--provider=local`** | none | Whisper size. Recommended: `large-v3-turbo` (`base` on an older laptop). |
 | `--model` | no | provider's default | Pin the model for `--provider` (written to `provider_models`). Rejected with the valid list if the provider doesn't offer it. Not for `local` — use `--local-model`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, or `custom`. Omit it and onboarding writes `custom`, so the provider you just chose is the one that runs. |
 | `--workspace` | no | `~/anyscribe` | Absolute path to the Obsidian vault. |

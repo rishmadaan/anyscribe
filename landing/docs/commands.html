@@ -1213,7 +1213,7 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 <tbody>
 <tr>
 <td><code>--model</code>, <code>-m</code></td>
-<td><strong>Required.</strong> Whisper size: <code>tiny</code>, <code>base</code>, <code>small</code>, <code>medium</code>, <code>large-v3</code>, <code>large-v3-turbo</code>, <code>distil-large-v3.5</code>. Recommended: <code>base</code>. No default — the CLI refuses to pick silently.</td>
+<td><strong>Required.</strong> Whisper size: <code>tiny</code>, <code>base</code>, <code>small</code>, <code>medium</code>, <code>large-v3</code>, <code>large-v3-turbo</code>, <code>distil-large-v3.5</code>. Recommended: <code>large-v3-turbo</code> (<code>base</code> on an older laptop). No default — the CLI refuses to pick silently.</td>
 </tr>
 <tr>
 <td><code>--yes</code>, <code>-y</code></td>
@@ -1909,7 +1909,7 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json
 <td><code>--local-model</code></td>
 <td><strong>yes when <code>--provider=local</code></strong></td>
 <td>none</td>
-<td>Whisper size. Recommended: <code>base</code>.</td>
+<td>Whisper size. Recommended: <code>large-v3-turbo</code> (<code>base</code> on an older laptop).</td>
 </tr>
 <tr>
 <td><code>--model</code></td>

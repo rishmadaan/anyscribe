@@ -228,8 +228,9 @@ def _offer_local_setup(settings: Settings, make_primary: bool) -> None:
             "key, no internet.\n"
             "Pick a model size. Larger is more accurate but slower and bigger "
             "on disk.\n\n"
-            f"[dim]Recommended: [bold]{RECOMMENDED_MODEL}[/bold] — good quality, "
-            f"small footprint (~{MODEL_SPECS[RECOMMENDED_MODEL]['download_mb']} MB).[/dim]",
+            f"[dim]Recommended: [bold]{RECOMMENDED_MODEL}[/bold] — near-best accuracy at "
+            f"good speed (~{MODEL_SPECS[RECOMMENDED_MODEL]['download_mb']} MB download). "
+            "On an older laptop, pick base.[/dim]",
             title="Local Transcription",
             border_style="blue",
         )
@@ -240,6 +241,7 @@ def _offer_local_setup(settings: Settings, make_primary: bool) -> None:
         marker = " [dim](recommended)[/dim]" if size == RECOMMENDED_MODEL else ""
         size_options.append(
             f"[cyan]{size}[/cyan] — ~{spec['download_mb']} MB, {spec['quality']}{marker}"
+            f" [dim]· use it for {spec['use_for']}[/dim]"
         )
     default_idx = MODEL_SIZES.index(RECOMMENDED_MODEL)
     console.print("  Use [bold]↑↓ arrow keys[/bold] to navigate, [bold]Enter[/bold] to select:\n")

@@ -25,7 +25,7 @@ def test_setup_without_model_exits_2_with_json_error():
     assert result.exit_code == 2
     err = json.loads(result.stderr.strip().splitlines()[-1])
     assert err["error"] == "--model is required"
-    assert err["recommended"] == "base"
+    assert err["recommended"] == "large-v3-turbo"
     assert "tiny" in err["choices"]
 
 

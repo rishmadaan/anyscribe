@@ -11,6 +11,31 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.18.1 — 2026-11-09
+
+**Fixed**
+- **Downloading a local model from the dashboard failed** with
+  `'_ProgressTqdm' object has no attribute 'unit'`. New installs pick up a
+  newer version of the Hugging Face download library, which switches its
+  progress bars off when there's no terminal window, and anyscribe's progress
+  tracking didn't expect that. Downloads now finish, and the progress bar
+  shows the model's real size instead of roughly double it. If a download
+  failed for you, update and press Install again.
+
+**Changed**
+- **The recommended local model is now `large-v3-turbo`** (was `base`). It is
+  close to the most accurate model and about six times faster than real time
+  on a CPU; it's a ~1.6 GB download and needs about 3 GB of free memory. On an
+  older laptop, `base` is still the right pick. Nothing changes for an
+  existing setup: your chosen model stays your default.
+
+**Added**
+- Every local model now says what it's for ("Use it for most people:
+  near-best accuracy at good speed. Start here") in the dashboard's model
+  picker, first-run setup and `anyscribe onboard`.
+
+---
+
 ## 0.18.0 — 2026-10-22
 
 **Added**

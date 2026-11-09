@@ -45,6 +45,7 @@ export interface ModelSpec {
   ram_mb: number;
   relative_speed: string;
   quality: string;
+  use_for: string;
 }
 
 export interface DownloadProgress {

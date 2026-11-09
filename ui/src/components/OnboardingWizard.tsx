@@ -720,6 +720,9 @@ function ModelSizeList({
             <p className="text-xs text-text-muted mt-1">
               {m.spec.quality} · {m.spec.relative_speed}
             </p>
+            <p className="text-xs text-text mt-0.5">
+              Use it for {m.spec.use_for}
+            </p>
           </button>
         );
       })}

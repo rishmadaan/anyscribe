@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 
 import httpx
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from anyscribe.config.paths import get_workspace_dir
 from anyscribe.config.settings import (
@@ -96,15 +97,22 @@ async def get_config() -> dict:
 
 
 @router.put("/config")
-async def update_config(req: ConfigUpdateRequest):
+async def update_config(req: ConfigUpdateRequest, request: Request):
     from anyscribe.config.paths import CONFIG_FILE
 
     # set_value persists per field; snapshot config.yaml so a mixed
     # valid+invalid payload rolls back instead of half-committing (a 422
     # must mean "nothing was saved").
     snapshot = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
+
+    def rollback() -> None:
+        if snapshot is not None:
+            CONFIG_FILE.write_bytes(snapshot)
+        elif CONFIG_FILE.exists():
+            CONFIG_FILE.unlink()
+
     for field_name, value in req.model_dump(exclude_unset=True).items():
-        if value is None:
+        if value is None or field_name == "tailnet":  # saved below, with its live apply
             continue
         if field_name == "instagram" and isinstance(value, dict):
             # Nested block -> dotted keys, the shape set_value speaks.
@@ -115,14 +123,16 @@ async def update_config(req: ConfigUpdateRequest):
         else:
             outcome = set_value(field_name, value)
         if not outcome.ok:
-            if snapshot is not None:
-                CONFIG_FILE.write_bytes(snapshot)
-            elif CONFIG_FILE.exists():
-                CONFIG_FILE.unlink()
+            rollback()
             return JSONResponse(
                 status_code=422,
                 content={"success": False, "error": outcome.error, "choices": outcome.choices},
             )
+    if req.tailnet is not None:  # same save + live apply as PUT /api/tailnet, under one lock
+        outcome = await run_in_threadpool(request.app.state.tailnet.save_and_apply, req.tailnet)
+        if not outcome.ok:  # on: nothing applied; off: already revoked. Undo the fields above
+            rollback()
+            return JSONResponse(status_code=422, content={"success": False, "error": outcome.error})
     return _config_payload()
 
 

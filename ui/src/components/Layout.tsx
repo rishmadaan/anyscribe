@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
-import { Mic, Clock, Settings, Waves, Power } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { Mic, Clock, Settings, Waves, Power, Share2 } from "lucide-react";
 import SetupBanner from "./SetupBanner";
+import { TailnetLink } from "./TailnetShare";
+import { REMOTE, useTailnet } from "../hooks/useTailnet";
 
 const NAV = [
   { to: "/", icon: Mic, label: "Transcribe" },
@@ -12,6 +14,7 @@ const NAV = [
 export default function Layout() {
   const [confirmShutdown, setConfirmShutdown] = useState(false);
   const [stopped, setStopped] = useState(false);
+  const { state: tailnet } = useTailnet();
 
   const handleShutdown = async () => {
     try {
@@ -77,6 +80,28 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Tailnet indicator, under the nav so it is visible without scrolling on every page */}
+        <div className="px-3 mt-4">
+          {tailnet?.active && tailnet.url ? (
+            <div className="rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-2">
+              <p className="flex items-center gap-1.5 text-xs text-text-secondary mb-0.5">
+                <Share2 className="w-3 h-3 text-green" />
+                Shared on your tailnet
+              </p>
+              <TailnetLink url={tailnet.url} compact />
+            </div>
+          ) : tailnet?.enabled && !tailnet.unknown && !(REMOTE && tailnet.held) ? (
+            // Read over the held link, it plainly works: no failure line.
+            <Link
+              to="/settings"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red hover:bg-surface-hover"
+            >
+              <Share2 className="w-3 h-3" />
+              {tailnet.held ? "Tailnet link isn't confirmed" : "Tailnet sharing isn't working"}
+            </Link>
+          ) : null}
+        </div>
 
         {/* Bottom — branding + shutdown */}
         <div className="mt-auto px-3 pb-4 space-y-2">

@@ -333,6 +333,8 @@ Launch a local web dashboard in the browser. Visual interface for transcribing, 
 anyscribe ui                  # opens browser at http://127.0.0.1:8457
 anyscribe ui --port 9000      # custom port
 anyscribe ui --no-open        # don't auto-open browser
+anyscribe ui --tailnet        # also share on the user's tailnet, this run only
+anyscribe ui --local-only     # this run stays local even if `tailnet` is on
 ```
 
 ### Flags
@@ -341,8 +343,12 @@ anyscribe ui --no-open        # don't auto-open browser
 |------|-------|-------------|---------|
 | `--port` | `-p` | Port to listen on | `8457` |
 | `--no-open` | | Don't auto-open browser | Off |
+| `--tailnet` | | Share on the tailnet for this run only; never writes config | Follows `tailnet` setting |
+| `--local-only` | | Keep this run local even if `tailnet` is on; never writes config | Follows `tailnet` setting |
 
-Local only (127.0.0.1). Stop with Ctrl+C.
+`--tailnet` with `--local-only` exits 2. Stop with Ctrl+C.
+
+**Binds 127.0.0.1 only, always.** With the `tailnet` setting on (or `--tailnet`), anyscribe also runs `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` for the port it actually started on and prints `Shared on your tailnet → https://<machine>.<tailnet>.ts.net:<port>/`. It prints `Asking Tailscale to share it...` first, and the shared line only once the server is listening; the shared line ends `(no login: anyone on your tailnet can use it)`. On stop (Ctrl+C, SIGTERM, `/api/shutdown`, tray quit) it removes only a rule it created itself (recorded in `~/.anyscribe/tailnet-owned.json`) that still points at anyscribe; a matching rule the user made by hand is used for the link (once sharing is on) and left in place. It never uses Funnel and never replaces another program's rule on that port. The server answers only to Host `127.0.0.1`, `localhost`, `[::1]` and, only while it holds its own share (still held while Tailscale is briefly down; released on switch-off, removal outside anyscribe, or stop), its exact tailnet name; anything else gets 403, setting on or off (a leftover or hand-made rule with the setting off, or another proxy, tunnel or hostname, is refused; a proxy that passes requests on as 127.0.0.1 or localhost still gets through, and the Settings card then warns). If sharing can't happen it still starts locally and prints one line beginning `Tailnet sharing is on but not working:` with the reason and fix (see troubleshooting.md). Never turn sharing on unless the user asked: the dashboard has no login.
 
 If the requested port is busy, `ui` scans the next 10 ports, starts on the first free one and prints `Port 8457 busy — using 8458`. It exits 1 only when the whole span is busy — so don't pre-check the port or retry with `--port` on a conflict.
 

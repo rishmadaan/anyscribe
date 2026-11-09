@@ -12,6 +12,8 @@ SESSIONS_DIR = APP_HOME / "sessions"
 TMP_DIR = APP_HOME / "tmp"
 DESKTOP_DIR = APP_HOME / "desktop"
 DESKTOP_MANIFEST = APP_HOME / "desktop.json"
+# HTTPS ports whose `tailscale serve` rule anyscribe itself created (core/tailnet.py)
+TAILNET_OWNED = APP_HOME / "tailnet-owned.json"
 
 # Recovery / checkpoint dirs for resilience
 RECOVERY_DIR = APP_HOME / "recovery"

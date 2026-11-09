@@ -2,17 +2,67 @@
 
 from __future__ import annotations
 
+import threading
+import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from anyscribe import __version__
+from anyscribe.core import tailnet
 from anyscribe.core.tray import ensure_streams as _ensure_streams
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+WRONG_HOST = (
+    "anyscribe only answers on this computer's own address (127.0.0.1 or localhost), "
+    "or on its own tailnet link while it is shared. "
+    "Open it on the computer running anyscribe to see why."
+)
+
+
+def _host_name(host: str) -> str:
+    """The Host header without its port: "[::1]:8457" -> "[::1]", "box.ts.net:8457" -> "box.ts.net"."""
+    host = host.strip().lower()
+    if host.startswith("["):
+        return host[: host.find("]") + 1]
+    return host.partition(":")[0]
+
+
+class HostCheck:
+    """Pure ASGI (HTTP and WebSocket): answer only on local names and, while this server holds
+    a share, the exact tailnet name Tailscale gave it. Blocks DNS rebinding, where a
+    web page reaches 127.0.0.1 under its own name; with sharing off no other name is answered,
+    so a leftover or hand-made Tailscale rule cannot expose the page."""
+
+    def __init__(self, app, share: tailnet.Share) -> None:
+        self.app = app
+        self.share = share
+
+    def allowed(self, host: str) -> bool:
+        name = _host_name(host)
+        if name in LOCAL_HOSTS:
+            return True
+        held = self.share.held  # the share being held, not the display (it may read failed)
+        return bool(held and name == urlsplit(held).hostname)
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            host = next((v.decode("latin-1") for k, v in scope["headers"] if k == b"host"), "")
+            if not self.allowed(host):
+                if scope["type"] == "websocket":
+                    await receive()  # websocket.connect
+                    await send({"type": "websocket.close", "code": 1008})  # sent as HTTP 403
+                else:
+                    await PlainTextResponse(WRONG_HOST, status_code=403)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def create_app() -> FastAPI:
@@ -44,6 +94,9 @@ def create_app() -> FastAPI:
     app.include_router(models_router)
     app.include_router(onboarding_router)
 
+    # Tailnet sharing state for this server; run() sets the port.
+    app.state.tailnet = tailnet.Share()
+
     # Serve built React SPA from static/
     if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
         # Mount static assets (JS, CSS, images)
@@ -72,6 +125,48 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
 
     # Stash server on app.state so /shutdown route can access it
     app.state.server = server
+
+    share = app.state.tailnet
+    share.port = port
+    # Only the real server checks Host (TestClient tests of create_app() send "testserver").
+    app.add_middleware(HostCheck, share=share)
+    wanted = tailnet.run_override
+    if wanted is None:
+        try:
+            wanted = tailnet.saved_setting()
+        except Exception:  # a broken config.yaml must not stop the dashboard starting
+            print(
+                "Couldn't read your anyscribe config, so tailnet sharing is off for this run.",
+                flush=True,
+            )
+            wanted = False
+
+    if wanted:
+
+        def _share_when_listening() -> None:
+            # uvicorn runs startup events BEFORE it binds the port, so wait for the bind:
+            # a failed bind must never touch Tailscale or print a link.
+            while not server.started:
+                if server.should_exit or share.closed:
+                    return
+                time.sleep(0.05)
+            print("Asking Tailscale to share it...", flush=True)
+            line = tailnet.describe(share.apply(True))
+            if line:
+                print(line, flush=True)
+
+        @app.on_event("startup")
+        async def _share_on_tailnet() -> None:
+            app.state.tailnet_thread = threading.Thread(target=_share_when_listening, daemon=True)
+            app.state.tailnet_thread.start()
+
+    # Shutdown runs on /api/shutdown, Ctrl+C and SIGTERM alike (uvicorn re-raises
+    # the signal only after it). A no-op unless this process owns a live rule.
+    @app.on_event("shutdown")
+    async def _unshare() -> None:
+        error = await run_in_threadpool(share.close)
+        if error:
+            print(tailnet.CLEANUP_FAILED.format(error=error, port=port), flush=True)
 
     if open_browser:
 

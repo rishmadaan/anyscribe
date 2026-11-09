@@ -670,6 +670,177 @@ from its menu (menu → Quit). anyscribe itself stays installed either way.
 
 ---
 
+## Tailnet sharing
+
+These apply only when you've turned on sharing (`anyscribe config set tailnet on`,
+`anyscribe ui --tailnet`, or **Settings → Sharing**). In every case the dashboard
+still starts on your own computer; anyscribe prints one line starting
+`Tailnet sharing is on but not working:` and the Settings card shows the same
+reason and fix. Fix the cause, then restart `anyscribe ui` (or flip the switch in
+Settings off and on).
+
+### `Tailscale isn't installed on this computer.`
+
+anyscribe looks for the `tailscale` command (on a Mac, also inside the Tailscale
+app). Install Tailscale from [tailscale.com/download](https://tailscale.com/download)
+and sign in, or turn sharing off:
+
+```bash
+anyscribe config set tailnet off
+```
+
+### `Tailscale is installed but not running or not signed in.`
+
+Tailscale is there but not connected. Open the Tailscale app and sign in, or run:
+
+```bash
+tailscale up
+```
+
+### `Tailscale won't let your user change its sharing settings.`
+
+On Linux, Tailscale only lets root or its "operator" change sharing. Make your user
+the operator once:
+
+```bash
+sudo tailscale set --operator=$USER
+```
+
+### `HTTPS sharing (Serve) isn't enabled on your tailnet yet.`
+
+Your tailnet has to allow HTTPS certificates once. The message ends with a
+`login.tailscale.com` link: open it, approve, and restart `anyscribe ui`. If there's
+no link, turn on **HTTPS Certificates** on the DNS page of the Tailscale admin
+console.
+
+### `Port 8457 is already shared on your tailnet by something else; anyscribe left it alone.`
+
+Another program already uses that port number with `tailscale serve`, so anyscribe
+won't replace its rule. Start the dashboard on a different port:
+
+```bash
+anyscribe ui --port 9000
+```
+
+(`tailscale serve status` shows what holds each port.)
+
+### The link says "bad gateway" or doesn't load
+
+The dashboard isn't running, but its Tailscale rule is still there. A normal stop
+(Ctrl+C, the **Shutdown** button, quitting the tray) removes the rule. It stays
+behind if anyscribe was killed hard (power loss, `kill -9`), and it can stay behind
+if Tailscale itself is stuck when you quit the tray, because the tray force-stops
+the dashboard after about 8 seconds. To clear it, start the dashboard shared for
+one run and stop it normally (Ctrl+C or the **Shutdown** button), using your port
+number:
+
+```bash
+anyscribe ui --tailnet --port 8457
+```
+
+anyscribe reuses the rule, and the clean stop removes both the rule and its note in
+`~/.anyscribe/tailnet-owned.json`. Removing the rule by hand instead
+(`tailscale serve --https=8457 off`) leaves that note behind, and one case then goes
+wrong: if you later make exactly the same rule by hand, anyscribe can't tell it apart
+from its own and removes it on its next clean stop.
+
+With sharing off, anyscribe never touches Tailscale, so it won't clean this up for you.
+
+### `Tailscale no longer has the share (removed outside anyscribe, or cleared when Tailscale signed out).`
+
+The Settings card shows this when the dashboard was shared but its Tailscale rule
+has gone (someone ran `tailscale serve reset` or `--https=<port> off`, or signing
+out of Tailscale cleared it). The page
+re-checks each time you open it or come back to the window. Flip the switch off
+and on to share it again.
+
+### `Tailscale says it is stopped or signed out on this computer, so other devices can't reach the link right now.`
+
+The Settings card shows this when the dashboard was shared but Tailscale has since
+stopped or signed out. The link can't open meanwhile, so the card stops showing it.
+Open Tailscale and sign in (or run `tailscale up`); the link comes back by itself,
+and the card shows it again the next time you open the page or come back to the
+window.
+
+anyscribe keeps holding the share meanwhile, so it still answers its exact tailnet
+name during the outage (no request from your tailnet can arrive while Tailscale is
+stopped anyway).
+
+### `anyscribe couldn't get an answer from Tailscale, so it can't confirm the link works.`
+
+The Settings card shows this, under "On, but the link isn't confirmed right now.",
+when one check of Tailscale failed or was slow, or Tailscale was still starting.
+The link may not open, so the card hides it until the next check. Other devices may
+still be able to open the page meanwhile: anyscribe keeps holding the share, and the
+card never claims the page is only on this computer. It checks again when you come
+back to the page.
+
+Opened on another device through the link, the card says instead: "On. You're
+reading this over the tailnet link, so it works." That is true: Tailscale delivered
+the page.
+
+### `A share you set up yourself; anyscribe will leave it in place.`
+
+Not an error. You had already made the same `tailscale serve` rule by hand, so
+anyscribe uses it for the link and does not remove it when it stops. Remove it
+yourself with `tailscale serve --https=<port> off` when you no longer want it.
+
+### `anyscribe left your own Tailscale rule on port 8457 in place, but no longer answers through it.`
+
+You switched sharing off while the dashboard was using a rule you made by hand.
+anyscribe never removes your rule, but it stops answering on the tailnet link, so
+your other devices get a refusal instead of the dashboard. With sharing off anyscribe
+no longer checks Tailscale, so this note stays until you flip the switch or restart,
+even if you have removed the rule since. To remove it, run
+`tailscale serve --https=8457 off` (your port number), or switch sharing back on.
+
+### `Other devices are refused now. anyscribe couldn't remove its Tailscale rule (...)`
+
+You switched sharing off (or stopped the dashboard), and anyscribe stopped
+answering on the tailnet link at once, but removing its own `tailscale serve` rule
+failed (the reason is in the brackets: Tailscale didn't answer, refused, or the
+record file couldn't be written). Nothing on your tailnet can use the page. anyscribe
+tries again when the dashboard stops; or remove the rule yourself with the command
+the note shows, `tailscale serve --https=8457 off` (your port number). If you remove
+it by hand, see [the link says "bad gateway"](#the-link-says-bad-gateway-or-doesnt-load)
+for clearing anyscribe's record of it.
+
+### "anyscribe only answers on this computer's own address..."
+
+You opened the dashboard under a name it doesn't answer. It answers only at
+`127.0.0.1` and `localhost` on this computer, and at its own tailnet link while
+anyscribe holds its share (from a successful share until you switch it off, the
+share is removed outside anyscribe, or the dashboard stops; also while Tailscale is
+briefly down). This blocks web pages from reaching it under their own name. Open it
+at `http://127.0.0.1:8457` on this computer.
+
+If you see this on another device through a Tailscale link, one of two things
+happened:
+
+- Sharing is off for this dashboard, and the link is a rule left behind or one you
+  made by hand with `tailscale serve`. A rule you made by hand: turn sharing on (the
+  Settings switch applies it now; `anyscribe config set tailnet on` at the next
+  start), and anyscribe uses it and leaves it in place. A leftover from a hard stop:
+  run `anyscribe ui --tailnet` and stop it normally to clear it (see
+  [the link says "bad gateway"](#the-link-says-bad-gateway-or-doesnt-load)).
+- Sharing is on, but Tailscale no longer has the share (removed outside anyscribe,
+  for example `tailscale serve reset`, or cleared when Tailscale signed out), so
+  anyscribe let go of it. Flip the switch off and on at
+  the computer running anyscribe (open it there at `http://127.0.0.1:8457`).
+
+If you reach the dashboard through another proxy, tunnel or hostname, it refuses that
+name (a proxy that passes requests on as 127.0.0.1 or localhost still gets through,
+and the Settings card then warns you); open it at 127.0.0.1, or share it with the
+tailnet setting.
+
+### `Couldn't read your anyscribe config, so tailnet sharing is off for this run.`
+
+`~/.anyscribe/config.yaml` has a mistake in it, so anyscribe can't tell whether
+sharing is on. The dashboard starts on your own computer. Fix the file (or see
+`anyscribe config path`), then restart `anyscribe ui`.
+
+---
+
 ## Last resort
 
 ### Config or workspace looks corrupted

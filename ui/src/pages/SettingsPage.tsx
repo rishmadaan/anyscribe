@@ -15,6 +15,7 @@ import {
   teardownLocal,
   getAutostart,
   setAutostart,
+  TailnetError,
 } from "../api/client";
 import type { AutostartState } from "../api/client";
 import type {
@@ -28,6 +29,8 @@ import LanguageInput from "../components/LanguageInput";
 import ModelInput from "../components/ModelInput";
 import { defaultModelFor, extraModelsFor, tierSummary } from "../api/models";
 import LocalSetupModal from "../components/LocalSetupModal";
+import { TailnetLink } from "../components/TailnetShare";
+import { REMOTE, useTailnet } from "../hooks/useTailnet";
 import {
   Check,
   AlertCircle,
@@ -835,6 +838,8 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <TailnetCard />
+
       {/* System */}
       {health && (
         <section>
@@ -1394,6 +1399,216 @@ function ExtraModels({
   );
 }
 
+// A note ending in a command: keep the command on one line (it would break at its hyphens).
+function NoteText({ text }: { text: string }) {
+  const i = text.lastIndexOf("tailscale serve ");
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="whitespace-nowrap">{text.slice(i)}</span>
+    </>
+  );
+}
+
+function TailnetCard() {
+  const { state, change } = useTailnet();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+  const [leftThisDevice, setLeftThisDevice] = useState(false);
+  const [leftNote, setLeftNote] = useState<string | null>(null);
+  // A later read showing the share held again (say, turned back on at the host) ends this view.
+  if (leftThisDevice && !(state?.held && !state.unknown)) {
+    return (
+      <section className="mb-10" id="tailnet">
+        <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
+          Sharing
+        </h2>
+        <div className="rounded-lg border border-border-subtle bg-surface px-4 py-3">
+          <p className="text-xs text-text-secondary">
+            Sharing is off. This device can no longer open the page. Turn it back on from
+            the computer running anyscribe.
+          </p>
+          {leftNote && (
+            <p className="text-xs text-text-muted mt-1">
+              <NoteText text={leftNote} />
+            </p>
+          )}
+        </div>
+      </section>
+    );
+  }
+  if (!state) return null;
+
+  const flip = async () => {
+    if (busy) return;
+    const turningOff = state.enabled;
+    if (turningOff && REMOTE && !confirmOff) {
+      setConfirmOff(true);
+      return;
+    }
+    setConfirmOff(false);
+    setBusy(true);
+    setErr(null);
+    try {
+      const next = await change(!state.enabled);
+      if (turningOff && REMOTE) {
+        setLeftNote(next.note);
+        setLeftThisDevice(true);
+      }
+    } catch (e) {
+      const live = e instanceof TailnetError ? e.state : undefined;
+      const msg = e instanceof Error ? e.message : "Could not change tailnet sharing";
+      if (live && turningOff && REMOTE && !live.held) {
+        // The server says this link is refused now (a failed save still switches off first).
+        setLeftNote(live.note);
+        setLeftThisDevice(true);
+      } else if (live) {
+        setErr(msg);
+      } else if (turningOff && REMOTE) {
+        setErr(
+          "This device lost the connection, which usually means sharing is now off. " +
+            "Check on the computer running anyscribe.",
+        );
+      } else {
+        setErr(`anyscribe couldn't confirm whether sharing changed (${msg}). Reload this page.`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mb-10" id="tailnet">
+      <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
+        Sharing
+      </h2>
+      <div className="rounded-lg border border-border-subtle bg-surface px-4 py-3 space-y-2">
+        <SettingRow label="Share on your tailnet">
+          <div className="flex items-center gap-2">
+            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-text-muted" />}
+            <Toggle
+              value={state.enabled}
+              onChange={() => void flip()}
+              label="Share on your tailnet"
+            />
+          </div>
+        </SettingRow>
+        {confirmOff && (
+          <div className="rounded-md border border-amber/30 bg-amber/5 px-3 py-2 space-y-2">
+            <p className="text-xs text-text">
+              {state.note
+                ? "This device will lose the page: anyscribe will refuse this link, though your own Tailscale rule stays in place. Turn it back on from the computer running anyscribe."
+                : "This device will lose the page. Turn it back on from the computer running anyscribe."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void flip()}
+                className="rounded px-3 py-2 min-h-9 text-xs bg-red/15 text-red hover:bg-red/25 cursor-pointer"
+              >
+                Turn off sharing
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmOff(false)}
+                className="rounded px-3 py-2 min-h-9 text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-text-muted">
+          Your tailnet is the private network of devices signed in to your
+          Tailscale account. Turned on, your other computers on your tailnet can
+          open this page too (it is laid out for a computer screen, not a phone).
+          It is never on the public internet.
+        </p>
+
+        {busy ? (
+          <p className="text-xs text-text-secondary">Asking Tailscale…</p>
+        ) : state.unknown ? (
+          <p className="text-xs text-text-secondary">
+            anyscribe couldn't read the current sharing state.
+          </p>
+        ) : state.active && state.url ? (
+          <div className="rounded-md border border-green/20 bg-green/5 px-3 py-2 space-y-1">
+            <p className="text-xs text-green">On. Open it from your other computers on your tailnet:</p>
+            <TailnetLink url={state.url} />
+            {state.note && (
+              <p className="text-xs text-text-muted">
+                <NoteText text={state.note} />
+              </p>
+            )}
+          </div>
+        ) : state.enabled && REMOTE && state.held ? (
+          // Tailscale delivered this very page, so the link works whatever the last check said.
+          <div className="rounded-md border border-amber/30 bg-amber/5 px-3 py-2">
+            <p className="text-xs text-amber">
+              On. You're reading this over the tailnet link, so it works. anyscribe's last
+              check didn't confirm it.
+            </p>
+          </div>
+        ) : state.enabled ? (
+          <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 space-y-1">
+            <p className="text-xs text-red">
+              {state.held
+                ? "On, but the link isn't confirmed right now."
+                : "On, but not working. This page is only on this computer right now."}
+            </p>
+            <p className="text-xs text-text-secondary">{state.reason}</p>
+            <p className="text-xs text-text-secondary font-mono">
+              Fix: {state.card_fix ?? state.fix}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-xs text-text-secondary">
+              Off. This page only answers at 127.0.0.1 or localhost on this computer.
+            </p>
+            {state.note && (
+              <p className="text-xs text-text-muted">
+                <NoteText text={state.note} />
+              </p>
+            )}
+            {REMOTE && (
+              <p className="text-xs text-amber">
+                But you're viewing this through a tunnel or proxy anyscribe didn't set up. It has
+                no login.
+              </p>
+            )}
+          </div>
+        )}
+
+        {state.saved === null && !busy && (
+          <p className="text-xs text-text-muted">
+            Couldn't read the saved setting (config.yaml has a mistake), so this shows only
+            the running dashboard.
+          </p>
+        )}
+        {state.saved !== null && state.saved !== state.enabled && !busy && !state.unknown && (
+          <p className="text-xs text-text-muted">
+            Saved setting: {state.saved ? "on" : "off"}. This running dashboard:{" "}
+            {state.held ? "shared" : "not shared"}. The switch changes both.
+          </p>
+        )}
+        {err && <p className="text-xs text-red font-mono">{err}</p>}
+
+        <p className="text-xs text-amber/80 flex gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+          <span>
+            This page has no login. Anyone on your tailnet can use it while it is
+            shared: change your API keys, run transcriptions that spend your credit,
+            delete transcripts, or stop it.
+          </span>
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function SettingRow({
   label,
   children,
@@ -1412,12 +1627,17 @@ function SettingRow({
 function Toggle({
   value,
   onChange,
+  label,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
+  label?: string;
 }) {
   return (
     <button
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
       onClick={() => onChange(!value)}
       className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${
         value ? "bg-amber" : "bg-border"

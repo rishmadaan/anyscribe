@@ -11,6 +11,36 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## 0.18.2 — 2026-11-09
+
+**Added**
+- **Share the dashboard with your other devices over Tailscale** (optional,
+  off by default). Turn it on once with `anyscribe config set tailnet on`, or
+  with the switch under **Settings → Sharing**. From then on `anyscribe ui`
+  also prints a private `https://<machine>.<tailnet>.ts.net:<port>/` link that
+  your other computers on your tailnet can open. `anyscribe ui --tailnet` and
+  `anyscribe ui --local-only` override it for one run. anyscribe still listens
+  only on your own computer and asks Tailscale to pass the page along; it never
+  uses Funnel (the public internet) and never replaces or removes a Tailscale
+  share it didn't create. The dashboard has no login: anyone on your tailnet
+  can use it while it is shared, and anyscribe says so wherever you turn it on.
+  If Tailscale isn't installed, signed in or allowed, the dashboard still opens
+  on your computer and one line says why and what to do. The dashboard is laid
+  out for a computer screen, not a phone. See **Commands → ui** and
+  **Troubleshooting → Tailnet sharing**.
+
+**Changed**
+- **The dashboard now only answers at its own address.** Whether sharing is on
+  or off, it answers at `127.0.0.1` or `localhost` on your computer, and at its
+  own Tailscale link while it is shared. This stops a malicious web page from
+  reaching your dashboard under another name. If you reached the dashboard
+  through another proxy, tunnel or hostname, it now refuses that name (a proxy
+  that passes requests on as `127.0.0.1` or `localhost` still works). A
+  Tailscale share you set up yourself with `tailscale serve` now needs the
+  sharing setting on; anyscribe then uses it and leaves it in place.
+
+---
+
 ## 0.18.1 — 2026-11-09
 
 **Fixed**

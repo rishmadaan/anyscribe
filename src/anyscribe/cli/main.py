@@ -233,14 +233,32 @@ app.add_typer(desktop_app, name="desktop")
 def ui(
     port: int = typer.Option(8457, "--port", "-p", min=1, max=65535, help="Port to listen on."),
     no_open: bool = typer.Option(False, "--no-open", help="Don't auto-open browser."),
+    share_tailnet: bool = typer.Option(
+        False,
+        "--tailnet",
+        help="Also share it on your tailnet for this run (needs Tailscale). "
+        "No login: anyone on your tailnet can use it.",
+    ),
+    local_only: bool = typer.Option(
+        False, "--local-only", help="Keep it on this computer for this run, even if tailnet is on."
+    ),
 ) -> None:
     """Launch the [bold]web UI[/bold] in your browser.
 
-    Starts a local web server and opens the anyscribe dashboard.
+    Starts a local web server and opens the anyscribe dashboard. With the
+    [bold]tailnet[/bold] setting on (or --tailnet) it is also shared with your
+    other Tailscale devices.
     """
     import socket
 
+    from anyscribe.core import tailnet
     from anyscribe.web.app import run
+
+    if share_tailnet and local_only:
+        err_console.print("[red]Use either --tailnet or --local-only, not both.[/red]")
+        raise typer.Exit(code=2)
+    # Per-run only: never written to config.
+    tailnet.run_override = True if share_tailnet else False if local_only else None
 
     # A busy port is nearly always our own second window or a stale server, so
     # roll forward instead of dead-ending the user. Only the exhausted scan is

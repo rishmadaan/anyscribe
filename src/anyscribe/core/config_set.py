@@ -41,6 +41,11 @@ ENUMS: dict[str, list[str]] = {
 _TRUTHY = ("true", "1", "yes", "on")
 
 
+def as_bool(value) -> bool:
+    """A boolean setting as a real bool: the spellings `config set` accepts, so "false" is off."""
+    return value if isinstance(value, bool) else str(value).strip().lower() in _TRUTHY
+
+
 @dataclass
 class SetOutcome:
     ok: bool
@@ -132,12 +137,22 @@ def _set_scalar(key: str, value, data: dict) -> str:
         raise _Invalid(f"Unknown key: {key}", valid_keys())
 
     if isinstance(target[final], bool):
-        typed = value if isinstance(value, bool) else str(value).strip().lower() in _TRUTHY
+        typed = as_bool(value)
     else:
         typed = str(value)
         if key == "workspace_path" and typed:
             typed = str(Path(typed).expanduser())
     target[final] = typed
+    if key == "tailnet":
+        warn = (
+            "\nThe web UI has no login: anyone on your tailnet can use it while it is shared."
+            if typed
+            else ""
+        )
+        return (
+            f"Set {key} = {typed}{warn}\n"
+            "Takes effect the next time you start anyscribe ui (or flip it in Settings)."
+        )
     return f"Set {key} = {typed}"
 
 

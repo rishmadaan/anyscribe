@@ -42,11 +42,16 @@ class ConfigUpdateRequest(BaseModel):
     local_file_media: str | None = None
     workspace_path: str | None = None
     local_model: str | None = None
+    tailnet: bool | None = None  # saved, and applied live to the running server
     provider_models: dict[str, str] | None = None
     extra_models: dict[str, list[str]] | None = None
     # Nested Instagram settings ({"browser": "firefox"}); fanned out to
     # dotted set_value keys ("instagram.browser") in the PUT handler.
     instagram: dict[str, str] | None = None
+
+
+class TailnetRequest(BaseModel):
+    enabled: bool
 
 
 class LocalSetupRequest(BaseModel):

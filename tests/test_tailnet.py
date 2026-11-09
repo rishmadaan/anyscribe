@@ -169,12 +169,12 @@ def test_port_served_to_a_different_target_is_never_overwritten(fake):
     fake.config["TCP"]["8467"] = {"HTTPS": True}
     fake.config["Web"][f"{HOST}:8467"] = {"Handlers": {"/": {"Proxy": "http://127.0.0.1:9999"}}}
     status = tailnet.start(8467)
-    assert not status.active and status.url is None
-    assert "Port 8467 is already shared" in status.reason and "--port" in status.fix
     assert bg_calls(fake) == []
     assert fake.config["Web"][f"{HOST}:8467"] == {
         "Handlers": {"/": {"Proxy": "http://127.0.0.1:9999"}}
     }
+    assert not status.active and status.url is None
+    assert "Port 8467 is already shared" in status.reason and "--port" in status.fix
 
 
 def test_a_funnel_port_is_never_treated_as_ours(fake):

@@ -189,3 +189,21 @@ export const setAutostart = (enabled: boolean) =>
     method: "PUT",
     body: JSON.stringify({ enabled }),
   });
+
+/** Live tailnet sharing of this server; `saved` is the setting (differs after --tailnet/--local-only). */
+export type TailnetState = {
+  enabled: boolean;
+  active: boolean;
+  url: string | null;
+  reason: string | null;
+  fix: string | null;
+  saved: boolean;
+};
+
+export const getTailnet = () => fetchJSON<TailnetState>("/tailnet");
+
+export const setTailnet = (enabled: boolean) =>
+  fetchJSON<TailnetState>("/tailnet", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });

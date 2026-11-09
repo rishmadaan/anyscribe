@@ -28,6 +28,8 @@ import LanguageInput from "../components/LanguageInput";
 import ModelInput from "../components/ModelInput";
 import { defaultModelFor, extraModelsFor, tierSummary } from "../api/models";
 import LocalSetupModal from "../components/LocalSetupModal";
+import { TailnetLink } from "../components/TailnetShare";
+import { useTailnet } from "../hooks/useTailnet";
 import {
   Check,
   AlertCircle,
@@ -345,6 +347,8 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      <TailnetCard />
 
       {/* Configure Defaults */}
       <section className="mb-10">
@@ -1391,6 +1395,83 @@ function ExtraModels({
         </div>
       </div>
     </div>
+  );
+}
+
+function TailnetCard() {
+  const { state, change } = useTailnet();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!state) return null;
+
+  const flip = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await change(!state.enabled);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not change tailnet sharing");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mb-10" id="tailnet">
+      <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
+        Sharing
+      </h2>
+      <div className="rounded-lg border border-border-subtle bg-surface px-4 py-3 space-y-2">
+        <SettingRow label="Share on your tailnet">
+          <div className="flex items-center gap-2">
+            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-text-muted" />}
+            <Toggle value={state.enabled} onChange={() => void flip()} />
+          </div>
+        </SettingRow>
+        <p className="text-xs text-text-muted">
+          Your tailnet is the private network of devices signed in to your
+          Tailscale account. Turned on, your phone or other computer can open
+          this page too. It is never on the public internet.
+        </p>
+
+        {busy ? (
+          <p className="text-xs text-text-secondary">Asking Tailscale…</p>
+        ) : state.active && state.url ? (
+          <div className="rounded-md border border-green/20 bg-green/5 px-3 py-2 space-y-1">
+            <p className="text-xs text-green">On. Open it from any of your Tailscale devices:</p>
+            <TailnetLink url={state.url} />
+          </div>
+        ) : state.enabled ? (
+          <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 space-y-1">
+            <p className="text-xs text-red">
+              On, but not working. This page is only on this computer right now.
+            </p>
+            <p className="text-xs text-text-secondary">{state.reason}</p>
+            <p className="text-xs text-text-secondary font-mono">Fix: {state.fix}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-text-secondary">Off. Only this computer can open this page.</p>
+        )}
+
+        {state.saved !== state.enabled && !busy && (
+          <p className="text-xs text-text-muted">
+            This run was started with {state.enabled ? "--tailnet" : "--local-only"}; your
+            saved setting is {state.saved ? "on" : "off"}. The switch changes both.
+          </p>
+        )}
+        {err && <p className="text-xs text-red font-mono">{err}</p>}
+
+        <p className="text-xs text-amber/80 flex gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+          <span>
+            This page has no login. Anyone on your tailnet can use it while it is
+            shared: change your API keys, run transcriptions that spend your credit,
+            and delete transcripts.
+          </span>
+        </p>
+      </div>
+    </section>
   );
 }
 

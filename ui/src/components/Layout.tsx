@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
-import { Mic, Clock, Settings, Waves, Power } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { Mic, Clock, Settings, Waves, Power, Share2 } from "lucide-react";
 import SetupBanner from "./SetupBanner";
+import { TailnetLink } from "./TailnetShare";
+import { useTailnet } from "../hooks/useTailnet";
 
 const NAV = [
   { to: "/", icon: Mic, label: "Transcribe" },
@@ -12,6 +14,7 @@ const NAV = [
 export default function Layout() {
   const [confirmShutdown, setConfirmShutdown] = useState(false);
   const [stopped, setStopped] = useState(false);
+  const { state: tailnet } = useTailnet();
 
   const handleShutdown = async () => {
     try {
@@ -78,8 +81,25 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Bottom — branding + shutdown */}
+        {/* Bottom — tailnet indicator, branding, shutdown */}
         <div className="mt-auto px-3 pb-4 space-y-2">
+          {tailnet?.active && tailnet.url ? (
+            <div className="mx-1 rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-2">
+              <p className="flex items-center gap-1.5 text-xs text-text-secondary mb-0.5">
+                <Share2 className="w-3 h-3 text-green" />
+                Shared on your tailnet
+              </p>
+              <TailnetLink url={tailnet.url} compact />
+            </div>
+          ) : tailnet?.enabled ? (
+            <Link
+              to="/settings"
+              className="mx-1 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red hover:bg-surface-hover"
+            >
+              <Share2 className="w-3 h-3" />
+              Tailnet sharing isn't working
+            </Link>
+          ) : null}
           <div className="px-3 py-2 text-xs text-text-secondary space-y-1">
             <p>&copy; 2026 Rishabh Madaan</p>
             <a href="https://github.com/rishmadaan/anyscribe#license" target="_blank" rel="noopener noreferrer" className="block hover:text-text underline">

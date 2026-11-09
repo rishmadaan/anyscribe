@@ -44,11 +44,16 @@ class FakeTailscale:
         self.off_rc = 0  # nonzero: `serve ... off` fails and changes nothing
         self.serve_result: tuple[int, str, str] | None = None  # force a `serve --bg` outcome
         self.serve_timeout_output: bytes | None = None
+        self.status_hangs = False  # `status --json` runs past its timeout
+        self.timeouts: list = []  # the timeout each call was given
 
     def __call__(self, args, capture_output=True, text=True, timeout=None):
         argv = list(args[1:])
         self.calls.append(argv)
+        self.timeouts.append(timeout)
         done = lambda rc=0, out="", err="": subprocess.CompletedProcess(args, rc, out, err)  # noqa: E731
+        if argv == ["status", "--json"] and self.status_hangs:
+            raise subprocess.TimeoutExpired(args, timeout)
         if argv == ["status", "--json"]:
             body = {"BackendState": self.backend, "Self": {"DNSName": HOST + "."}}
             return done(self.status_rc, json.dumps(body))
@@ -628,14 +633,51 @@ def test_a_live_share_whose_tailscale_is_down_reads_as_failed(client, fake, caus
     assert data["reason"] == (
         "Tailscale is not running or signed out, so the link does not work right now."
     )
-    assert data["card_fix"] == (
-        "Open Tailscale and sign in (or run: tailscale up), then flip this switch off and on."
+    # R3-C1: it heals by itself once Tailscale is back, so no switch flip is asked for.
+    assert data["fix"] == (
+        "Open Tailscale and sign in (or run: tailscale up); the link comes back by itself."
     )
+    assert data["card_fix"] is None
     assert client.app.state.tailnet.owned and tailnet._owned_ports() == {8467}
     # Tailscale is back: switching off removes our rule.
     fake.backend, fake.status_rc, fake.serve_status_rc = "Running", 0, 0
     client.put("/api/tailnet", json={"enabled": False})
     assert fake.config == OTHER
+
+
+@pytest.mark.parametrize("meanwhile", ["switched off", "off and on again", "closed"])
+def test_a_refresh_result_read_before_a_change_is_dropped(fake, monkeypatch, meanwhile):
+    """R3-C1: refresh reads Tailscale outside the lock; a toggle or close() that lands during
+    the read wins, so a stale answer never revives a released link or drops a new share."""
+    share = tailnet.Share(8467)
+    share.apply(True)
+    url = share.held
+    real = tailnet._serve_config
+
+    def change_during_the_read(cli, timeout=tailnet.TIMEOUT):
+        monkeypatch.setattr(tailnet, "_serve_config", real)  # only the refresh's own read
+        if meanwhile == "switched off":
+            stale = real(cli)  # still shows our rule
+            share.apply(False)
+        elif meanwhile == "closed":
+            stale = real(cli)
+            share.close()
+        else:
+            share.apply(False)
+            stale = real(cli)  # shows the rule gone
+            share.apply(True)
+        return stale
+
+    monkeypatch.setattr(tailnet, "_serve_config", change_during_the_read)
+    share.refresh()
+    if meanwhile == "off and on again":
+        assert share.held == url and share.owned and share.status.active
+        assert tailnet._owned_ports() == {8467}  # the new rule is still recorded, so removable
+        share.close()
+        assert fake.config == OTHER
+    else:
+        assert share.held is None and share.status == tailnet.Status()
+        assert fake.config == OTHER
 
 
 def test_get_with_an_unreadable_config_shows_the_live_state(client, fake):
@@ -731,37 +773,56 @@ def _gate_rows(app) -> dict[str, int]:
     return {h: TestClient(app, base_url=f"http://{h}").get("/").status_code for h in GATE_HOSTS}
 
 
-def _assert_gate_matches_the_claim(app) -> bool:
-    """The invariant: a non-local Host is answered if and only if GET /api/tailnet (asked on
-    127.0.0.1) reports the share active AND its link's host is exactly that name."""
+def _assert_gate_matches_the_hold(app) -> tuple[bool, bool]:
+    """The invariant (R3-C1): a non-local Host gets 200 if and only if a URL is held and its
+    host is exactly that name. The display may read failed while held, but never shows a link
+    that is not held. Returns (display active, tailnet name answered)."""
     claim = TestClient(app, base_url="http://127.0.0.1:8467").get("/api/tailnet").json()
-    live_name = claim["url"].split("/")[2].rpartition(":")[0] if claim["active"] else None
+    held = app.state.tailnet.held  # read after the GET: its refresh may release the hold
+    held_name = held.split("/")[2].rpartition(":")[0] if held else None
     rows = _gate_rows(app)
     for host, code in rows.items():
         name = host.partition("]")[0] + "]" if host.startswith("[") else host.partition(":")[0]
         local = name in ("127.0.0.1", "localhost", "[::1]")
-        assert code == (200 if local or name == live_name else 403), (host, code, claim)
-    return rows[f"{HOST}:8467"] == 200
+        assert code == (200 if local or name == held_name else 403), (host, code, claim, held)
+    if claim["active"]:
+        assert claim["url"] == held
+    return claim["active"], rows[f"{HOST}:8467"] == 200
 
 
 @pytest.mark.parametrize(
-    "setting,rule,tailnet_name_answered",
+    "setting,rule,tailnet_name_answered,event,after_event",
     [
-        ("off", "none", False),
-        ("off", "leftover", False),  # R2-C1: a hard-killed run's rule, still recorded
-        ("off", "hand-made", False),  # R2-C1: the user's own `tailscale serve`
-        ("off", "owned-live", True),  # `anyscribe ui --tailnet` with the setting off
-        ("on", "none", True),
-        ("on", "leftover", True),  # reused
-        ("on", "hand-made", True),  # adopted, left in place
-        ("on", "owned-live", True),
+        ("off", "none", False, None, None),
+        ("off", "leftover", False, None, None),  # R2-C1: a hard-killed run's rule, still recorded
+        ("off", "hand-made", False, None, None),  # R2-C1: the user's own `tailscale serve`
+        ("off", "owned-live", True, None, None),  # `anyscribe ui --tailnet` with the setting off
+        ("on", "none", True, None, None),
+        ("on", "leftover", True, None, None),  # reused
+        ("on", "hand-made", True, None, None),  # adopted, left in place
+        ("on", "owned-live", True, None, None),
+        # R3-C1: Tailscale down while held: the display reads failed, the name is still answered
+        ("on", "none", True, "down", (False, True)),
+        ("on", "hand-made", True, "down", (False, True)),
+        # removed outside anyscribe while Tailscale is Running: the hold is released
+        ("on", "none", True, "removed", (False, False)),
+        ("on", "hand-made", True, "removed", (False, False)),
     ],
 )
-def test_the_gate_answers_a_non_local_name_only_when_the_card_says_it_is_shared(
-    fake, lifecycle, config_restored, setting, rule, tailnet_name_answered, monkeypatch
+def test_the_gate_answers_a_non_local_name_only_while_a_share_is_held(
+    fake,
+    lifecycle,
+    config_restored,
+    setting,
+    rule,
+    tailnet_name_answered,
+    event,
+    after_event,
+    monkeypatch,
 ):
-    """R2-C1/C2/C3: setting x rule state x Host. Then switch off live: every non-local name
-    is refused again, a hand-made rule included (it stays in Tailscale, anyscribe refuses it)."""
+    """R2-C1/C2/C3, R3-C1: setting x rule state x Host. Then switch off live: every non-local
+    name is refused again, a hand-made rule included (it stays in Tailscale, anyscribe refuses
+    it)."""
     from anyscribe.core.config_set import set_value
     from anyscribe.web.app import run
 
@@ -776,18 +837,84 @@ def test_the_gate_answers_a_non_local_name_only_when_the_card_says_it_is_shared(
     seen = {}
 
     def during(app):
-        seen["before"] = _assert_gate_matches_the_claim(app)
+        seen["before"] = _assert_gate_matches_the_hold(app)
+        if event == "down":
+            fake.backend = "Starting"
+        if event == "removed":
+            fake.config["TCP"].pop("8467")
+            fake.config["Web"].pop(f"{HOST}:8467")
+        if event:
+            seen["event"] = _assert_gate_matches_the_hold(app)
         local = TestClient(app, base_url="http://127.0.0.1:8467")
         assert local.put("/api/tailnet", json={"enabled": False}).status_code == 200
-        seen["after"] = _assert_gate_matches_the_claim(app)
+        seen["after"] = _assert_gate_matches_the_hold(app)
 
     lifecycle["during"] = during
     run(port=8467, open_browser=False)
-    assert seen == {"before": tailnet_name_answered, "after": False}
+    expected = {"before": (tailnet_name_answered,) * 2, "after": (False, False)}
+    if event:
+        expected["event"] = after_event
+    assert seen == expected
     if setting == "off" and rule != "owned-live":
         assert fake.calls == []  # setting off: the gate needed no Tailscale call
-    if rule == "hand-made":
+    if rule == "hand-made" and event != "removed":
         assert tailnet.port_state(fake.config, 8467) == "ours"  # never removed
+
+
+@pytest.mark.parametrize("rule", ["owned", "hand-made"])
+@pytest.mark.parametrize("fault", ["timeout", "status exit 1", "serve status exit 1", "Starting"])
+def test_one_bad_tailscale_read_never_costs_the_remote_device_its_share(
+    fake, lifecycle, config_restored, rule, fault
+):
+    """R3-C1: one bad read during a GET from the tailnet name shows failed but keeps the share
+    held; once the read is good again, the remote device's next GET (no local request in
+    between) is answered and shows the same link live."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "on").ok
+    if rule == "hand-made":
+        tcp, web = ours(8467)
+        fake.config["TCP"]["8467"], fake.config["Web"][f"{HOST}:8467"] = tcp, web
+    url = f"https://{HOST}:8467/"
+    seen = {}
+
+    def inject(on: bool) -> None:
+        if fault == "timeout":
+            fake.status_hangs = on
+        elif fault == "status exit 1":
+            fake.status_rc = 1 if on else 0
+        elif fault == "serve status exit 1":
+            fake.serve_status_rc = 1 if on else 0
+        else:
+            fake.backend = fault if on else "Running"
+
+    def during(app):
+        remote = TestClient(app, base_url=f"http://{HOST}:8467")
+        assert remote.get("/api/tailnet").json()["url"] == url
+        inject(True)
+        fake.calls.clear()
+        fake.timeouts.clear()
+        bad = remote.get("/api/tailnet")
+        assert bad.status_code == 200, bad.text
+        assert bad.json()["active"] is False and bad.json()["enabled"] is True
+        assert bad.json()["url"] is None  # no link shown while it may not work
+        assert set(fake.timeouts) == {tailnet.REFRESH_TIMEOUT}  # a focus never waits 10 s
+        inject(False)
+        good = remote.get("/api/tailnet")
+        assert good.status_code == 200, good.text
+        data = good.json()
+        assert data["active"] is True and data["url"] == url
+        assert data["note"] == (None if rule == "owned" else tailnet.HANDMADE)
+        seen["ok"] = True
+
+    lifecycle["during"] = during
+    run(port=8467, open_browser=False)
+    assert seen == {"ok": True}
+    if rule == "owned":
+        assert fake.config == OTHER  # still ours, so the clean stop removed it
+    else:
+        assert off_calls(fake) == [] and tailnet.port_state(fake.config, 8467) == "ours"
 
 
 def _failure_cases(fake, monkeypatch):

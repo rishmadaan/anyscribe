@@ -24,6 +24,8 @@ from anyscribe.core.fileutil import atomic_write
 # Tailscale's CLI answers in well under a second; a wedged daemon, or `serve`
 # waiting for the admin to enable HTTPS, would otherwise block the server start.
 TIMEOUT = 10
+# A page focus re-reads Tailscale; it must never keep the page (or close()) waiting long.
+REFRESH_TIMEOUT = 3
 MAC_APP_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 
 # One-run override set by `anyscribe ui --tailnet / --local-only`; None follows the setting.
@@ -71,10 +73,10 @@ def _text(data) -> str:
     return data or ""
 
 
-def _run(cli: str, *args: str) -> tuple[int, str, str]:
+def _run(cli: str, *args: str, timeout: float = TIMEOUT) -> tuple[int, str, str]:
     """(exit code, stdout, stderr). A timeout or launch failure is code -1 with what was printed."""
     try:
-        r = subprocess.run([cli, *args], capture_output=True, text=True, timeout=TIMEOUT)
+        r = subprocess.run([cli, *args], capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:  # partial output arrives as bytes on POSIX
         return -1, _text(e.stdout), _text(e.stderr)
     except OSError as e:
@@ -86,9 +88,9 @@ def _target(port: int) -> str:
     return f"http://127.0.0.1:{port}"
 
 
-def _serve_config(cli: str) -> dict | None:
+def _serve_config(cli: str, timeout: float = TIMEOUT) -> dict | None:
     """The current serve config, or None when it cannot be read (then touch nothing)."""
-    code, out, _ = _run(cli, "serve", "status", "--json")
+    code, out, _ = _run(cli, "serve", "status", "--json", timeout=timeout)
     if code != 0:
         return None
     if not out.strip():
@@ -100,9 +102,9 @@ def _serve_config(cli: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _status_json(cli: str) -> dict:
+def _status_json(cli: str, timeout: float = TIMEOUT) -> dict:
     """`tailscale status --json`, or {} when it fails or is unreadable."""
-    code, out, _ = _run(cli, "status", "--json")
+    code, out, _ = _run(cli, "status", "--json", timeout=timeout)
     try:
         data = json.loads(out) if code == 0 else {}
     except ValueError:
@@ -288,6 +290,11 @@ class Share:
     def __init__(self, port: int | None = None) -> None:
         self.port = port
         self.status = Status()  # what the CLI and the UI show
+        # The link this server holds: set when start() succeeds (our rule or an adopted
+        # hand-made one), cleared on switch-off, "removed outside anyscribe" and close. The
+        # Host gate answers its exact name; `status` may show failed meanwhile (Tailscale down).
+        self.held: str | None = None
+        self._hold = 0  # bumped whenever `held` changes, so a stale refresh result is dropped
         self.owned = False  # this process holds a live rule anyscribe created; kept apart
         # from `status` so a failed repeat "on" cannot make shutdown forget the rule
         self.closed = False  # the server is stopping: never share again
@@ -305,39 +312,66 @@ class Share:
             elif wanted:
                 self.status = start(self.port)
                 self.owned = self.owned or self.status.owned
+                if self.status.active:  # a failed repeat "on" keeps the hold; refresh settles it
+                    self._set_held(self.status.url)
             else:
-                # A live share we don't own (hand-made) stays in Tailscale: say so.
-                left = self.status.active and not self.owned
+                # An adopted hand-made share stays in Tailscale: say so.
+                left = self.held is not None and not self.owned
                 self._release()
                 self.status = Status(note=LEFT_IN_PLACE.format(port=self.port) if left else None)
             return self.status
 
     def refresh(self) -> Status:
-        """While live, re-read Tailscale: a removed rule, an unreadable serve config, or a
-        backend that is not Running drops to a failed state, so no dead link is shown.
+        """While a link is held, re-read Tailscale so the display tells the truth.
 
-        Not live (including sharing off) = no Tailscale call at all.
+        Not Running, or a read that fails or times out: show failed and keep holding (a passing
+        hiccup must not cost a working share). Running and the rule is ours: show it live again.
+        Running and the rule is gone: "removed outside anyscribe", and the hold is released.
+        Nothing held (including sharing off) = no Tailscale call at all.
         """
         with self._lock:
-            if not self.status.active:
-                return self.status
-            cli = find_cli()
-            config = _serve_config(cli) if cli else None
-            if config is not None and port_state(config, self.port) != "ours":
+            held, hold, port = self.held, self._hold, self.port
+        if held is None:
+            return self.status
+        # Read outside the lock, so a page focus never makes a toggle or close() wait.
+        cli = find_cli()
+        running = bool(cli) and (
+            _status_json(cli, REFRESH_TIMEOUT).get("BackendState") == "Running"
+        )
+        config = _serve_config(cli, REFRESH_TIMEOUT) if running else None
+        with self._lock:
+            if self._hold != hold:
+                return self.status  # switched off, re-shared or closed while we read
+            if config is None:
+                # Keep self.owned: our rule may still be there, and close() retries removing it.
+                self.status = _failed(
+                    "Tailscale is not running or signed out, so the link does not work right now.",
+                    "Open Tailscale and sign in (or run: tailscale up); "
+                    "the link comes back by itself.",
+                )
+            elif port_state(config, port) == "ours":
+                if not self.status.active:
+                    self.status = Status(
+                        enabled=True,
+                        active=True,
+                        url=held,
+                        note=None if self.owned else HANDMADE,
+                        owned=self.owned,
+                    )
+            else:
                 if self.owned:
-                    _record(self.port, False)
+                    _record(port, False)
                 self.owned = False
+                self._set_held(None)
                 self.status = _failed(
                     "The share was removed outside anyscribe.",
                     "Turn sharing off and on again to share it again.",
                 )
-            elif config is None or _status_json(cli).get("BackendState") != "Running":
-                # Keep self.owned: our rule may still be there, and close() retries removing it.
-                self.status = _failed(
-                    "Tailscale is not running or signed out, so the link does not work right now.",
-                    "Open Tailscale and sign in (or run: tailscale up), then restart anyscribe ui.",
-                )
             return self.status
+
+    def _set_held(self, url: str | None) -> None:
+        self.held = url
+        self._hold += 1
 
     def save_and_apply(self, wanted: bool):
         """Save the setting and apply it under one lock, so saved and live cannot drift apart.
@@ -356,6 +390,7 @@ class Share:
         if self.owned:
             stop(self.port)
             self.owned = False
+        self._set_held(None)
 
     def close(self) -> None:
         """The server is stopping: remove our own rule and refuse any later share."""

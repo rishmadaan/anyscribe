@@ -35,8 +35,8 @@ def _host_name(host: str) -> str:
 
 
 class HostCheck:
-    """Pure ASGI (HTTP and WebSocket): answer only on local names and, while this server's
-    share is live, the exact tailnet name Tailscale gave it. Blocks DNS rebinding, where a
+    """Pure ASGI (HTTP and WebSocket): answer only on local names and, while this server holds
+    a share, the exact tailnet name Tailscale gave it. Blocks DNS rebinding, where a
     web page reaches 127.0.0.1 under its own name; with sharing off no other name is answered,
     so a leftover or hand-made Tailscale rule cannot expose the page."""
 
@@ -48,8 +48,8 @@ class HostCheck:
         name = _host_name(host)
         if name in LOCAL_HOSTS:
             return True
-        status = self.share.status
-        return bool(status.active and status.url and name == urlsplit(status.url).hostname)
+        held = self.share.held  # the share being held, not the display (it may read failed)
+        return bool(held and name == urlsplit(held).hostname)
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] in ("http", "websocket"):

@@ -409,12 +409,22 @@ class Share:
 
         Returns config_set's SetOutcome; nothing is applied when the save failed.
         """
-        from anyscribe.core.config_set import set_value
+        from anyscribe.core.config_set import SetOutcome, set_value
 
         with self._lock:
-            outcome = set_value("tailnet", wanted)
-            if outcome.ok:
-                self.apply(wanted)
+            if not wanted:
+                self.apply(False)  # revoke first: a broken config must never keep the link open
+            try:
+                outcome = set_value("tailnet", wanted)
+            except Exception as exc:  # set_value's load_config raises on a malformed config.yaml
+                outcome = SetOutcome(False, error=f"Couldn't save the setting: {exc}")
+            if not outcome.ok and not wanted:
+                outcome.error = (
+                    "Sharing is off for this running dashboard, but the saved setting "
+                    f"couldn't be changed ({outcome.error})"
+                )
+            if outcome.ok and wanted:
+                self.apply(True)
             return outcome
 
     def _release(self) -> str | None:

@@ -1105,3 +1105,28 @@ def test_card_fix_says_flip_the_switch_where_the_cli_says_a_command(fake, monkey
         assert "restart anyscribe ui" not in status.card_fix
         assert "flip this switch" in status.card_fix
         assert status.to_dict()["card_fix"] == status.card_fix
+
+
+def test_switch_off_with_a_broken_config_still_revokes(fake, lifecycle, config_restored):
+    """R5 fit: the off switch revokes before it saves, so a broken config.yaml cannot keep
+    the tailnet name answering; the error says sharing is off but the save failed."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "on").ok
+    seen = {}
+
+    def during(app):
+        seen["before"] = _gate_rows(app)[f"{HOST}:8467"]
+        CONFIG_FILE.write_text("tailnet: [\n")
+        r = TestClient(app, base_url="http://127.0.0.1:8467").put(
+            "/api/tailnet", json={"enabled": False}
+        )
+        seen["put"] = (r.status_code, "Sharing is off for this running dashboard" in r.text)
+        seen["held"] = app.state.tailnet.held
+        seen["after"] = _gate_rows(app)[f"{HOST}:8467"]
+
+    lifecycle["during"] = during
+    run(port=8467, open_browser=False)
+    assert seen == {"before": 200, "put": (500, True), "held": None, "after": 403}
+    assert tailnet.port_state(fake.config, 8467) == "free"  # anyscribe's own rule was removed

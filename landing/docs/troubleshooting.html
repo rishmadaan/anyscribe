@@ -597,6 +597,15 @@ your other devices get a refusal instead of the dashboard. With sharing off anys
 no longer checks Tailscale, so this note stays until you flip the switch or restart,
 even if you have removed the rule since. To remove it, run
 <code>tailscale serve --https=8457 off</code> (your port number), or switch sharing back on.</p>
+<h3 id="other-devices-are-refused-now-anyscribe-couldnt-remove-its-tailscale-rule"><code>Other devices are refused now. anyscribe couldn't remove its Tailscale rule (...)</code></h3>
+<p>You switched sharing off (or stopped the dashboard), and anyscribe stopped
+answering on the tailnet link at once, but removing its own <code>tailscale serve</code> rule
+failed (the reason is in the brackets: Tailscale didn't answer, refused, or the
+record file couldn't be written). Nothing on your tailnet can use the page. anyscribe
+tries again when the dashboard stops; or remove the rule yourself with the command
+the note shows, <code>tailscale serve --https=8457 off</code> (your port number). If you remove
+it by hand, see <a href="#the-link-says-bad-gateway-or-doesnt-load">the link says "bad gateway"</a>
+for clearing anyscribe's record of it.</p>
 <h3 id="anyscribe-only-answers-on-this-computers-own-address">"anyscribe only answers on this computer's own address..."</h3>
 <p>You opened the dashboard under a name it doesn't answer. It answers only at
 <code>127.0.0.1</code> and <code>localhost</code> on this computer, and at its own tailnet link while

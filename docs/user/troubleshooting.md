@@ -794,6 +794,17 @@ no longer checks Tailscale, so this note stays until you flip the switch or rest
 even if you have removed the rule since. To remove it, run
 `tailscale serve --https=8457 off` (your port number), or switch sharing back on.
 
+### `Other devices are refused now. anyscribe couldn't remove its Tailscale rule (...)`
+
+You switched sharing off (or stopped the dashboard), and anyscribe stopped
+answering on the tailnet link at once, but removing its own `tailscale serve` rule
+failed (the reason is in the brackets: Tailscale didn't answer, refused, or the
+record file couldn't be written). Nothing on your tailnet can use the page. anyscribe
+tries again when the dashboard stops; or remove the rule yourself with the command
+the note shows, `tailscale serve --https=8457 off` (your port number). If you remove
+it by hand, see [the link says "bad gateway"](#the-link-says-bad-gateway-or-doesnt-load)
+for clearing anyscribe's record of it.
+
 ### "anyscribe only answers on this computer's own address..."
 
 You opened the dashboard under a name it doesn't answer. It answers only at

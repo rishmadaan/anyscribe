@@ -127,6 +127,17 @@ An independent review (correctness and fit) upheld 15 findings. What changed:
   shows failed and keeps holding; Running with our rule shows it live again;
   only Running with the rule gone releases the hold. Answering the name during
   an outage costs nothing, because no tailnet request can arrive then.
+- **Revoke first, clean up second** (review round 4). Every release path
+  (switch-off, "removed outside anyscribe", close, `/api/shutdown`) now clears
+  the held link before any disk write or Tailscale call, so a failed record
+  write or `serve off` can no longer leave the tailnet name answered. The
+  failure is reported in plain words ("Other devices are refused now..."),
+  `close()` retries it, and `/api/shutdown` always exits. A refresh stops
+  between its two reads if sharing was switched off meanwhile. A failed or
+  slow read is no longer worded as "stopped or signed out": it says the link
+  can't be confirmed and may still work, and `GET /api/tailnet` returns `held`
+  so the card never tells a device reading it over the link that the page is
+  only on the host computer.
 - **Host check.** A pure ASGI middleware (HTTP and WebSocket) answers the
   local names always, and the exact tailnet name of this server's share only
   while that share is live; anything else gets 403, so a DNS-rebinding page

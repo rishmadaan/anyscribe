@@ -281,6 +281,27 @@ class Share:
                 self.status = Status()
             return self.status
 
+    def refresh(self) -> Status:
+        """While live, re-read Tailscale: a rule removed outside anyscribe drops to a failed state.
+
+        Not live (including sharing off) = no Tailscale call at all.
+        """
+        with self._lock:
+            if not self.status.active:
+                return self.status
+            cli = find_cli()
+            config = _serve_config(cli) if cli else None
+            if config is None or port_state(config, self.port) == "ours":
+                return self.status  # still there (or unreadable: claim nothing new)
+            if self.owned:
+                _record(self.port, False)
+            self.owned = False
+            self.status = _failed(
+                "The share was removed outside anyscribe.",
+                "Turn sharing off and on again to share it again.",
+            )
+            return self.status
+
     def save_and_apply(self, wanted: bool):
         """Save the setting and apply it under one lock, so saved and live cannot drift apart.
 

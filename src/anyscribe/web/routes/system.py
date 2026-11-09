@@ -58,7 +58,9 @@ def tailnet_state(request: Request) -> dict:
 
 
 @router.get("/tailnet")
-async def tailnet_status(request: Request) -> dict:
+def tailnet_status(request: Request) -> dict:
+    """Sync (threadpool): while live it re-reads Tailscale, so a removed share is not shown live."""
+    request.app.state.tailnet.refresh()
     return tailnet_state(request)
 
 

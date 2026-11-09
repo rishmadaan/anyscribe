@@ -14,12 +14,19 @@ export function useTailnet() {
   const [state, setState] = useState<TailnetState | null>(null);
 
   useEffect(() => {
-    getTailnet()
-      .then(setState)
-      .catch(() => setState(null));
+    const load = () =>
+      getTailnet()
+        .then(setState)
+        .catch(() => setState(null));
+    load();
     const onChange = (e: Event) => setState((e as CustomEvent<TailnetState>).detail);
     window.addEventListener(EVENT, onChange);
-    return () => window.removeEventListener(EVENT, onChange);
+    // The server re-checks a live share on every read, so coming back to the window is enough.
+    window.addEventListener("focus", load);
+    return () => {
+      window.removeEventListener(EVENT, onChange);
+      window.removeEventListener("focus", load);
+    };
   }, []);
 
   const change = useCallback(async (enabled: boolean) => {

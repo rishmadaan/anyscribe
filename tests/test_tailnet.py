@@ -508,3 +508,19 @@ def test_a_failed_save_applies_nothing(client, fake, monkeypatch):
     r = client.put("/api/tailnet", json={"enabled": True})
     assert r.status_code == 500 and r.json()["detail"] == "disk full"
     assert fake.calls == []
+
+
+def test_a_share_removed_outside_anyscribe_reads_as_failed(client, fake):
+    """C4: GET re-checks a live share; a rule removed by hand is not shown as live."""
+    assert client.put("/api/tailnet", json={"enabled": True}).json()["active"] is True
+    fake.config["TCP"].pop("8467")
+    fake.config["Web"].pop(f"{HOST}:8467")
+    data = client.get("/api/tailnet").json()
+    assert data["active"] is False and data["url"] is None
+    assert data["reason"] == "The share was removed outside anyscribe."
+    assert tailnet._owned_ports() == set()
+
+
+def test_get_with_sharing_off_never_calls_tailscale(client, fake):
+    client.get("/api/tailnet")
+    assert fake.calls == []

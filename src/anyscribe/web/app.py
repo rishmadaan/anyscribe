@@ -6,7 +6,6 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -22,7 +21,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 WRONG_HOST = (
     "anyscribe only answers on this computer's own address (127.0.0.1 or localhost) "
-    "or on its tailnet link while sharing is on."
+    "or on a Tailscale (.ts.net) link."
 )
 
 
@@ -35,20 +34,18 @@ def _host_name(host: str) -> str:
 
 
 class HostCheck:
-    """Pure ASGI (HTTP and WebSocket): answer only on local names and, while shared, the
-    tailnet name. Blocks DNS rebinding, where a web page reaches 127.0.0.1 under its own name
-    and could otherwise switch sharing on."""
+    """Pure ASGI (HTTP and WebSocket): answer only on local names and Tailscale names. Blocks
+    DNS rebinding, where a web page reaches 127.0.0.1 under its own name and could otherwise
+    switch sharing on. Any *.ts.net name is safe to allow: Tailscale issues those names, so an
+    attacker cannot point one at 127.0.0.1, and a share the user set up by hand keeps working
+    with the setting off."""
 
-    def __init__(self, app, share: tailnet.Share) -> None:
+    def __init__(self, app) -> None:
         self.app = app
-        self.share = share
 
     def allowed(self, host: str) -> bool:
         name = _host_name(host)
-        if name in LOCAL_HOSTS:
-            return True
-        status = self.share.status
-        return bool(status.active and status.url and name == urlsplit(status.url).hostname)
+        return name in LOCAL_HOSTS or name.endswith(".ts.net")
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] in ("http", "websocket"):
@@ -127,7 +124,7 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
     share = app.state.tailnet
     share.port = port
     # Only the real server checks Host (TestClient tests of create_app() send "testserver").
-    app.add_middleware(HostCheck, share=share)
+    app.add_middleware(HostCheck)
     wanted = tailnet.run_override
     if wanted is None:
         try:

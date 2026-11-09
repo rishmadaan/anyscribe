@@ -607,16 +607,14 @@ def test_a_foreign_host_cannot_open_the_progress_websocket(served_app):
         assert closed.value.code == 4004  # the route's own close, not the Host check's 1008
 
 
-def test_the_tailnet_name_is_answered_only_while_shared(served_app):
-    share = served_app.state.tailnet
-    for base in (f"http://{HOST}:8467", f"http://{HOST}"):
-        c = TestClient(served_app, base_url=base)
-        assert c.get("/").status_code == 403  # not shared yet
-        share.status = tailnet.Status(enabled=True, active=True, url=f"https://{HOST}:8467/")
-        assert c.get("/").status_code == 200
-        evil = TestClient(served_app, base_url="http://evil.example")
-        assert evil.get("/").status_code == 403  # sharing does not open it to any name
-        share.status = tailnet.Status()
+def test_tailscale_names_are_answered_even_with_sharing_off(served_app, fake):
+    """A share the user set up by hand (setting off) keeps working; other names stay refused."""
+    assert not served_app.state.tailnet.status.active
+    for base in (f"http://{HOST}:8467", f"http://{HOST}", "http://other.tail9.ts.net:8457"):
+        assert TestClient(served_app, base_url=base).get("/").status_code == 200, base
+    for base in ("http://evil.example", "http://ts.net.evil.example", "http://evilts.net"):
+        assert TestClient(served_app, base_url=base).get("/").status_code == 403, base
+    assert fake.calls == []  # allowing the name needs no Tailscale call
 
 
 def _failure_cases(fake, monkeypatch):

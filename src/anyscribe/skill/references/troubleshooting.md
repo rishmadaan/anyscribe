@@ -384,7 +384,7 @@ Then restart `anyscribe ui`, or flip the Settings switch off and on.
 
 **Link answers "bad gateway":** the server was killed hard (SIGKILL, power loss), or Tailscale was stuck when the tray force-stopped it, so its rule stayed. Starting `anyscribe ui` with sharing on reuses it and the next clean stop removes it; or `tailscale serve --https=<port> off`. With sharing off anyscribe never touches Tailscale, so it won't clean it up.
 
-**`The share was removed outside anyscribe.`** (Settings card): the rule went away while shared; flip the switch off and on. **`A share you set up yourself; anyscribe will leave it in place.`**: not an error, the user's own matching rule is used and never removed. **403 "anyscribe only answers on this computer's own address..."**: the page was opened under an unknown Host (for example a hand-made `tailscale serve` with the setting off); turn the `tailnet` setting on instead. **`Couldn't read your anyscribe config, so tailnet sharing is off for this run.`**: config.yaml is malformed; the dashboard runs locally.
+**`The share was removed outside anyscribe.`** (Settings card): the rule went away while shared; flip the switch off and on. **`A share you set up yourself; anyscribe will leave it in place.`**: not an error, the user's own matching rule is used and never removed. **403 "anyscribe only answers on this computer's own address..."**: the page was opened under a Host that is not `127.0.0.1`, `localhost`, `[::1]` or a `*.ts.net` Tailscale name; open it at one of those. **`Couldn't read your anyscribe config, so tailnet sharing is off for this run.`**: config.yaml is malformed; the dashboard runs locally.
 
 ### Fully removing the tray / menu-bar auto-start
 

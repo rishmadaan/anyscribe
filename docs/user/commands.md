@@ -915,7 +915,7 @@ If sharing is on but can't work (Tailscale missing, not signed in, and so on), t
 
 > **What anyscribe changes in Tailscale.** It adds one `tailscale serve` rule for its own port once the dashboard is listening, and notes that port in `~/.anyscribe/tailnet-owned.json`. On a normal stop it removes only a rule it noted that still points at the dashboard. If you already made the same rule yourself (`tailscale serve --bg --https=8457 http://127.0.0.1:8457`), anyscribe uses it for the link and leaves it in place. It never replaces a rule that points anywhere else. If the dashboard is killed hard (power loss, `kill -9`), or Tailscale is stuck when the tray force-stops it, its rule stays behind and answers "bad gateway"; the next `anyscribe ui` with sharing on reuses it and removes it on its next clean stop, or remove it yourself with `tailscale serve --https=8457 off`. With sharing off, anyscribe doesn't touch Tailscale at all, not even to clean up.
 >
-> A share you make by hand while the setting is off now gets a "only answers on this computer's own address" page, because the dashboard refuses names it doesn't know. Turn the setting on instead: anyscribe then uses your rule and leaves it in place.
+> The dashboard answers only on `127.0.0.1`, `localhost` and Tailscale `.ts.net` names, so a web page can't reach it under its own name. A share you make by hand with `tailscale serve` still works with the setting off.
 
 > **Want it without a terminal?** `anyscribe desktop install` gives you an app icon that opens this same dashboard and keeps it running in the background. See [anyscribe desktop](#anyscribe-desktop).
 

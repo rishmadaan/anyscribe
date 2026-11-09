@@ -117,9 +117,11 @@ An independent review (correctness and fit) upheld 15 findings. What changed:
   and reports "The share was removed outside anyscribe." if the rule is gone;
   the UI re-reads on window focus.
 - **Host check.** A pure ASGI middleware refuses any Host but the local names
-  and, while shared, the tailnet name (HTTP and WebSocket), so a DNS-rebinding
-  page cannot switch sharing on. Side effect: a share made by hand with the
-  setting off now gets a 403; the docs say to turn the setting on instead.
+  and `*.ts.net` names (HTTP and WebSocket), so a DNS-rebinding page cannot
+  switch sharing on. `*.ts.net` is allowed always, not only while shared:
+  Tailscale issues those names, so an attacker cannot point one at 127.0.0.1,
+  and a share made by hand with the setting off keeps working (an earlier
+  version refused it; changed in review).
 - **No login, said everywhere:** the CLI's shared line, `config set tailnet
   on`, the `--tailnet` help and the card ("or stop it").
 - Smaller: a broken `config.yaml` starts local-only with one line; a quoted

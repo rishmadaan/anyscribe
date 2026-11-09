@@ -567,10 +567,10 @@ anyscribe uses it for the link and does not remove it when it stops. Remove it
 yourself with <code>tailscale serve --https=&lt;port&gt; off</code> when you no longer want it.</p>
 <h3 id="anyscribe-only-answers-on-this-computers-own-address">"anyscribe only answers on this computer's own address..."</h3>
 <p>You opened the dashboard under a name it doesn't know: anything other than
-<code>127.0.0.1</code>, <code>localhost</code>, or its tailnet address while sharing is on. This blocks
-web pages from reaching it under their own name. If you shared it by hand with
-<code>tailscale serve</code> while the <code>tailnet</code> setting is off, turn the setting on instead
-(<code>anyscribe config set tailnet on</code>); anyscribe then uses your rule.</p>
+<code>127.0.0.1</code>, <code>localhost</code>, or a Tailscale address ending in <code>.ts.net</code>. This blocks
+web pages from reaching it under their own name. Open it at
+<code>http://127.0.0.1:8457</code> on this computer, or at its <code>https://...ts.net</code> link from
+your other devices.</p>
 <h3 id="couldnt-read-your-anyscribe-config-so-tailnet-sharing-is-off-for-this-run"><code>Couldn't read your anyscribe config, so tailnet sharing is off for this run.</code></h3>
 <p><code>~/.anyscribe/config.yaml</code> has a mistake in it, so anyscribe can't tell whether
 sharing is on. The dashboard starts on your own computer. Fix the file (or see

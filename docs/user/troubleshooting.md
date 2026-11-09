@@ -756,10 +756,10 @@ yourself with `tailscale serve --https=<port> off` when you no longer want it.
 ### "anyscribe only answers on this computer's own address..."
 
 You opened the dashboard under a name it doesn't know: anything other than
-`127.0.0.1`, `localhost`, or its tailnet address while sharing is on. This blocks
-web pages from reaching it under their own name. If you shared it by hand with
-`tailscale serve` while the `tailnet` setting is off, turn the setting on instead
-(`anyscribe config set tailnet on`); anyscribe then uses your rule.
+`127.0.0.1`, `localhost`, or a Tailscale address ending in `.ts.net`. This blocks
+web pages from reaching it under their own name. Open it at
+`http://127.0.0.1:8457` on this computer, or at its `https://...ts.net` link from
+your other devices.
 
 ### `Couldn't read your anyscribe config, so tailnet sharing is off for this run.`
 

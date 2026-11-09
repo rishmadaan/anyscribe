@@ -39,7 +39,8 @@ class Status:
     active: bool = False  # the serve rule is live and the link works
     url: str | None = None
     reason: str | None = None
-    fix: str | None = None
+    fix: str | None = None  # terminal wording, printed by the CLI
+    card_fix: str | None = None  # the Settings card's wording, when it differs (it has a switch)
     note: str | None = None  # e.g. the link is a share the user made by hand
     owned: bool = False  # anyscribe created this rule (recorded), so it may remove it
 
@@ -132,7 +133,11 @@ def port_state(config: dict, port: int) -> str:
 
 
 def _failed(reason: str, fix: str) -> Status:
-    return Status(enabled=True, reason=reason, fix=fix)
+    # The card sits beside the switch: flipping it replaces the terminal steps.
+    card = fix.replace(
+        ", or turn sharing off: anyscribe config set tailnet off", ", or flip this switch off."
+    ).replace("restart anyscribe ui", "flip this switch off and on")
+    return Status(enabled=True, reason=reason, fix=fix, card_fix=card if card != fix else None)
 
 
 def _classify(output: str, port: int) -> Status:

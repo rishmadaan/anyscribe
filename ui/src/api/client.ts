@@ -197,6 +197,8 @@ export type TailnetState = {
   url: string | null;
   reason: string | null;
   fix: string | null;
+  card_fix: string | null;
+  note: string | null;
   saved: boolean;
 };
 

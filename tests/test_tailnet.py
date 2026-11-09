@@ -462,6 +462,7 @@ def test_api_toggle_saves_and_applies_live(client, fake):
         "url": None,
         "reason": None,
         "fix": None,
+        "card_fix": None,
         "note": None,
         "saved": False,
     }
@@ -616,3 +617,29 @@ def test_the_tailnet_name_is_answered_only_while_shared(served_app):
         evil = TestClient(served_app, base_url="http://evil.example")
         assert evil.get("/").status_code == 403  # sharing does not open it to any name
         share.status = tailnet.Status()
+
+
+def _failure_cases(fake, monkeypatch):
+    """Every failure whose CLI fix names a terminal step, with the switch beside it on the card."""
+    monkeypatch.setattr(tailnet, "find_cli", lambda: None)
+    yield tailnet.start(8467)  # not installed
+    monkeypatch.setattr(tailnet, "find_cli", lambda: "/usr/bin/tailscale")
+    fake.backend = "Stopped"
+    yield tailnet.start(8467)  # not running
+    fake.backend = "Running"
+    yield tailnet._classify("Serve is not enabled. https://login.tailscale.com/f/serve?x=1", 8467)
+    yield tailnet._classify("serve is not enabled on your tailnet", 8467)
+    monkeypatch.setattr(tailnet, "_serve_config", lambda cli: None)
+    yield tailnet.start(8467)  # serve status unreadable
+
+
+def test_card_fix_says_flip_the_switch_where_the_cli_says_a_command(fake, monkeypatch):
+    """F6: the card never tells the user to type a command its own switch does."""
+    cases = list(_failure_cases(fake, monkeypatch))
+    assert len(cases) == 5
+    for status in cases:
+        assert "anyscribe config set" in status.fix or "restart anyscribe ui" in status.fix
+        assert "anyscribe config set" not in status.card_fix
+        assert "restart anyscribe ui" not in status.card_fix
+        assert "flip this switch" in status.card_fix
+        assert status.to_dict()["card_fix"] == status.card_fix

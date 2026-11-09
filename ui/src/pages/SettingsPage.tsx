@@ -1452,7 +1452,9 @@ function TailnetCard() {
               On, but not working. This page is only on this computer right now.
             </p>
             <p className="text-xs text-text-secondary">{state.reason}</p>
-            <p className="text-xs text-text-secondary font-mono">Fix: {state.fix}</p>
+            <p className="text-xs text-text-secondary font-mono">
+              Fix: {state.card_fix ?? state.fix}
+            </p>
           </div>
         ) : (
           <p className="text-xs text-text-secondary">Off. Only this computer can open this page.</p>

@@ -1342,7 +1342,7 @@ anyscribe ui --local-only
 <pre><code class="language-bash">anyscribe config set tailnet on     # every `anyscribe ui` from now on
 anyscribe ui --tailnet              # just this once
 </code></pre>
-<p>If you use <a href="https://tailscale.com">Tailscale</a>, you can open the dashboard from your phone or another computer too. Your <strong>tailnet</strong> is the private network of devices signed in to your Tailscale account. With sharing on, anyscribe still listens only on <code>127.0.0.1</code> and asks Tailscale to pass your tailnet's requests through to it. It prints the link when it starts:</p>
+<p>If you use <a href="https://tailscale.com">Tailscale</a>, you can open the dashboard from another computer too (it is laid out for a computer screen, not a phone). Your <strong>tailnet</strong> is the private network of devices signed in to your Tailscale account. With sharing on, anyscribe still listens only on <code>127.0.0.1</code> and asks Tailscale to pass your tailnet's requests through to it. It prints the link when it starts:</p>
 <pre><code>anyscribe ui → http://127.0.0.1:8457
 Asking Tailscale to share it...
 Shared on your tailnet → https://my-laptop.tail1234.ts.net:8457/ (no login: anyone on your tailnet can use it)

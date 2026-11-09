@@ -899,7 +899,7 @@ anyscribe config set tailnet on     # every `anyscribe ui` from now on
 anyscribe ui --tailnet              # just this once
 ```
 
-If you use [Tailscale](https://tailscale.com), you can open the dashboard from your phone or another computer too. Your **tailnet** is the private network of devices signed in to your Tailscale account. With sharing on, anyscribe still listens only on `127.0.0.1` and asks Tailscale to pass your tailnet's requests through to it. It prints the link when it starts:
+If you use [Tailscale](https://tailscale.com), you can open the dashboard from another computer too (it is laid out for a computer screen, not a phone). Your **tailnet** is the private network of devices signed in to your Tailscale account. With sharing on, anyscribe still listens only on `127.0.0.1` and asks Tailscale to pass your tailnet's requests through to it. It prints the link when it starts:
 
 ```
 anyscribe ui → http://127.0.0.1:8457

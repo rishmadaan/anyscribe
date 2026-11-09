@@ -1496,8 +1496,9 @@ function TailnetCard() {
         )}
         <p className="text-xs text-text-muted">
           Your tailnet is the private network of devices signed in to your
-          Tailscale account. Turned on, your phone or other computer can open
-          this page too. It is never on the public internet.
+          Tailscale account. Turned on, your other computers on it can open this
+          page too; it is laid out for a computer screen. It is never on the
+          public internet.
         </p>
 
         {busy ? (

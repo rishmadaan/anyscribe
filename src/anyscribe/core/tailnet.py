@@ -223,7 +223,21 @@ def start(port: int) -> Status:
                 "Tailscale accepted the request but the share isn't showing up.",
                 f"Check with: tailscale serve status (port {port}).",
             )
-        _record(port, True)  # only now: our own serve succeeded and reads back as ours
+        try:
+            _record(port, True)  # only now: our own serve succeeded and reads back as ours
+        except OSError as e:
+            # Unrecorded, the rule would never be removed: undo it rather than leave it live.
+            folder = OWNED_FILE.parent
+            if _run(cli, "serve", f"--https={port}", "off")[0] != 0:
+                return _failed(
+                    f"anyscribe couldn't note the share it made ({e}) and couldn't remove it.",
+                    f"Remove it: tailscale serve --https={port} off, then check that "
+                    f"{folder} is writable.",
+                )
+            return _failed(
+                f"anyscribe couldn't note the share it made ({e}), so it removed it again.",
+                f"Check that {folder} is writable, then restart anyscribe ui.",
+            )
         recorded = True
     # A matching rule nobody recorded was made by hand: use it for the link, never remove it.
     return Status(

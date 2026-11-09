@@ -104,6 +104,13 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
     # valid+invalid payload rolls back instead of half-committing (a 422
     # must mean "nothing was saved").
     snapshot = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
+
+    def rollback() -> None:
+        if snapshot is not None:
+            CONFIG_FILE.write_bytes(snapshot)
+        elif CONFIG_FILE.exists():
+            CONFIG_FILE.unlink()
+
     for field_name, value in req.model_dump(exclude_unset=True).items():
         if value is None or field_name == "tailnet":  # saved below, with its live apply
             continue
@@ -116,17 +123,15 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
         else:
             outcome = set_value(field_name, value)
         if not outcome.ok:
-            if snapshot is not None:
-                CONFIG_FILE.write_bytes(snapshot)
-            elif CONFIG_FILE.exists():
-                CONFIG_FILE.unlink()
+            rollback()
             return JSONResponse(
                 status_code=422,
                 content={"success": False, "error": outcome.error, "choices": outcome.choices},
             )
     if req.tailnet is not None:  # same save + live apply as PUT /api/tailnet, under one lock
         outcome = await run_in_threadpool(request.app.state.tailnet.save_and_apply, req.tailnet)
-        if not outcome.ok:
+        if not outcome.ok:  # nothing was applied live; undo the fields saved above too
+            rollback()
             return JSONResponse(status_code=422, content={"success": False, "error": outcome.error})
     return _config_payload()
 

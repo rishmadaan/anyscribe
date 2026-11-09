@@ -41,6 +41,7 @@ class FakeTailscale:
         self.backend = "Running"
         self.status_rc = 0
         self.serve_status_rc = 0  # nonzero: `serve status` fails (tailscaled stopped)
+        self.off_rc = 0  # nonzero: `serve ... off` fails and changes nothing
         self.serve_result: tuple[int, str, str] | None = None  # force a `serve --bg` outcome
         self.serve_timeout_output: bytes | None = None
 
@@ -65,6 +66,8 @@ class FakeTailscale:
             self.config.setdefault("Web", {})[f"{HOST}:{port}"] = web
             return done()
         if argv[0] == "serve" and argv[-1] == "off":
+            if self.off_rc:
+                return done(self.off_rc, "", "failed")
             port = argv[1].split("=")[1]
             self.config["TCP"].pop(port, None)
             self.config["Web"].pop(f"{HOST}:{port}", None)
@@ -253,6 +256,28 @@ def test_a_failed_repeat_on_does_not_orphan_our_rule(fake):
     share.close()
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
     assert fake.config == OTHER
+
+
+@pytest.mark.parametrize("undo_works", [True, False])
+def test_a_share_that_cannot_be_recorded_is_undone_not_left_unowned(fake, monkeypatch, undo_works):
+    """R2-C6: serve --bg worked but the ownership note can't be written: remove the rule."""
+
+    def unwritable(path, content):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(tailnet, "atomic_write", unwritable)
+    fake.off_rc = 0 if undo_works else 1
+    status = tailnet.start(8467)
+    assert not status.active and status.url is None and status.enabled
+    assert off_calls(fake) == [["serve", "--https=8467", "off"]]
+    assert tailnet._owned_ports() == set()
+    if undo_works:
+        assert fake.config == OTHER  # no unowned live rule left behind
+        assert status.reason.endswith("so it removed it again.")
+    else:
+        assert tailnet.port_state(fake.config, 8467) == "ours"
+        assert status.reason.endswith("and couldn't remove it.")
+        assert status.fix.startswith("Remove it: tailscale serve --https=8467 off")
 
 
 def test_failure_line_is_one_line_with_reason_and_fix(fake):
@@ -507,6 +532,27 @@ def test_put_config_applies_tailnet_live_too(client, fake):
     assert tailnet.port_state(fake.config, 8467) == "ours"
     client.put("/api/config", json={"tailnet": False})
     assert fake.config == OTHER
+
+
+def test_put_config_saves_nothing_when_the_tailnet_part_fails(client, fake, monkeypatch):
+    """R2-C6: a 422 from PUT /api/config means nothing was saved, tailnet failure included."""
+    from anyscribe.config.settings import load_config
+    from anyscribe.core import config_set
+
+    real = config_set.set_value
+    client.put("/api/config", json={"keep_media": False})
+    before = CONFIG_FILE.read_bytes()
+
+    def tailnet_save_fails(key, value):
+        if key == "tailnet":
+            return config_set.SetOutcome(False, error="disk full")
+        return real(key, value)
+
+    monkeypatch.setattr(config_set, "set_value", tailnet_save_fails)
+    r = client.put("/api/config", json={"keep_media": True, "tailnet": True})
+    assert r.status_code == 422 and r.json()["error"] == "disk full"
+    assert CONFIG_FILE.read_bytes() == before and load_config().keep_media is False
+    assert fake.calls == []
 
 
 def test_save_and_apply_hold_one_lock(fake, monkeypatch, config_restored):

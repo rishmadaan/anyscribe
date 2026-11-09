@@ -1460,8 +1460,8 @@ function TailnetCard() {
 
         {state.saved !== state.enabled && !busy && (
           <p className="text-xs text-text-muted">
-            This run was started with {state.enabled ? "--tailnet" : "--local-only"}; your
-            saved setting is {state.saved ? "on" : "off"}. The switch changes both.
+            Saved setting: {state.saved ? "on" : "off"}. This running dashboard:{" "}
+            {state.active ? "shared" : "not shared"}. The switch changes both.
           </p>
         )}
         {err && <p className="text-xs text-red font-mono">{err}</p>}

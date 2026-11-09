@@ -466,3 +466,45 @@ def test_put_config_applies_tailnet_live_too(client, fake):
     assert tailnet.port_state(fake.config, 8467) == "ours"
     client.put("/api/config", json={"tailnet": False})
     assert fake.config == OTHER
+
+
+def test_save_and_apply_hold_one_lock(fake, monkeypatch, config_restored):
+    """C7: an "off" sent while an "on" is still applying waits, so saved and live agree."""
+    import threading
+    import time
+
+    from anyscribe.config.settings import load_config
+
+    share = tailnet.Share(8467)
+    inside, release = threading.Event(), threading.Event()
+    real_start = tailnet.start
+
+    def slow_start(port):
+        inside.set()
+        release.wait(5)
+        return real_start(port)
+
+    monkeypatch.setattr(tailnet, "start", slow_start)
+    on = threading.Thread(target=share.save_and_apply, args=(True,))
+    on.start()
+    assert inside.wait(5)
+    off = threading.Thread(target=share.save_and_apply, args=(False,))
+    off.start()
+    time.sleep(0.3)
+    assert load_config().tailnet is True  # the "off" has not saved yet: it waits for the lock
+    release.set()
+    on.join(5)
+    off.join(5)
+    assert load_config().tailnet is False and share.status.active is False
+    assert fake.config == OTHER
+
+
+def test_a_failed_save_applies_nothing(client, fake, monkeypatch):
+    from anyscribe.core import config_set
+
+    monkeypatch.setattr(
+        config_set, "set_value", lambda k, v: config_set.SetOutcome(False, error="disk full")
+    )
+    r = client.put("/api/tailnet", json={"enabled": True})
+    assert r.status_code == 500 and r.json()["detail"] == "disk full"
+    assert fake.calls == []

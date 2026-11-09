@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from anyscribe.core import service, tailnet, tray
-from anyscribe.core.config_set import set_value
 from anyscribe.web.models import TailnetRequest
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -66,8 +65,9 @@ async def tailnet_status(request: Request) -> dict:
 @router.put("/tailnet")
 def set_tailnet(req: TailnetRequest, request: Request) -> dict:
     """Save the setting and apply it to this running server now (sync: runs in the threadpool)."""
-    set_value("tailnet", req.enabled)
-    request.app.state.tailnet.apply(req.enabled)
+    outcome = request.app.state.tailnet.save_and_apply(req.enabled)
+    if not outcome.ok:
+        raise HTTPException(status_code=500, detail=outcome.error)
     return tailnet_state(request)
 
 

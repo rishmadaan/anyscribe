@@ -105,7 +105,7 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
     # must mean "nothing was saved").
     snapshot = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
     for field_name, value in req.model_dump(exclude_unset=True).items():
-        if value is None:
+        if value is None or field_name == "tailnet":  # saved below, with its live apply
             continue
         if field_name == "instagram" and isinstance(value, dict):
             # Nested block -> dotted keys, the shape set_value speaks.
@@ -124,8 +124,10 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
                 status_code=422,
                 content={"success": False, "error": outcome.error, "choices": outcome.choices},
             )
-    if req.tailnet is not None:  # same live apply as PUT /api/tailnet, so the two cannot disagree
-        await run_in_threadpool(request.app.state.tailnet.apply, req.tailnet)
+    if req.tailnet is not None:  # same save + live apply as PUT /api/tailnet, under one lock
+        outcome = await run_in_threadpool(request.app.state.tailnet.save_and_apply, req.tailnet)
+        if not outcome.ok:
+            return JSONResponse(status_code=422, content={"success": False, "error": outcome.error})
     return _config_payload()
 
 

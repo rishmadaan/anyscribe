@@ -281,6 +281,19 @@ class Share:
                 self.status = Status()
             return self.status
 
+    def save_and_apply(self, wanted: bool):
+        """Save the setting and apply it under one lock, so saved and live cannot drift apart.
+
+        Returns config_set's SetOutcome; nothing is applied when the save failed.
+        """
+        from anyscribe.core.config_set import set_value
+
+        with self._lock:
+            outcome = set_value("tailnet", wanted)
+            if outcome.ok:
+                self.apply(wanted)
+            return outcome
+
     def _release(self) -> None:
         if self.owned:
             stop(self.port)

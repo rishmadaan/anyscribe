@@ -613,4 +613,6 @@ def test_the_tailnet_name_is_answered_only_while_shared(served_app):
         assert c.get("/").status_code == 403  # not shared yet
         share.status = tailnet.Status(enabled=True, active=True, url=f"https://{HOST}:8467/")
         assert c.get("/").status_code == 200
+        evil = TestClient(served_app, base_url="http://evil.example")
+        assert evil.get("/").status_code == 403  # sharing does not open it to any name
         share.status = tailnet.Status()

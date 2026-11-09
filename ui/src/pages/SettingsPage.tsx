@@ -348,8 +348,6 @@ export default function SettingsPage() {
         </section>
       )}
 
-      <TailnetCard />
-
       {/* Configure Defaults */}
       <section className="mb-10">
         <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
@@ -838,6 +836,8 @@ export default function SettingsPage() {
           </p>
         </div>
       </section>
+
+      <TailnetCard />
 
       {/* System */}
       {health && (
@@ -1398,20 +1398,50 @@ function ExtraModels({
   );
 }
 
+// Opened from another device (through the tailnet link), switching off removes this page.
+const REMOTE = !["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
+
 function TailnetCard() {
   const { state, change } = useTailnet();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+  const [leftThisDevice, setLeftThisDevice] = useState(false);
+
+  if (leftThisDevice) {
+    return (
+      <section className="mb-10" id="tailnet">
+        <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
+          Sharing
+        </h2>
+        <div className="rounded-lg border border-border-subtle bg-surface px-4 py-3">
+          <p className="text-xs text-text-secondary">
+            Sharing is off. This device can no longer open the page. Turn it back on from
+            the computer running anyscribe.
+          </p>
+        </div>
+      </section>
+    );
+  }
   if (!state) return null;
 
   const flip = async () => {
     if (busy) return;
+    const turningOff = state.enabled;
+    if (turningOff && REMOTE && !confirmOff) {
+      setConfirmOff(true);
+      return;
+    }
+    setConfirmOff(false);
     setBusy(true);
     setErr(null);
     try {
       await change(!state.enabled);
+      if (turningOff && REMOTE) setLeftThisDevice(true);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not change tailnet sharing");
+      // From another device the reply can be cut off with the share itself: that is success.
+      if (turningOff && REMOTE) setLeftThisDevice(true);
+      else setErr(e instanceof Error ? e.message : "Could not change tailnet sharing");
     } finally {
       setBusy(false);
     }
@@ -1433,6 +1463,30 @@ function TailnetCard() {
             />
           </div>
         </SettingRow>
+        {confirmOff && (
+          <div className="rounded-md border border-amber/30 bg-amber/5 px-3 py-2 space-y-2">
+            <p className="text-xs text-text">
+              This device will lose the page. Turn it back on from the computer running
+              anyscribe.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void flip()}
+                className="rounded px-2.5 py-1 text-xs bg-red/15 text-red hover:bg-red/25 cursor-pointer"
+              >
+                Turn off sharing
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmOff(false)}
+                className="rounded px-2.5 py-1 text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         <p className="text-xs text-text-muted">
           Your tailnet is the private network of devices signed in to your
           Tailscale account. Turned on, your phone or other computer can open
@@ -1445,6 +1499,7 @@ function TailnetCard() {
           <div className="rounded-md border border-green/20 bg-green/5 px-3 py-2 space-y-1">
             <p className="text-xs text-green">On. Open it from any of your Tailscale devices:</p>
             <TailnetLink url={state.url} />
+            {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
           </div>
         ) : state.enabled ? (
           <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 space-y-1">

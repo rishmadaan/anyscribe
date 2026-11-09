@@ -152,6 +152,7 @@ def test_permission_refused_names_the_operator_fix(fake, monkeypatch):
     assert not status.active and status.url is None
     assert "won't let your user" in status.reason
     assert status.fix == "Run once: sudo tailscale set --operator=$USER"
+    assert tailnet._owned_ports() == set()
 
 
 def test_https_not_enabled_passes_the_enable_url_through(fake):
@@ -164,6 +165,7 @@ def test_https_not_enabled_passes_the_enable_url_through(fake):
     assert "isn't enabled on your tailnet" in status.reason
     assert url in status.fix
     assert tailnet.port_state(fake.config, 8467) == "free"
+    assert tailnet._owned_ports() == set()  # a failed serve is never recorded as ours
 
 
 def test_port_served_to_a_different_target_is_never_overwritten(fake):

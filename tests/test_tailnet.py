@@ -301,6 +301,8 @@ def lifecycle(monkeypatch):
             if thread:
                 thread.join(seen.get("join", 5))
             seen["status"] = app.state.tailnet.status
+            if "during" in seen:  # a test's requests against the live server
+                seen["during"](app)
         seen["port"] = app.state.tailnet.port
 
     monkeypatch.setattr(uvicorn.Server, "run", fake_serve)
@@ -607,14 +609,79 @@ def test_a_foreign_host_cannot_open_the_progress_websocket(served_app):
         assert closed.value.code == 4004  # the route's own close, not the Host check's 1008
 
 
-def test_tailscale_names_are_answered_even_with_sharing_off(served_app, fake):
-    """A share the user set up by hand (setting off) keeps working; other names stay refused."""
-    assert not served_app.state.tailnet.status.active
-    for base in (f"http://{HOST}:8467", f"http://{HOST}", "http://other.tail9.ts.net:8457"):
-        assert TestClient(served_app, base_url=base).get("/").status_code == 200, base
-    for base in ("http://evil.example", "http://ts.net.evil.example", "http://evilts.net"):
-        assert TestClient(served_app, base_url=base).get("/").status_code == 403, base
-    assert fake.calls == []  # allowing the name needs no Tailscale call
+GATE_HOSTS = [
+    "127.0.0.1:8467",
+    "localhost:8467",
+    "[::1]:8467",
+    f"{HOST}:8467",
+    HOST,
+    "other.tail9.ts.net:8467",
+    f"{HOST}.evil.example",
+    "evil.example",
+]
+
+
+def _gate_rows(app) -> dict[str, int]:
+    return {h: TestClient(app, base_url=f"http://{h}").get("/").status_code for h in GATE_HOSTS}
+
+
+def _assert_gate_matches_the_claim(app) -> bool:
+    """The invariant: a non-local Host is answered if and only if GET /api/tailnet (asked on
+    127.0.0.1) reports the share active AND its link's host is exactly that name."""
+    claim = TestClient(app, base_url="http://127.0.0.1:8467").get("/api/tailnet").json()
+    live_name = claim["url"].split("/")[2].rpartition(":")[0] if claim["active"] else None
+    rows = _gate_rows(app)
+    for host, code in rows.items():
+        name = host.partition("]")[0] + "]" if host.startswith("[") else host.partition(":")[0]
+        local = name in ("127.0.0.1", "localhost", "[::1]")
+        assert code == (200 if local or name == live_name else 403), (host, code, claim)
+    return rows[f"{HOST}:8467"] == 200
+
+
+@pytest.mark.parametrize(
+    "setting,rule,tailnet_name_answered",
+    [
+        ("off", "none", False),
+        ("off", "leftover", False),  # R2-C1: a hard-killed run's rule, still recorded
+        ("off", "hand-made", False),  # R2-C1: the user's own `tailscale serve`
+        ("off", "owned-live", True),  # `anyscribe ui --tailnet` with the setting off
+        ("on", "none", True),
+        ("on", "leftover", True),  # reused
+        ("on", "hand-made", True),  # adopted, left in place
+        ("on", "owned-live", True),
+    ],
+)
+def test_the_gate_answers_a_non_local_name_only_when_the_card_says_it_is_shared(
+    fake, lifecycle, config_restored, setting, rule, tailnet_name_answered, monkeypatch
+):
+    """R2-C1/C2/C3: setting x rule state x Host. Then switch off live: every non-local name
+    is refused again, a hand-made rule included (it stays in Tailscale, anyscribe refuses it)."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", setting).ok
+    if rule in ("leftover", "hand-made"):
+        tcp, web = ours(8467)
+        fake.config["TCP"]["8467"], fake.config["Web"][f"{HOST}:8467"] = tcp, web
+    if rule == "leftover":
+        tailnet.OWNED_FILE.write_text("[8467]")
+    if rule == "owned-live":
+        monkeypatch.setattr(tailnet, "run_override", True)
+    seen = {}
+
+    def during(app):
+        seen["before"] = _assert_gate_matches_the_claim(app)
+        local = TestClient(app, base_url="http://127.0.0.1:8467")
+        assert local.put("/api/tailnet", json={"enabled": False}).status_code == 200
+        seen["after"] = _assert_gate_matches_the_claim(app)
+
+    lifecycle["during"] = during
+    run(port=8467, open_browser=False)
+    assert seen == {"before": tailnet_name_answered, "after": False}
+    if setting == "off" and rule != "owned-live":
+        assert fake.calls == []  # setting off: the gate needed no Tailscale call
+    if rule == "hand-made":
+        assert tailnet.port_state(fake.config, 8467) == "ours"  # never removed
 
 
 def _failure_cases(fake, monkeypatch):

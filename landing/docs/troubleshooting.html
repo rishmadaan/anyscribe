@@ -597,9 +597,12 @@ at <code>http://127.0.0.1:8457</code> on this computer.</p>
 <p>If you see this on another device through a Tailscale link, one of two things
 happened:</p>
 <ul>
-<li>Sharing is off for this dashboard: the link is a rule left behind or one you made
-  by hand with <code>tailscale serve</code>. Turn the <code>tailnet</code> setting on (or flip the switch
-  in Settings); anyscribe then uses your rule and leaves it in place.</li>
+<li>Sharing is off for this dashboard, and the link is a rule left behind or one you
+  made by hand with <code>tailscale serve</code>. A rule you made by hand: turn sharing on (the
+  Settings switch applies it now; <code>anyscribe config set tailnet on</code> at the next
+  start), and anyscribe uses it and leaves it in place. A leftover from a hard stop:
+  run <code>anyscribe ui --tailnet</code> and stop it normally to clear it (see
+  <a href="#the-link-says-bad-gateway-or-doesnt-load">the link says "bad gateway"</a>).</li>
 <li>Sharing is on, but the share was removed outside anyscribe (for example
   <code>tailscale serve reset</code>), so anyscribe let go of it. Flip the switch off and on at
   the computer running anyscribe (open it there at <code>http://127.0.0.1:8457</code>).</li>

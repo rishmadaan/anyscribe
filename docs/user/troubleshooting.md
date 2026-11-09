@@ -759,6 +759,13 @@ Not an error. You had already made the same `tailscale serve` rule by hand, so
 anyscribe uses it for the link and does not remove it when it stops. Remove it
 yourself with `tailscale serve --https=<port> off` when you no longer want it.
 
+### `Your own Tailscale rule on port 8457 is still there, but anyscribe now refuses it.`
+
+You switched sharing off while the dashboard was using a rule you made by hand.
+anyscribe never removes your rule, but it stops answering on the tailnet link, so
+your other devices get a refusal instead of the dashboard. Remove the rule with
+`tailscale serve --https=8457 off` (your port number), or switch sharing back on.
+
 ### "anyscribe only answers on this computer's own address..."
 
 You opened the dashboard under a name it doesn't answer. It answers only at

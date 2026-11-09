@@ -211,6 +211,24 @@ def test_a_hand_made_matching_rule_is_used_but_never_removed(fake):
     assert tailnet._owned_ports() == set()
 
 
+def test_switching_off_a_hand_made_share_says_the_rule_is_still_there(fake):
+    """R2-C2: anyscribe leaves the user's rule, and the off state says so instead of "Off"."""
+    tcp, web = ours(8467)
+    fake.config["TCP"]["8467"], fake.config["Web"][f"{HOST}:8467"] = tcp, web
+    share = tailnet.Share(8467)
+    assert share.apply(True).note == tailnet.HANDMADE
+    off = share.apply(False)
+    assert not off.enabled and not off.active and off.url is None
+    assert off.note == (
+        "Your own Tailscale rule on port 8467 is still there, but anyscribe now refuses it. "
+        "`tailscale serve --https=8467 off` removes it."
+    )
+    assert off_calls(fake) == [] and tailnet.port_state(fake.config, 8467) == "ours"
+    owned = tailnet.Share(8468)
+    owned.apply(True)
+    assert owned.apply(False).note is None  # our own rule is removed: nothing left to mention
+
+
 def test_a_recorded_leftover_from_a_hard_kill_is_reused_then_removed(fake):
     first = tailnet.Share(8467)
     first.apply(True)  # creates and records the rule, then the process "dies" (no close)

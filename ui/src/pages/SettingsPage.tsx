@@ -1407,6 +1407,7 @@ function TailnetCard() {
   const [err, setErr] = useState<string | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
   const [leftThisDevice, setLeftThisDevice] = useState(false);
+  const [leftNote, setLeftNote] = useState<string | null>(null);
 
   if (leftThisDevice) {
     return (
@@ -1419,6 +1420,7 @@ function TailnetCard() {
             Sharing is off. This device can no longer open the page. Turn it back on from
             the computer running anyscribe.
           </p>
+          {leftNote && <p className="text-xs text-text-muted mt-1">{leftNote}</p>}
         </div>
       </section>
     );
@@ -1436,11 +1438,15 @@ function TailnetCard() {
     setBusy(true);
     setErr(null);
     try {
-      await change(!state.enabled);
-      if (turningOff && REMOTE) setLeftThisDevice(true);
+      const next = await change(!state.enabled);
+      if (turningOff && REMOTE) {
+        setLeftNote(next.note);
+        setLeftThisDevice(true);
+      }
     } catch (e) {
-      // From another device the reply can be cut off with the share itself: that is success.
-      if (turningOff && REMOTE) setLeftThisDevice(true);
+      // From another device the connection can drop with the share itself (fetch throws a
+      // TypeError): that is success. Any HTTP error means nothing changed, so show it.
+      if (turningOff && REMOTE && e instanceof TypeError) setLeftThisDevice(true);
       else setErr(e instanceof Error ? e.message : "Could not change tailnet sharing");
     } finally {
       setBusy(false);
@@ -1466,21 +1472,22 @@ function TailnetCard() {
         {confirmOff && (
           <div className="rounded-md border border-amber/30 bg-amber/5 px-3 py-2 space-y-2">
             <p className="text-xs text-text">
-              This device will lose the page. Turn it back on from the computer running
-              anyscribe.
+              {state.note
+                ? "This device will lose the page: anyscribe will refuse this link, though your own Tailscale rule stays in place. Turn it back on from the computer running anyscribe."
+                : "This device will lose the page. Turn it back on from the computer running anyscribe."}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => void flip()}
-                className="rounded px-2.5 py-1 text-xs bg-red/15 text-red hover:bg-red/25 cursor-pointer"
+                className="rounded px-3 py-2 min-h-9 text-xs bg-red/15 text-red hover:bg-red/25 cursor-pointer"
               >
                 Turn off sharing
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmOff(false)}
-                className="rounded px-2.5 py-1 text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
+                className="rounded px-3 py-2 min-h-9 text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
               >
                 Cancel
               </button>
@@ -1512,7 +1519,18 @@ function TailnetCard() {
             </p>
           </div>
         ) : (
-          <p className="text-xs text-text-secondary">Off. Only this computer can open this page.</p>
+          <div className="space-y-1">
+            <p className="text-xs text-text-secondary">
+              Off. This page only answers at 127.0.0.1 or localhost on this computer.
+            </p>
+            {state.note && <p className="text-xs text-text-muted">{state.note}</p>}
+            {REMOTE && (
+              <p className="text-xs text-amber">
+                You're viewing this through a tunnel or proxy anyscribe didn't set up. It has no
+                login.
+              </p>
+            )}
+          </div>
         )}
 
         {state.saved !== state.enabled && !busy && (

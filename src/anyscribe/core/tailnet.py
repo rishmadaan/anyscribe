@@ -30,6 +30,10 @@ MAC_APP_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 run_override: bool | None = None
 
 HANDMADE = "A share you set up yourself; anyscribe will leave it in place."
+LEFT_IN_PLACE = (
+    "Your own Tailscale rule on port {port} is still there, but anyscribe now refuses it. "
+    "`tailscale serve --https={port} off` removes it."
+)
 NO_LOGIN = "no login: anyone on your tailnet can use it"
 
 
@@ -282,8 +286,10 @@ class Share:
                 self.status = start(self.port)
                 self.owned = self.owned or self.status.owned
             else:
+                # A live share we don't own (hand-made) stays in Tailscale: say so.
+                left = self.status.active and not self.owned
                 self._release()
-                self.status = Status()
+                self.status = Status(note=LEFT_IN_PLACE.format(port=self.port) if left else None)
             return self.status
 
     def refresh(self) -> Status:

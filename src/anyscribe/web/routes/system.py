@@ -86,8 +86,13 @@ async def shutdown(request: Request) -> dict:
     """Gracefully shut down the server, removing anyscribe's tailnet rule first."""
     # Before shutdown starts: uvicorn waits for in-flight work before its shutdown hook,
     # and the tray force-stops the server a few seconds after this request.
-    await run_in_threadpool(request.app.state.tailnet.close)
-    server = getattr(request.app.state, "server", None)
-    if server:
-        server.should_exit = True
+    try:
+        error = await run_in_threadpool(request.app.state.tailnet.close)
+        if error:  # access is already revoked; the shutdown hook retries the removal
+            port = request.app.state.tailnet.port
+            print(tailnet.CLEANUP_FAILED.format(error=error, port=port), flush=True)
+    finally:
+        server = getattr(request.app.state, "server", None)
+        if server:
+            server.should_exit = True  # always: a failed cleanup must not keep the server up
     return {"ok": True, "message": "shutting down"}

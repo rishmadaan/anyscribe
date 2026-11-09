@@ -9,6 +9,7 @@ cannot disagree. With sharing off, nothing here calls Tailscale.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import shutil
@@ -38,6 +39,10 @@ LEFT_IN_PLACE = (
     "To remove it: tailscale serve --https={port} off"
 )
 NO_LOGIN = "no login: anyone on your tailnet can use it"
+CLEANUP_FAILED = (
+    "Other devices are refused now. anyscribe couldn't remove its Tailscale rule ({error}); "
+    "it retries on stop, or run: tailscale serve --https={port} off"
+)
 
 
 @dataclass
@@ -208,7 +213,8 @@ def start(port: int) -> Status:
     state = port_state(config, port)
     recorded = port in _owned_ports()
     if recorded and state != "ours":
-        _record(port, False)  # our old rule is gone (or replaced): forget it
+        with contextlib.suppress(OSError):  # best effort: a stale record is re-checked here
+            _record(port, False)  # our old rule is gone (or replaced): forget it
         recorded = False
     if state == "taken":
         return _failed(
@@ -252,19 +258,24 @@ def start(port: int) -> Status:
     )
 
 
-def stop(port: int) -> None:
-    """Remove the serve rule for ``port`` only if anyscribe recorded it AND it is still ours."""
+def stop(port: int) -> str | None:
+    """Remove the serve rule for ``port`` only if anyscribe recorded it AND it is still ours.
+
+    None when done (or nothing to do); otherwise what went wrong, with the record kept so a
+    later stop retries. Writing the record may raise OSError.
+    """
     cli = find_cli()
     if not cli or port not in _owned_ports():
-        return
+        return None
     config = _serve_config(cli)
     if config is None:
-        return  # can't see it: keep the record, a later clean stop retries
+        return "couldn't read its sharing settings"
     if port_state(config, port) == "ours":
-        code, _, _ = _run(cli, "serve", f"--https={port}", "off")
+        code, out, err = _run(cli, "serve", f"--https={port}", "off")
         if code != 0:
-            return
+            return next(iter((err or out).strip().splitlines()), f"exit code {code}")
     _record(port, False)
+    return None
 
 
 def saved_setting() -> bool:
@@ -318,8 +329,12 @@ class Share:
             else:
                 # An adopted hand-made share stays in Tailscale: say so.
                 left = self.held is not None and not self.owned
-                self._release()
-                self.status = Status(note=LEFT_IN_PLACE.format(port=self.port) if left else None)
+                error = self._release()
+                if error:
+                    note = CLEANUP_FAILED.format(error=error, port=self.port)
+                else:
+                    note = LEFT_IN_PLACE.format(port=self.port) if left else None
+                self.status = Status(note=note)
             return self.status
 
     def refresh(self) -> Status:
@@ -360,14 +375,15 @@ class Share:
                         owned=self.owned,
                     )
             else:
-                if self.owned:
-                    _record(port, False)
-                self.owned = False
-                self._set_held(None)
+                owned, self.owned = self.owned, False
+                self._set_held(None)  # revoke first: the record write below may fail
                 self.status = _failed(
                     "The share was removed outside anyscribe.",
                     "Turn sharing off and on again to share it again.",
                 )
+                if owned:
+                    with contextlib.suppress(OSError):  # a stale record: start() re-checks it
+                        _record(port, False)
             return self.status
 
     def _set_held(self, url: str | None) -> None:
@@ -387,15 +403,31 @@ class Share:
                 self.apply(wanted)
             return outcome
 
-    def _release(self) -> None:
-        if self.owned:
-            stop(self.port)
-            self.owned = False
-        self._set_held(None)
+    def _release(self) -> str | None:
+        """Revoke first (the gate refuses the tailnet name at once), then remove our rule.
 
-    def close(self) -> None:
-        """The server is stopping: remove our own rule and refuse any later share."""
+        Cleanup is best effort and never raises: the error is returned, and `owned` stays
+        True so close() retries. `stop` stays under the lock: outside it, a start/stop on the
+        same port could race.
+        """
+        self._set_held(None)
+        if not self.owned:
+            return None
+        try:
+            error = stop(self.port)
+        except Exception as e:  # e.g. the record file can't be written
+            error = str(e) or type(e).__name__
+        if error is None:
+            self.owned = False
+        return error
+
+    def close(self) -> str | None:
+        """The server is stopping: refuse any later share, then remove our own rule.
+
+        Never raises; returns the cleanup error, if any (a later close() retries).
+        """
         with self._lock:
-            self._release()
             self.closed = True
+            error = self._release()
             self.status = Status()
+            return error

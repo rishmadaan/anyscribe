@@ -163,7 +163,9 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
     # the signal only after it). A no-op unless this process owns a live rule.
     @app.on_event("shutdown")
     async def _unshare() -> None:
-        await run_in_threadpool(share.close)
+        error = await run_in_threadpool(share.close)
+        if error:
+            print(tailnet.CLEANUP_FAILED.format(error=error, port=port), flush=True)
 
     if open_browser:
 

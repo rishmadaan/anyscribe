@@ -726,6 +726,22 @@ def test_shutdown_removes_our_rule_before_the_server_stops(client, fake):
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
 
 
+def test_shutdown_exits_even_if_close_raises(client, fake, monkeypatch):
+    """R4-C1: should_exit is set in a finally, so nothing in close() can keep the server up."""
+
+    class Server:
+        should_exit = False
+
+    def broken_close():
+        raise RuntimeError("boom")
+
+    client.app.state.server = Server()
+    monkeypatch.setattr(client.app.state.tailnet, "close", broken_close)
+    with pytest.raises(RuntimeError):
+        client.post("/api/shutdown")
+    assert client.app.state.server.should_exit is True
+
+
 # ── Host check (C8): DNS rebinding cannot reach the API ──────
 
 
@@ -929,6 +945,101 @@ def test_one_bad_tailscale_read_never_costs_the_remote_device_its_share(
         assert fake.config == OTHER  # still ours, so the clean stop removed it
     else:
         assert off_calls(fake) == [] and tailnet.port_state(fake.config, 8467) == "ours"
+
+
+def _unwritable(path, content):
+    raise PermissionError(13, "Permission denied", str(path))
+
+
+@pytest.mark.parametrize(
+    "where,fault",
+    [
+        ("switch off", "record write fails"),
+        ("switch off", "serve off exits 1"),
+        ("removed outside", "record write fails"),  # refresh never runs `serve off`
+        ("shutdown", "record write fails"),
+        ("shutdown", "serve off exits 1"),
+    ],
+)
+def test_access_is_revoked_first_even_when_cleanup_fails(
+    fake, lifecycle, config_restored, monkeypatch, capsys, where, fault
+):
+    """R4-C1: every release path refuses the tailnet name before any disk write or Tailscale
+    call. A failed record write or `serve off` is reported in plain words, never a 500, never
+    leaves the name answered, /api/shutdown still exits, and the next close() retries."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "on").ok
+    real_write, real_stop = tailnet.atomic_write, tailnet.stop
+    held_at_cleanup = []  # the hold, seen at the moment each cleanup step starts
+    seen = {}
+
+    def during(app):
+        share = app.state.tailnet
+        local = TestClient(app, base_url="http://127.0.0.1:8467")
+        remote = TestClient(app, base_url=f"http://{HOST}:8467")
+        assert remote.get("/").status_code == 200 and share.owned
+
+        def write(path, content):
+            held_at_cleanup.append(share.held)
+            if fault == "record write fails":
+                _unwritable(path, content)
+            real_write(path, content)
+
+        def stop(port):
+            held_at_cleanup.append(share.held)
+            return real_stop(port)
+
+        monkeypatch.setattr(tailnet, "atomic_write", write)
+        monkeypatch.setattr(tailnet, "stop", stop)
+        fake.off_rc = 1 if fault == "serve off exits 1" else 0
+        if where == "switch off":
+            r = local.put("/api/tailnet", json={"enabled": False})
+            assert r.status_code == 200, r.text
+            error = (
+                str(PermissionError(13, "Permission denied", str(tailnet.OWNED_FILE)))
+                if fault == "record write fails"
+                else "failed"  # the fake's stderr
+            )
+            assert r.json()["note"] == tailnet.CLEANUP_FAILED.format(error=error, port=8467)
+        elif where == "removed outside":
+            fake.config["TCP"].pop("8467")
+            fake.config["Web"].pop(f"{HOST}:8467")
+            r = local.get("/api/tailnet")
+            assert r.status_code == 200, r.text
+            assert r.json()["active"] is False and r.json()["url"] is None
+        else:
+            r = local.post("/api/shutdown")
+            assert r.status_code == 200, r.text
+            assert app.state.server.should_exit is True and share.closed
+            assert "Other devices are refused now." in capsys.readouterr().out
+        assert share.held is None
+        assert remote.get("/").status_code == 403
+        assert held_at_cleanup and set(held_at_cleanup) == {None}
+        # The fault clears; the shutdown hook's close() retries the removal.
+        monkeypatch.setattr(tailnet, "atomic_write", real_write)
+        fake.off_rc = 0
+        seen["ok"] = True
+
+    lifecycle["during"] = during
+    run(port=8467, open_browser=False)
+    assert seen == {"ok": True}
+    assert fake.config == OTHER
+    # Refresh forgets ownership first, so a record it could not clear stays (start re-checks it).
+    stale = where == "removed outside"
+    assert tailnet._owned_ports() == ({8467} if stale else set())
+
+
+def test_a_stale_record_that_cannot_be_cleared_never_breaks_a_start(fake, monkeypatch):
+    """R4-C1: start() forgets a recorded rule that is gone; a failed write must not raise."""
+    tailnet.OWNED_FILE.write_text("[8467]")
+    fake.config["TCP"]["8467"] = {"HTTPS": True}  # someone else's rule on the port now
+    fake.config["Web"][f"{HOST}:8467"] = {"Handlers": {"/": {"Proxy": "http://127.0.0.1:9"}}}
+    monkeypatch.setattr(tailnet, "atomic_write", _unwritable)
+    status = tailnet.start(8467)
+    assert not status.active and "already shared on your tailnet by something else" in status.reason
+    assert bg_calls(fake) == [] and off_calls(fake) == []
 
 
 def _failure_cases(fake, monkeypatch):

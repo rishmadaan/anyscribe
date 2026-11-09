@@ -9,6 +9,7 @@ import { TailnetError, getTailnet, setTailnet } from "../api/client";
 import type { TailnetState } from "../api/client";
 
 const EVENT = "anyscribe:tailnet";
+let generation = 0; // bumped by every toggle; a read started before one is dropped
 
 /** Opened from another device, through the tailnet link (switching off removes this page). */
 export const REMOTE = !["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
@@ -17,10 +18,12 @@ export function useTailnet() {
   const [state, setState] = useState<TailnetState | null>(null);
 
   useEffect(() => {
-    const load = () =>
+    const load = () => {
+      const g = generation;
       getTailnet()
-        .then(setState)
-        .catch(() => setState(null));
+        .then((s) => g === generation && setState(s))
+        .catch(() => g === generation && setState(null));
+    };
     load();
     // A null detail means "unknown": keep the switch where it was, drop every live claim.
     const onChange = (e: Event) => {
@@ -39,6 +42,7 @@ export function useTailnet() {
   const change = useCallback(async (enabled: boolean) => {
     const broadcast = (s: TailnetState | null) =>
       window.dispatchEvent(new CustomEvent(EVENT, { detail: s }));
+    generation += 1;
     try {
       const next = await setTailnet(enabled);
       broadcast(next);

@@ -1418,8 +1418,8 @@ function TailnetCard() {
   const [confirmOff, setConfirmOff] = useState(false);
   const [leftThisDevice, setLeftThisDevice] = useState(false);
   const [leftNote, setLeftNote] = useState<string | null>(null);
-
-  if (leftThisDevice) {
+  // A later read showing the share held again (say, turned back on at the host) ends this view.
+  if (leftThisDevice && !(state?.held && !state.unknown)) {
     return (
       <section className="mb-10" id="tailnet">
         <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
@@ -1588,7 +1588,7 @@ function TailnetCard() {
             the running dashboard.
           </p>
         )}
-        {state.saved !== null && state.saved !== state.enabled && !busy && (
+        {state.saved !== null && state.saved !== state.enabled && !busy && !state.unknown && (
           <p className="text-xs text-text-muted">
             Saved setting: {state.saved ? "on" : "off"}. This running dashboard:{" "}
             {state.held ? "shared" : "not shared"}. The switch changes both.

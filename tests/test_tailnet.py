@@ -559,3 +559,58 @@ def test_shutdown_removes_our_rule_before_the_server_stops(client, fake):
     assert client.post("/api/shutdown").json()["ok"] is True
     assert seen == [("should_exit", OTHER)]  # the rule was already gone when exit was asked
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
+
+
+# ── Host check (C8): DNS rebinding cannot reach the API ──────
+
+
+@pytest.fixture
+def served_app(fake, lifecycle, config_restored):
+    """The app exactly as run() serves it (with its middleware), sharing off."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "off").ok
+    run(port=8467, open_browser=False)
+    return lifecycle["app"]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8467", "localhost:8467", "[::1]:8467", "localhost"])
+def test_local_hosts_are_answered(served_app, host):
+    r = TestClient(served_app, base_url=f"http://{host}").get("/api/tailnet")
+    assert r.status_code == 200 and r.json()["enabled"] is False
+
+
+def test_a_foreign_host_gets_403_on_every_route(served_app, fake):
+    c = TestClient(served_app, base_url="http://evil.example")
+    for method, path in [("get", "/api/tailnet"), ("get", "/"), ("put", "/api/tailnet")]:
+        r = c.request(method.upper(), path, json={"enabled": True} if method == "put" else None)
+        assert r.status_code == 403 and "only answers" in r.text, (method, path)
+    assert fake.calls == []  # the rebinding PUT never reached the toggle
+
+
+def test_a_foreign_host_cannot_open_the_progress_websocket(served_app):
+    from starlette.websockets import WebSocketDisconnect
+
+    # TestClient's websocket ignores base_url for Host, so set it explicitly.
+    client = TestClient(served_app)
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect("/api/ws/jobs/x", headers={"host": "evil.example"}):
+            pass
+    assert refused.value.code == 1008
+    good = {"host": "127.0.0.1:8467"}
+    with client.websocket_connect("/api/ws/jobs/x", headers=good) as ws:  # accepted: route answers
+        assert ws.receive_json()["message"] == "Job not found"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+        assert closed.value.code == 4004  # the route's own close, not the Host check's 1008
+
+
+def test_the_tailnet_name_is_answered_only_while_shared(served_app):
+    share = served_app.state.tailnet
+    for base in (f"http://{HOST}:8467", f"http://{HOST}"):
+        c = TestClient(served_app, base_url=base)
+        assert c.get("/").status_code == 403  # not shared yet
+        share.status = tailnet.Status(enabled=True, active=True, url=f"https://{HOST}:8467/")
+        assert c.get("/").status_code == 200
+        share.status = tailnet.Status()

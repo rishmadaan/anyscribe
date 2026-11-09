@@ -6,9 +6,10 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -17,6 +18,49 @@ from anyscribe.core import tailnet
 from anyscribe.core.tray import ensure_streams as _ensure_streams
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+WRONG_HOST = (
+    "anyscribe only answers on this computer's own address (127.0.0.1 or localhost) "
+    "or on its tailnet link while sharing is on."
+)
+
+
+def _host_name(host: str) -> str:
+    """The Host header without its port: "[::1]:8457" -> "[::1]", "box.ts.net:8457" -> "box.ts.net"."""
+    host = host.strip().lower()
+    if host.startswith("["):
+        return host[: host.find("]") + 1]
+    return host.partition(":")[0]
+
+
+class HostCheck:
+    """Pure ASGI (HTTP and WebSocket): answer only on local names and, while shared, the
+    tailnet name. Blocks DNS rebinding, where a web page reaches 127.0.0.1 under its own name
+    and could otherwise switch sharing on."""
+
+    def __init__(self, app, share: tailnet.Share) -> None:
+        self.app = app
+        self.share = share
+
+    def allowed(self, host: str) -> bool:
+        name = _host_name(host)
+        if name in LOCAL_HOSTS:
+            return True
+        status = self.share.status
+        return bool(status.active and status.url and name == urlsplit(status.url).hostname)
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            host = next((v.decode("latin-1") for k, v in scope["headers"] if k == b"host"), "")
+            if not self.allowed(host):
+                if scope["type"] == "websocket":
+                    await receive()  # websocket.connect
+                    await send({"type": "websocket.close", "code": 1008})  # sent as HTTP 403
+                else:
+                    await PlainTextResponse(WRONG_HOST, status_code=403)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def create_app() -> FastAPI:
@@ -82,6 +126,8 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
 
     share = app.state.tailnet
     share.port = port
+    # Only the real server checks Host (TestClient tests of create_app() send "testserver").
+    app.add_middleware(HostCheck, share=share)
     wanted = tailnet.run_override
     if wanted is None:
         try:

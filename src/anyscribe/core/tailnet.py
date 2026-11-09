@@ -235,6 +235,14 @@ def stop(port: int) -> None:
     _record(port, False)
 
 
+def saved_setting() -> bool:
+    """The saved `tailnet` setting as a real bool (a hand-written "false" is off). May raise."""
+    from anyscribe.config.settings import load_config
+    from anyscribe.core.config_set import as_bool
+
+    return as_bool(load_config().tailnet)
+
+
 def describe(status: Status) -> str | None:
     """The one line the CLI prints; None when sharing is off."""
     if status.active:

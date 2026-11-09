@@ -82,9 +82,14 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
     share.port = port
     wanted = tailnet.run_override
     if wanted is None:
-        from anyscribe.config.settings import load_config
-
-        wanted = load_config().tailnet
+        try:
+            wanted = tailnet.saved_setting()
+        except Exception:  # a broken config.yaml must not stop the dashboard starting
+            print(
+                "Couldn't read your anyscribe config, so tailnet sharing is off for this run.",
+                flush=True,
+            )
+            wanted = False
 
     if wanted:
 

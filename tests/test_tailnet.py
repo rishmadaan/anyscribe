@@ -312,6 +312,28 @@ def test_setting_off_never_calls_tailscale(fake, lifecycle, config_restored):
     assert lifecycle["status"].enabled is False
 
 
+def test_a_broken_config_starts_local_only_with_one_line(fake, lifecycle, config_restored, capsys):
+    """C5: a malformed config.yaml must not stop `anyscribe ui`; sharing is off, said once."""
+    from anyscribe.web.app import run
+
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text("tailnet: [\n")
+    run(port=8467, open_browser=False)
+    assert fake.calls == [] and lifecycle["status"].enabled is False
+    out = capsys.readouterr().out
+    assert out.count("Couldn't read your anyscribe config") == 1
+    assert "tailnet sharing is off for this run" in out
+
+
+def test_a_quoted_false_in_config_is_off(fake, lifecycle, config_restored):
+    from anyscribe.web.app import run
+
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text('tailnet: "false"\n')
+    run(port=8467, open_browser=False)
+    assert fake.calls == [] and lifecycle["status"].enabled is False
+
+
 def test_setting_on_shares_at_startup_and_unshares_at_shutdown(
     fake, lifecycle, config_restored, capsys
 ):

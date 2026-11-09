@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -93,9 +95,22 @@ def run(host: str = "127.0.0.1", port: int = 8457, open_browser: bool = True) ->
 
     if wanted:
 
+        def _share_when_listening() -> None:
+            # uvicorn runs startup events BEFORE it binds the port, so wait for the bind:
+            # a failed bind must never touch Tailscale or print a link.
+            while not server.started:
+                if server.should_exit or share.closed:
+                    return
+                time.sleep(0.05)
+            print("Asking Tailscale to share it...", flush=True)
+            line = tailnet.describe(share.apply(True))
+            if line:
+                print(line, flush=True)
+
         @app.on_event("startup")
         async def _share_on_tailnet() -> None:
-            print(tailnet.describe(await run_in_threadpool(share.apply, True)), flush=True)
+            app.state.tailnet_thread = threading.Thread(target=_share_when_listening, daemon=True)
+            app.state.tailnet_thread.start()
 
     # Shutdown runs on /api/shutdown, Ctrl+C and SIGTERM alike (uvicorn re-raises
     # the signal only after it). A no-op unless this process owns a live rule.

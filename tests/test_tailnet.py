@@ -294,7 +294,12 @@ def lifecycle(monkeypatch):
 
     def fake_serve(self, sockets=None):
         app = self.config.app
+        seen["app"] = app
         with TestClient(app):
+            self.started = seen.get("bind_ok", True)  # what uvicorn sets once it is listening
+            thread = getattr(app.state, "tailnet_thread", None)
+            if thread:
+                thread.join(seen.get("join", 5))
             seen["status"] = app.state.tailnet.status
         seen["port"] = app.state.tailnet.port
 
@@ -334,6 +339,18 @@ def test_a_quoted_false_in_config_is_off(fake, lifecycle, config_restored):
     assert fake.calls == [] and lifecycle["status"].enabled is False
 
 
+def test_a_failed_bind_never_touches_tailscale(fake, lifecycle, config_restored, capsys):
+    """C3: startup events run before the bind; sharing must wait until the server listens."""
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "on").ok
+    lifecycle["bind_ok"], lifecycle["join"] = False, 0.5
+    run(port=8467, open_browser=False)
+    assert fake.calls == []
+    assert "Shared on your tailnet" not in capsys.readouterr().out
+
+
 def test_setting_on_shares_at_startup_and_unshares_at_shutdown(
     fake, lifecycle, config_restored, capsys
 ):
@@ -346,10 +363,12 @@ def test_setting_on_shares_at_startup_and_unshares_at_shutdown(
     assert bg_calls(fake) == [["serve", "--bg", "--https=8467", "http://127.0.0.1:8467"]]
     assert off_calls(fake) == [["serve", "--https=8467", "off"]]
     assert fake.config == OTHER
+    out = capsys.readouterr().out
     assert (
         f"Shared on your tailnet → https://{HOST}:8467/ "
-        "(no login: anyone on your tailnet can use it)" in capsys.readouterr().out
+        "(no login: anyone on your tailnet can use it)" in out
     )
+    assert out.index("Asking Tailscale to share it...") < out.index("Shared on your tailnet")
 
 
 # ── CLI flags ────────────────────────────────────────────────
@@ -524,3 +543,4 @@ def test_a_share_removed_outside_anyscribe_reads_as_failed(client, fake):
 def test_get_with_sharing_off_never_calls_tailscale(client, fake):
     client.get("/api/tailnet")
     assert fake.calls == []
+

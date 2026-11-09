@@ -32,9 +32,10 @@ MAC_APP_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 run_override: bool | None = None
 
 HANDMADE = "A share you set up yourself; anyscribe will leave it in place."
+# Past tense, no backticks: with sharing off anyscribe no longer looks, and the card shows plain text.
 LEFT_IN_PLACE = (
-    "Your own Tailscale rule on port {port} is still there, but anyscribe now refuses it. "
-    "`tailscale serve --https={port} off` removes it."
+    "anyscribe left your own Tailscale rule on port {port} in place and now refuses it. "
+    "To remove it: tailscale serve --https={port} off"
 )
 NO_LOGIN = "no login: anyone on your tailnet can use it"
 

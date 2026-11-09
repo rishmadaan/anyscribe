@@ -575,10 +575,12 @@ open, so the card stops showing it. Open Tailscale and sign in (or run
 <p>Not an error. You had already made the same <code>tailscale serve</code> rule by hand, so
 anyscribe uses it for the link and does not remove it when it stops. Remove it
 yourself with <code>tailscale serve --https=&lt;port&gt; off</code> when you no longer want it.</p>
-<h3 id="your-own-tailscale-rule-on-port-8457-is-still-there-but-anyscribe-now-refuses-it"><code>Your own Tailscale rule on port 8457 is still there, but anyscribe now refuses it.</code></h3>
+<h3 id="anyscribe-left-your-own-tailscale-rule-on-port-8457-in-place-and-now-refuses-it"><code>anyscribe left your own Tailscale rule on port 8457 in place and now refuses it.</code></h3>
 <p>You switched sharing off while the dashboard was using a rule you made by hand.
 anyscribe never removes your rule, but it stops answering on the tailnet link, so
-your other devices get a refusal instead of the dashboard. Remove the rule with
+your other devices get a refusal instead of the dashboard. With sharing off anyscribe
+no longer checks Tailscale, so this note stays until you flip the switch or restart,
+even if you have removed the rule since. To remove it, run
 <code>tailscale serve --https=8457 off</code> (your port number), or switch sharing back on.</p>
 <h3 id="anyscribe-only-answers-on-this-computers-own-address">"anyscribe only answers on this computer's own address..."</h3>
 <p>You opened the dashboard under a name it doesn't answer. It answers only at

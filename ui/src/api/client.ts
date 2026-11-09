@@ -201,12 +201,27 @@ export type TailnetState = {
   note: string | null;
   held: boolean; // the tailnet name is answered (the gate); the display may read failed meanwhile
   saved: boolean | null; // null: config.yaml could not be read
+  unknown?: boolean; // client only: a toggle failed and the live state couldn't be read back
 };
+
+/** A failed toggle; `state` is the server's live state when it could say. */
+export class TailnetError extends Error {
+  state?: TailnetState;
+  constructor(message: string, state?: TailnetState) {
+    super(message);
+    this.state = state;
+  }
+}
 
 export const getTailnet = () => fetchJSON<TailnetState>("/tailnet");
 
-export const setTailnet = (enabled: boolean) =>
-  fetchJSON<TailnetState>("/tailnet", {
+export const setTailnet = async (enabled: boolean): Promise<TailnetState> => {
+  const res = await fetch(`${BASE}/tailnet`, {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
+  if (res.ok) return res.json();
+  const body = await res.json().catch(() => null);
+  throw new TailnetError(`${res.status}: ${body?.detail ?? res.statusText}`, body?.state);
+};

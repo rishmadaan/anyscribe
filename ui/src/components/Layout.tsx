@@ -91,7 +91,7 @@ export default function Layout() {
               </p>
               <TailnetLink url={tailnet.url} compact />
             </div>
-          ) : tailnet?.enabled && !(REMOTE && tailnet.held) ? (
+          ) : tailnet?.enabled && !tailnet.unknown && !(REMOTE && tailnet.held) ? (
             // Read over the held link, it plainly works: no failure line.
             <Link
               to="/settings"

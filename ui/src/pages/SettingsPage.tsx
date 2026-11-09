@@ -15,6 +15,7 @@ import {
   teardownLocal,
   getAutostart,
   setAutostart,
+  TailnetError,
 } from "../api/client";
 import type { AutostartState } from "../api/client";
 import type {
@@ -1457,10 +1458,22 @@ function TailnetCard() {
         setLeftThisDevice(true);
       }
     } catch (e) {
-      // From another device the connection can drop with the share itself (fetch throws a
-      // TypeError): that is success. Any HTTP error means nothing changed, so show it.
-      if (turningOff && REMOTE && e instanceof TypeError) setLeftThisDevice(true);
-      else setErr(e instanceof Error ? e.message : "Could not change tailnet sharing");
+      const live = e instanceof TailnetError ? e.state : undefined;
+      const msg = e instanceof Error ? e.message : "Could not change tailnet sharing";
+      if (live && turningOff && REMOTE && !live.held) {
+        // The server says this link is refused now (a failed save still switches off first).
+        setLeftNote(live.note);
+        setLeftThisDevice(true);
+      } else if (live) {
+        setErr(msg);
+      } else if (turningOff && REMOTE) {
+        setErr(
+          "This device lost the connection, which usually means sharing is now off. " +
+            "Check on the computer running anyscribe.",
+        );
+      } else {
+        setErr(`anyscribe couldn't confirm whether sharing changed (${msg}). Reload this page.`);
+      }
     } finally {
       setBusy(false);
     }
@@ -1516,6 +1529,10 @@ function TailnetCard() {
 
         {busy ? (
           <p className="text-xs text-text-secondary">Asking Tailscale…</p>
+        ) : state.unknown ? (
+          <p className="text-xs text-text-secondary">
+            anyscribe couldn't read the current sharing state.
+          </p>
         ) : state.active && state.url ? (
           <div className="rounded-md border border-green/20 bg-green/5 px-3 py-2 space-y-1">
             <p className="text-xs text-green">On. Open it from your other computers on your tailnet:</p>

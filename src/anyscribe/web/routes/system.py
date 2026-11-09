@@ -6,6 +6,7 @@ import sys
 from importlib.util import find_spec
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -79,8 +80,10 @@ def tailnet_status(request: Request) -> dict:
 def set_tailnet(req: TailnetRequest, request: Request) -> dict:
     """Save the setting and apply it to this running server now (sync: runs in the threadpool)."""
     outcome = request.app.state.tailnet.save_and_apply(req.enabled)
-    if not outcome.ok:
-        raise HTTPException(status_code=500, detail=outcome.error)
+    if not outcome.ok:  # the live state rides along: a failed switch-off has still revoked
+        return JSONResponse(
+            status_code=500, content={"detail": outcome.error, "state": tailnet_state(request)}
+        )
     return tailnet_state(request)
 
 

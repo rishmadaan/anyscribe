@@ -405,7 +405,7 @@ class Share:
         self._hold += 1
 
     def save_and_apply(self, wanted: bool):
-        """Save the setting and apply it under one lock, so saved and live cannot drift apart.
+        """Save the setting and apply it under one lock, so two changes never interleave.
 
         Returns config_set's SetOutcome. Switching off revokes before saving, so a failed
         save still leaves sharing off; switching on applies only after the save succeeded.

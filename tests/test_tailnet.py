@@ -1123,10 +1123,11 @@ def test_switch_off_with_a_broken_config_still_revokes(fake, lifecycle, config_r
             "/api/tailnet", json={"enabled": False}
         )
         seen["put"] = (r.status_code, "Sharing is off for this running dashboard" in r.text)
+        seen["state_held"] = r.json()["state"]["held"]  # the live state rides along
         seen["held"] = app.state.tailnet.held
         seen["after"] = _gate_rows(app)[f"{HOST}:8467"]
 
     lifecycle["during"] = during
     run(port=8467, open_browser=False)
-    assert seen == {"before": 200, "put": (500, True), "held": None, "after": 403}
+    assert seen == {"before": 200, "put": (500, True), "state_held": False, "held": None, "after": 403}
     assert tailnet.port_state(fake.config, 8467) == "free"  # anyscribe's own rule was removed

@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { getTailnet, setTailnet } from "../api/client";
+import { TailnetError, getTailnet, setTailnet } from "../api/client";
 import type { TailnetState } from "../api/client";
 
 const EVENT = "anyscribe:tailnet";
@@ -22,7 +22,11 @@ export function useTailnet() {
         .then(setState)
         .catch(() => setState(null));
     load();
-    const onChange = (e: Event) => setState((e as CustomEvent<TailnetState>).detail);
+    // A null detail means "unknown": keep the switch where it was, drop every live claim.
+    const onChange = (e: Event) => {
+      const d = (e as CustomEvent<TailnetState | null>).detail;
+      setState((prev) => d ?? (prev && { ...prev, active: false, url: null, unknown: true }));
+    };
     window.addEventListener(EVENT, onChange);
     // The server re-checks a live share on every read, so coming back to the window is enough.
     window.addEventListener("focus", load);
@@ -33,16 +37,19 @@ export function useTailnet() {
   }, []);
 
   const change = useCallback(async (enabled: boolean) => {
-    const broadcast = (s: TailnetState) =>
+    const broadcast = (s: TailnetState | null) =>
       window.dispatchEvent(new CustomEvent(EVENT, { detail: s }));
     try {
       const next = await setTailnet(enabled);
       broadcast(next);
       return next;
     } catch (err) {
-      // A failed switch-off has still revoked the link: show the live state, keep the error.
-      await getTailnet().then(broadcast, () => {});
-      throw err;
+      // Show only what the server says: its live state from the error, else a fresh read,
+      // else unknown. The card words its message from whichever one arrived.
+      const live =
+        (err instanceof TailnetError && err.state) || (await getTailnet().catch(() => undefined));
+      broadcast(live ?? null);
+      throw new TailnetError(err instanceof Error ? err.message : String(err), live);
     }
   }, []);
 

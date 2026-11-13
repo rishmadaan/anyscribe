@@ -85,7 +85,8 @@ class ElevenLabsProvider(TranscriptionProvider):
         segments: list[TranscriptSegment] = []
         # ElevenLabs sends the gaps between words as their own {"type": "spacing"} tokens;
         # keeping them tripled every space and halved each segment's real word count.
-        words = [w for w in data.get("words", []) if w.get("type") != "spacing"]
+        tokens = data.get("words", [])
+        words = [w for w in tokens if w.get("type") != "spacing"]
 
         if words:
             # Group words into ~30-word segments for readability
@@ -105,7 +106,8 @@ class ElevenLabsProvider(TranscriptionProvider):
                         )
                     )
 
-        duration = words[-1].get("end") if words else None
+        # Duration reads every token, so trailing silence sent as spacing still counts.
+        duration = tokens[-1].get("end") if tokens else None
 
         return TranscriptResult(
             text=text,

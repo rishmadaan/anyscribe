@@ -398,6 +398,16 @@ class TestElevenLabs:
         ]
         assert result.duration == 32.0
 
+    def test_trailing_spacing_token_still_counts_toward_duration(self, audio, monkeypatch):
+        tokens = [
+            {"text": "hello", "type": "word", "start": 0.2, "end": 1.0},
+            {"text": " ", "type": "spacing", "start": 1.0, "end": 2.0},
+        ]
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "hello", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert result.duration == 2.0
+        assert [(s.text, s.start, s.end) for s in result.segments] == [("hello", 0.2, 1.0)]
+
     def test_auto_language_omits_code(self, audio, monkeypatch):
         calls = stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "language_code": "en"}))
         ElevenLabsProvider().transcribe(audio)

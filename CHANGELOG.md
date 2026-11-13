@@ -11,6 +11,24 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## Unreleased
+
+**Fixed**
+- **ElevenLabs transcripts had three spaces between every word, and timestamped
+  lines were half as long as they should be.** Lines now hold about 30 words
+  with single spaces, as documented. Transcripts you already made keep their
+  extra spaces; they are invisible in Obsidian's reading view, and
+  `anyscribe "<url>" --force` makes a fresh copy.
+- **The dashboard's company logo and footer artwork were missing** (a broken
+  image in the sidebar, no drawings along the bottom) in every release since
+  0.16.0. Both are back.
+
+**Changed**
+- The website opens with a short demo video of the dashboard, and the README
+  screenshot shows the current name.
+
+---
+
 ## 0.18.2 — 2026-11-09
 
 **Added**

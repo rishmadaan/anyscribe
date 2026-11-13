@@ -15,6 +15,7 @@ build/
 # Media files (downloaded content)
 *.mp3
 *.mp4
+!landing/assets/*.mp4
 *.m4a
 *.wav
 *.ogg

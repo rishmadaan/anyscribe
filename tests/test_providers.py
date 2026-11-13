@@ -383,6 +383,21 @@ class TestElevenLabs:
         assert call["data"]["language_code"] == "hi"
         assert call["headers"]["xi-api-key"] == "key-elevenlabs"
 
+    def test_spacing_tokens_do_not_pad_or_shorten_segments(self, audio, monkeypatch):
+        # Real responses put a {"text": " ", "type": "spacing"} token between every word.
+        tokens = []
+        for i in range(31):
+            tokens.append({"text": f"w{i}", "type": "word", "start": float(i), "end": i + 0.5})
+            tokens.append({"text": " ", "type": "spacing", "start": i + 0.5, "end": i + 1.0})
+        tokens.append({"text": "[bell dings]", "type": "audio_event", "start": 31.0, "end": 32.0})
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert [s.text for s in result.segments] == [
+            " ".join(f"w{i}" for i in range(30)),
+            "w30 [bell dings]",
+        ]
+        assert result.duration == 32.0
+
     def test_auto_language_omits_code(self, audio, monkeypatch):
         calls = stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "language_code": "en"}))
         ElevenLabsProvider().transcribe(audio)

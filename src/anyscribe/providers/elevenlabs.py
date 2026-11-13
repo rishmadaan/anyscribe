@@ -83,7 +83,9 @@ class ElevenLabsProvider(TranscriptionProvider):
 
         # Build segments from word-level data grouped by sentences
         segments: list[TranscriptSegment] = []
-        words = data.get("words", [])
+        # ElevenLabs sends the gaps between words as their own {"type": "spacing"} tokens;
+        # keeping them tripled every space and halved each segment's real word count.
+        words = [w for w in data.get("words", []) if w.get("type") != "spacing"]
 
         if words:
             # Group words into ~30-word segments for readability

@@ -45,12 +45,12 @@ shipped PNG. Watched it fail on the damaged files first.
 ## Hero demo video
 
 `landing/assets/anyscribe-demo.mp4` is one real take of the real dashboard,
-recorded by `scripts/record-demo.py` (Playwright driving Chrome against a
-throwaway home, so no personal history is on screen). Captions and the pointer
-are drawn into the page by the script. Two things in the take are staged and
-both are in the script: the page is zoomed 1.25x so text reads at hero size,
-and the scratch home prefix in displayed paths is replaced with `~`. The
-"ready in N seconds" caption is the measured time of that take.
+recorded with a Playwright script kept outside the repo (driving Chrome against
+a throwaway home, so no personal history is on screen). Captions and the
+pointer are drawn into the page by the script. Two things in the take are
+staged: the page is zoomed 1.25x so text reads at hero size, and the scratch
+home prefix in displayed paths is replaced with `~`. The "ready in N seconds"
+caption is the measured time of that take.
 
 The hero headline moved from the agent-first line to "Study any reel or video
 as text" (owner's call, 2026-11-13: lead with creators studying other

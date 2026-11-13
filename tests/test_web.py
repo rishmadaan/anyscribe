@@ -295,3 +295,14 @@ def test_put_config_instagram_browser(client):
     r = client.put("/api/config", json={"instagram": {"browser": ""}})
     assert r.status_code == 200
     assert r.json()["instagram"]["browser"] == ""
+
+
+def test_shipped_pngs_are_valid_png_files():
+    """A line-ending rule once rewrote these as text; browsers then drew nothing."""
+    from importlib.resources import files
+
+    static = files("anyscribe") / "web" / "static"
+    pngs = sorted(p for p in static.iterdir() if p.name.endswith(".png"))
+    assert pngs, "no PNGs found in web/static"
+    broken = [p.name for p in pngs if p.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n"]
+    assert broken == []

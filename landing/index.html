@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>anyscribe: let your AI agent transcribe anything</title>
-<meta name="description" content="anyscribe turns any spoken thing (YouTube, Instagram, a voice memo, a meeting) into searchable markdown on your own machine. Built so your AI agent can run it for you, with a clean local dashboard and a full CLI when you want your hands on it. Open source, local-first, seven engines." />
-<meta property="og:title" content="anyscribe: let your AI agent transcribe anything" />
-<meta property="og:description" content="Let your AI agent transcribe any video, reel, or recording into clean markdown on your own machine. A clean local dashboard when you want to see it, a full CLI when you want your hands on it." />
+<title>anyscribe: study any reel or video as text</title>
+<meta name="description" content="anyscribe turns Instagram reels, YouTube videos, podcasts and your own recordings into clean, searchable text on your own machine, in English, Hindi or Hinglish. Use the local dashboard, the CLI, or let your AI agent run it for you. Open source, local-first, seven engines." />
+<meta property="og:title" content="anyscribe: study any reel or video as text" />
+<meta property="og:description" content="Turn any reel, video or recording into clean, searchable text on your own machine, in English, Hindi or Hinglish. A local dashboard, a full CLI, or your AI agent runs it for you." />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230E0D0B'/><circle cx='16' cy='16' r='4.5' fill='%23F5A524'/></svg>" />
 
@@ -182,7 +182,7 @@
 
   /* --- HERO ----------------------------------------------------- */
   .hero {
-    padding: clamp(32px, 5.5vh, 56px) 0 clamp(48px, 8vh, 88px); /* tight top: CTA must sit above the fold */
+    padding: clamp(32px, 5.5vh, 56px) 0 clamp(48px, 8vh, 88px); /* tight top: the demo video should start above the fold */
     position: relative;
     overflow: hidden;
   }
@@ -744,6 +744,12 @@
     padding: 4px 14px; border-radius: 100px;
   }
   .browser-shot { display: block; width: 100%; height: auto; }
+  .hero-demo { margin-top: clamp(24px, 3.5vh, 40px); margin-bottom: 0; }
+  .hero-demo-note {
+    margin: 12px 0 clamp(32px, 5vh, 56px);
+    font-family: var(--sans); font-size: 13px; line-height: 1.5;
+    color: var(--ink-3);
+  }
 
   .ui-points {
     margin-top: clamp(40px, 6vh, 64px);
@@ -1422,12 +1428,23 @@
     </div>
 
     <h1 class="hero-h">
-      Let your AI agent <span class="it">transcribe</span> <span class="amber">anything.</span>
+      Study any reel or video <span class="it">as</span> <span class="amber">text.</span>
     </h1>
 
     <p class="hero-lede">
-      anyscribe turns YouTube videos, reels, podcasts, and recordings into <span class="amber-underline">clean, searchable markdown</span> on your own machine. Built so <b>your AI agent can run it for you</b>, with a clean local dashboard when you want to see it, and a full CLI when you want your hands on it.
+      anyscribe turns Instagram reels, YouTube videos, podcasts and your own recordings into <span class="amber-underline">clean, searchable text</span> on your own machine, in English, Hindi or Hinglish. Read how the creators you follow open, pace and close their videos.
     </p>
+
+    <figure class="browser hero-demo">
+      <div class="browser-bar">
+        <span class="b-dot r"></span><span class="b-dot y"></span><span class="b-dot g"></span>
+        <span class="b-url">127.0.0.1:8457</span>
+      </div>
+      <video id="hero-demo" class="browser-shot" src="assets/anyscribe-demo.mp4" poster="assets/anyscribe-demo-poster.jpg"
+        width="1280" height="720" autoplay muted loop playsinline controls preload="metadata"
+        aria-label="A 43-second silent demo of the anyscribe dashboard: a reel link is pasted, transcribed in a few seconds, then opened from History as a timestamped transcript and copied."></video>
+    </figure>
+    <p class="hero-demo-note">Recorded with ElevenLabs, a cloud engine you connect with your own key, with timestamps switched on. The Local engine, an option during setup, is free and fully offline, and slower.</p>
 
     <ul class="hero-ways" aria-label="Three ways to use anyscribe">
       <li><span class="w-n">01</span><span class="w-l">With your AI agent</span><span class="w-d">Claude Code skill + MCP server</span></li>
@@ -1561,7 +1578,7 @@
         <span class="b-url">127.0.0.1:8457</span>
       </div>
       <img class="browser-shot" src="assets/scribe-ui.png" loading="lazy" width="1400" height="875"
-        alt="The anyscribe web UI: a dark dashboard with a Transcribe, History, and Settings sidebar, a URL input reading paste a URL or file path, an amber Transcribe button, and a balanced hi-Latn clean options row." />
+        alt="The anyscribe web UI: a dark dashboard with a Transcribe, History, and Settings sidebar, a URL input reading paste a URL or file path, an amber Transcribe button, and a balanced auto clean options row." />
     </figure>
 
     <div class="ui-points">
@@ -2063,6 +2080,12 @@
 
 <!-- ============================================================== -->
 <script>
+  /* --- hero demo: no autoplay for people who asked for less motion --- */
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const demo = document.getElementById('hero-demo');
+    demo.removeAttribute('autoplay'); demo.pause();
+  }
+
   /* --- copy to clipboard -------------------------------------- */
   const toast = document.getElementById('toast');
   const showToast = (msg) => {

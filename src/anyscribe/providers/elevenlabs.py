@@ -7,6 +7,7 @@ Docs: https://elevenlabs.io/docs/api-reference/speech-to-text
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -83,14 +84,20 @@ class ElevenLabsProvider(TranscriptionProvider):
 
         # Build segments from word-level data grouped by sentences
         segments: list[TranscriptSegment] = []
-        words = data.get("words", [])
+        # ElevenLabs sends the gaps between words as their own {"type": "spacing"} tokens;
+        # keeping them tripled every space and halved each segment's real word count.
+        tokens = data.get("words", [])
+        words = [w for w in tokens if w.get("type") != "spacing"]
 
         if words:
             # Group words into ~30-word segments for readability
             chunk_size = 30
             for i in range(0, len(words), chunk_size):
                 word_chunk = words[i : i + chunk_size]
-                seg_text = " ".join(w.get("text", "") for w in word_chunk).strip()
+                # Collapse runs of spaces: token text can carry its own padding.
+                seg_text = re.sub(
+                    r" {2,}", " ", " ".join(w.get("text", "") for w in word_chunk)
+                ).strip()
                 start = word_chunk[0].get("start", 0)
                 end = word_chunk[-1].get("end", 0)
                 if seg_text:
@@ -103,7 +110,8 @@ class ElevenLabsProvider(TranscriptionProvider):
                         )
                     )
 
-        duration = words[-1].get("end") if words else None
+        # Duration reads every token, so trailing silence sent as spacing still counts.
+        duration = tokens[-1].get("end") if tokens else None
 
         return TranscriptResult(
             text=text,

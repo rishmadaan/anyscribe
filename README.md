@@ -1,6 +1,6 @@
 # anyscribe
 
-**Let your AI agent transcribe anything.** Turns YouTube videos, Instagram reels, and local audio/video files into structured, searchable markdown, browsable in Obsidian.
+**Study any reel or video as text.** Turns Instagram reels, YouTube videos, and local audio/video files into structured, searchable markdown, in English, Hindi or Hinglish, browsable in Obsidian.
 
 Built agent-first, with three ways to reach it, in priority order:
 

@@ -383,6 +383,42 @@ class TestElevenLabs:
         assert call["data"]["language_code"] == "hi"
         assert call["headers"]["xi-api-key"] == "key-elevenlabs"
 
+    def test_spacing_tokens_do_not_pad_or_shorten_segments(self, audio, monkeypatch):
+        # Real responses put a {"text": " ", "type": "spacing"} token between every word.
+        tokens = []
+        for i in range(31):
+            tokens.append({"text": f"w{i}", "type": "word", "start": float(i), "end": i + 0.5})
+            tokens.append({"text": " ", "type": "spacing", "start": i + 0.5, "end": i + 1.0})
+        tokens.append({"text": "[bell dings]", "type": "audio_event", "start": 31.0, "end": 32.0})
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert [s.text for s in result.segments] == [
+            " ".join(f"w{i}" for i in range(30)),
+            "w30 [bell dings]",
+        ]
+        assert result.duration == 32.0
+
+    def test_trailing_spacing_token_still_counts_toward_duration(self, audio, monkeypatch):
+        tokens = [
+            {"text": "hello", "type": "word", "start": 0.2, "end": 1.0},
+            {"text": " ", "type": "spacing", "start": 1.0, "end": 2.0},
+        ]
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "hello", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert result.duration == 2.0
+        assert [(s.text, s.start, s.end) for s in result.segments] == [("hello", 0.2, 1.0)]
+
+    def test_padded_token_text_never_leaves_double_spaces(self, audio, monkeypatch):
+        tokens = [
+            {"text": "hello ", "type": "word", "start": 0.0, "end": 0.5},
+            {"text": " ", "type": "spacing", "start": 0.5, "end": 0.6},
+            {"text": " world", "type": "word", "start": 0.6, "end": 1.0},
+            {"text": " [bell dings] ", "type": "audio_event", "start": 1.0, "end": 2.0},
+        ]
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert [s.text for s in result.segments] == ["hello world [bell dings]"]
+
     def test_auto_language_omits_code(self, audio, monkeypatch):
         calls = stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "language_code": "en"}))
         ElevenLabsProvider().transcribe(audio)

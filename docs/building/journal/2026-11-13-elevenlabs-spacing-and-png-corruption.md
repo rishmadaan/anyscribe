@@ -47,9 +47,10 @@ shipped PNG. Watched it fail on the damaged files first.
 `landing/assets/anyscribe-demo.mp4` is one real take of the real dashboard,
 recorded with a Playwright script kept outside the repo (driving Chrome against
 a throwaway home, so no personal history is on screen). Captions and the
-pointer are drawn into the page by the script. Two things in the take are
-staged: the page is zoomed 1.25x so text reads at hero size, and the scratch
-home prefix in displayed paths is replaced with `~`. The "ready in N seconds"
+pointer are drawn into the page by the script. Three things in the take are
+staged: the page is zoomed 1.25x so text reads at hero size, the scratch home
+prefix in displayed paths is shown as `~`, and two earlier transcripts were
+copied into the throwaway home so History is not empty. The "ready in N seconds"
 caption is the measured time of that take.
 
 The hero headline moved from the agent-first line to "Study any reel or video

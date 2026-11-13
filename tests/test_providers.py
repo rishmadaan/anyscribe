@@ -408,6 +408,17 @@ class TestElevenLabs:
         assert result.duration == 2.0
         assert [(s.text, s.start, s.end) for s in result.segments] == [("hello", 0.2, 1.0)]
 
+    def test_padded_token_text_never_leaves_double_spaces(self, audio, monkeypatch):
+        tokens = [
+            {"text": "hello ", "type": "word", "start": 0.0, "end": 0.5},
+            {"text": " ", "type": "spacing", "start": 0.5, "end": 0.6},
+            {"text": " world", "type": "word", "start": 0.6, "end": 1.0},
+            {"text": " [bell dings] ", "type": "audio_event", "start": 1.0, "end": 2.0},
+        ]
+        stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "words": tokens}))
+        result = ElevenLabsProvider().transcribe(audio)
+        assert [s.text for s in result.segments] == ["hello world [bell dings]"]
+
     def test_auto_language_omits_code(self, audio, monkeypatch):
         calls = stub_post(monkeypatch, FakeResponse(json_data={"text": "x", "language_code": "en"}))
         ElevenLabsProvider().transcribe(audio)

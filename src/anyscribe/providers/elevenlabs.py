@@ -7,6 +7,7 @@ Docs: https://elevenlabs.io/docs/api-reference/speech-to-text
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -93,7 +94,10 @@ class ElevenLabsProvider(TranscriptionProvider):
             chunk_size = 30
             for i in range(0, len(words), chunk_size):
                 word_chunk = words[i : i + chunk_size]
-                seg_text = " ".join(w.get("text", "") for w in word_chunk).strip()
+                # Collapse runs of spaces: token text can carry its own padding.
+                seg_text = re.sub(
+                    r" {2,}", " ", " ".join(w.get("text", "") for w in word_chunk)
+                ).strip()
                 start = word_chunk[0].get("start", 0)
                 end = word_chunk[-1].get("end", 0)
                 if seg_text:

@@ -4,3 +4,8 @@ ui/**/* text eol=lf
 src/anyscribe/web/static/**/*.html text eol=lf
 src/anyscribe/web/static/**/*.css text eol=lf
 src/anyscribe/web/static/**/*.js text eol=lf
+
+# Images are binary. Without this the ui/ text rule above rewrites their bytes and breaks them.
+*.png binary
+*.mp4 binary
+*.webm binary

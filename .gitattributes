@@ -5,7 +5,14 @@ src/anyscribe/web/static/**/*.html text eol=lf
 src/anyscribe/web/static/**/*.css text eol=lf
 src/anyscribe/web/static/**/*.js text eol=lf
 
-# Images are binary. Without this the ui/ text rule above rewrites their bytes and breaks them.
+# Images, video and fonts are binary. Without this the ui/ text rule above rewrites their bytes and breaks them.
 *.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
 *.mp4 binary
 *.webm binary
+*.woff binary
+*.woff2 binary

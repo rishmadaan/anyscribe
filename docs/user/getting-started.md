@@ -27,14 +27,14 @@ By the end of this guide you will have:
 >
 > All three write the same config and land you in the same place. Transcriptions you start from one surface show up in all of them.
 
-> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and Whisper models when you set them up. It also checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote for a cloned install), and upgrades yt-dlp when your copy is over 60 days old. Local files with the local provider work with no internet connection, and your audio never leaves your machine.
+> **Everything runs locally.** The Web UI at `http://127.0.0.1:8457` is a server on your own machine — no cloud account, no sign-up. anyscribe has no analytics or telemetry. It goes online to download a source you point it at, to call the transcription provider you set up, and to install dependencies and local models (Parakeet, Whisper) when you set them up. It also checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote for a cloned install), and upgrades yt-dlp when your copy is over 60 days old. Local files with the local provider work with no internet connection, and your audio never leaves your machine.
 
 ## What you need
 
 - **A computer running macOS, Linux, or Windows** (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, yt-dlp, and Deno for YouTube.
 - **Then pick one engine:**
-  - **Free, offline** — the **local** provider. No API key, no internet, runs Whisper on your machine. Downloads a model once during setup.
-  - **Or an API key** from one provider — OpenAI is the default. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys); transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. Six cloud providers are supported alongside local — see [providers.md](providers.md) for the comparison.
+  - **On this computer (recommended)** — the **local** provider: free, private, no API key, works offline. It runs Parakeet v3 (English and 24 European languages, about 10 minutes per hour of audio on our 6-core test desktop) and Whisper Large v3 Turbo for Hindi and 95+ other languages. The setup wizard asks what language your audio is in and downloads the right model once (Parakeet v3 is 670 MB).
+  - **Or a cloud service** — needs an API key from one provider; OpenAI is the cloud default. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys); transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. Six cloud providers are supported alongside local — see [providers.md](providers.md) for the comparison.
 
 > **Later, if you want cheaper or more accurate:** each provider offers a few models you can switch between — see [providers.md](providers.md). You don't need to think about this to get started; the defaults are good.
 
@@ -102,9 +102,11 @@ anyscribe ui
 
 Opens a local dashboard at `http://127.0.0.1:8457`. A **setup wizard pops up on first launch**:
 
-1. **Pick a provider** — cards for `openai` (general purpose, multilingual), `deepgram` (fast, native diarization), `groq` (cheapest and fastest cloud Whisper), `elevenlabs` (high accuracy, 90+ languages), `sargam` (Sarvam AI, Indic languages), `openrouter` (many models, one API), plus `local` for free offline transcription on your own machine.
-2. **Paste your API key.** The **Test key** button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. This step is skipped for `local`.
-3. **Choose whether to also enable offline transcription** — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
+1. **How should anyscribe transcribe?** Two choices:
+   - **On this computer** (recommended) — free, private, no account or API key, works offline.
+   - **With a cloud service** — slightly more accurate on hard audio, adds speaker labels, very fast, paid per minute. Opens the list: `openai`, `deepgram`, `groq`, `elevenlabs`, `sargam` (Sarvam AI, Indic languages), `openrouter`.
+2. **On this computer:** answer **"What language is most of your audio?"** and anyscribe suggests a model in plain words, using what it detects about your computer (memory, disk space). English or European languages get **Parakeet v3** (~670 MB, about 10 minutes per hour of audio on our test desktop); Hindi gets **Whisper Large v3 Turbo**; a mix gets both. You can still pick any card; **More models** lists the rest with why they're tucked away. Click **Download … and set up**. A progress bar shows the download.
+   **With a cloud service:** paste your API key. The **Test key** button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. You can then also enable transcription on this computer, as a free backup (`-p local`).
 4. **Confirm your workspace** — where your transcripts live, default `~/anyscribe/`.
 
 Click around — no commands to memorize.
@@ -121,10 +123,10 @@ python -m anyscribe onboard      # Windows (first time — prints PATH fix)
 The wizard uses arrow-key selectors — navigate with **↑↓** and press **Enter** to select:
 
 1. **Check your system** — makes sure `yt-dlp` and `ffmpeg` are installed. Offers to install missing ones.
-2. **Choose your provider** — 7 options: OpenAI (default), OpenRouter, ElevenLabs, Sarvam AI, Deepgram, Groq, Local.
+2. **How should anyscribe transcribe?** — **On this computer** (default: free, private, no API key) or **With a cloud service** (then pick OpenAI, OpenRouter, ElevenLabs, Sarvam AI, Deepgram or Groq). On this computer asks **"What language is most of your audio?"**, prints a suggested model with the reason, and shows the four main models first (accuracy, speed, minutes per hour of audio, download size) with **More models** for the rest.
 3. **Choose that provider's model** — only if it offers more than one. The first is the recommended default; press Enter to take it.
 4. **Enter your API key** — stored locally at `~/.anyscribe/.env`. Never sent anywhere except your provider.
-5. **Also enable offline transcription?** (optional) — installs faster-whisper and a Whisper model so you can also transcribe offline, for free, whenever you choose it (`-p local`).
+5. **Also enable offline transcription?** (cloud users, optional) — the same language question and model choice, so you can also transcribe on this computer, for free, whenever you choose it (`-p local`).
 6. **Add more provider keys** (optional) — configure multiple providers now or later.
 7. **Configure Instagram** (optional) — choose which browser to read Instagram cookies from. Needed only for rate-limited or private reels.
 8. **Choose language** — auto-detect (default) or pick a specific language.

@@ -1,0 +1,12 @@
+# Target
+
+- Repo: `rishmadaan/anyscribe` (public). Live checkout `~/labs/projects/anyscribe` stays on `main`; do not touch it.
+- Worktree to build in: `~/labs/projects/anyscribe-wt/local-first`, branch `feat/local-first-parakeet`, based on `main` @ `b2bafa784ca232164f28d8662380ccd081b6fb73` (v0.18.3) plus the packet commit. Check `git rev-parse HEAD` and branch before editing; stop if they differ from what this file says.
+- In scope: `src/anyscribe/**` (providers, core, cli, web routes, mcp, skill references, `web/static` rebuilt from `ui/`), `ui/src/**`, `tests/**` (add new test files; edit existing ones only where behaviour intentionally changed), `pyproject.toml`, `docs/**`, `CHANGELOG.md`, `BACKLOG.md`, third-party notice files, `landing/docs/**` only if the docs build regenerates it.
+- Must not change: `install.sh`, `install.ps1` (unless the av pin genuinely needs it there; say why), `src/anyscribe/core/tailnet.py`, anything about cloud providers' behaviour, the version number in `pyproject.toml` / `__init__` (release is the lead's), `.github/`.
+- Test folders: `tests/` (pytest). Do not delete or weaken existing tests; if one encodes old behaviour this spec changes (e.g. `RECOMMENDED_MODEL == "large-v3-turbo"`), update it and list it in proof.md.
+- Never read or print `~/.anyscribe/.env` or any key. Never run anything against the owner's real `~/.anyscribe` or `~/anyscribe`: always `HOME=<throwaway>` and `HF_HOME=<throwaway>/hf` for real runs.
+- Shared model cache already populated (read-only reuse is fine to save downloads; copy, don't move): `<lead scratch folder>/hf` holds all 7 Whisper sizes, parakeet v2/v3 and silero VAD ONNX. Using `HF_HOME` pointed there is fine for runs that aren't proving a fresh download; prove at least one fresh download into an empty `HF_HOME` for parakeet-v3 + tiny.
+- Test audio (neutral copies, not to be committed): `<lead scratch folder>/testaudio/english-1.wav` (70 s English, starts mid-sentence: the punctuation case) and `.../testaudio/hindi-1.wav` (Hindi, ~30 s, FLEURS). A short public YouTube URL for the URL path: `https://www.youtube.com/watch?v=jNQXAC9IVRw`.
+- Python: use a venv inside the worktree or the scratch area (`uv venv`); Node for `ui/` per `ui/package.json` (`npm ci && npm run build` or the repo's documented build script).
+- Commit after each logical step on `feat/local-first-parakeet` only, with the repo's message style; end each message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push; do not open a PR (the lead does).

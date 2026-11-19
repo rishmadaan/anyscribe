@@ -10,6 +10,7 @@ from pathlib import Path
 from anyscribe.config.paths import TMP_DIR
 from anyscribe.config.settings import Settings
 from anyscribe.providers import PROVIDER_KEY_ENV, normalize_provider_name
+from anyscribe.providers.base import local_hint
 
 # Minimum free space required (500 MB)
 MIN_FREE_BYTES = 500 * 1024 * 1024
@@ -60,7 +61,7 @@ def preflight_check(settings: Settings, url: str) -> None:
         raise RuntimeError(
             f"{env_var} not set for provider '{provider}'.\n"
             f"  Fix: anyscribe config set {provider}_api_key YOUR_KEY\n"
-            f"  Or:  anyscribe onboard --force"
+            f"  Or:  anyscribe onboard --force" + local_hint()
         )
 
     # 3. Validate local file format before environment-dependent disk checks.

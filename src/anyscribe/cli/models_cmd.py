@@ -1,9 +1,11 @@
-"""``anyscribe model`` — day-to-day Whisper model cache management.
+"""``anyscribe model`` — day-to-day local model cache management.
 
-These commands operate on the HuggingFace cache directly. They never install
-or uninstall faster-whisper — that's ``anyscribe local setup/teardown``'s job.
-If local transcription isn't set up, pull/rm error cleanly and point at the
-right command; list still works (showing everything as not-cached).
+These commands operate on the HuggingFace cache directly. They never
+uninstall the engines — that's ``anyscribe local teardown``'s job. ``pull``
+installs the missing engine first when needed (an install from before
+Parakeet has faster-whisper but not onnx-asr). If local transcription isn't
+set up, rm/reinstall error cleanly and point at the right command; list
+still works (showing everything as not-cached).
 
 All commands support ``--json`` for agent consumption.
 """
@@ -21,8 +23,14 @@ from anyscribe.config.settings import load_config
 from anyscribe.providers.local_models import (
     MODEL_REPOS,
     MODEL_SIZES,
+    BENCHMARK_CAPTION,
     MODEL_SPECS,
+    RECOMMENDED_MODEL,
+    bytes_on_disk,
     delete_model,
+    display_name,
+    engine_importable,
+    engine_of,
     faster_whisper_importable,
     is_cached,
     list_cached_models,
@@ -35,7 +43,7 @@ err_console = Console(stderr=True)
 
 models_app = typer.Typer(
     name="model",
-    help="List, download, and delete local Whisper models.",
+    help="List, download, and delete local transcription models (Parakeet, Whisper).",
     rich_markup_mode="rich",
     no_args_is_help=True,
 )
@@ -55,7 +63,7 @@ def _write_json_err(data) -> None:
 def model_list(
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]List[/bold] all Whisper models with cache status and disk usage."""
+    """[bold]List[/bold] all local models with ratings, cache status and disk usage."""
     settings = load_config()
     models = list_cached_models()
 
@@ -64,9 +72,11 @@ def model_list(
             {
                 "size": m["size"],
                 "cached": m["cached"],
+                "partial": m.get("partial", False),
                 "bytes": m["bytes"],
                 "repo": m["repo"],
                 "default": m["size"] == settings.local_model,
+                "recommended": m["size"] == RECOMMENDED_MODEL,
                 "spec": m["spec"],
             }
             for m in models
@@ -76,30 +86,51 @@ def model_list(
             err_console.print("hint: faster-whisper not installed — run `anyscribe local setup`")
         return
 
-    table = Table(title="Whisper models")
-    table.add_column("Size", style="bold")
-    table.add_column("Status")
-    table.add_column("Disk")
-    table.add_column("Download size")
-    table.add_column("Quality")
-
-    for m in models:
-        cached_mb = int(m["bytes"]) // (1024 * 1024) if m["cached"] else 0
-        status = "[green]cached[/green]" if m["cached"] else "[dim]not cached[/dim]"
-        marker = " (default)" if m["size"] == settings.local_model else ""
-        table.add_row(
-            f"{m['size']}{marker}",
-            status,
-            f"{cached_mb} MB" if m["cached"] else "—",
-            f"~{m['spec']['download_mb']} MB",
-            m["spec"]["quality"],
-        )
-    console.print(table)
+    console.print(models_table(models, settings.local_model))
     if not faster_whisper_importable():
         console.print(
             "\n[yellow]Local transcription is not set up.[/yellow] "
-            "Run [bold]anyscribe local setup --model base[/bold] to install."
+            f"Run [bold]anyscribe local setup --model {RECOMMENDED_MODEL}[/bold] to install."
         )
+
+
+def models_table(models: list[dict], default: str, title: str = "Local models") -> Table:
+    """The shared model table for ``model list`` and ``local status``."""
+    table = Table(title=title)
+    table.add_column("Model", style="bold")
+    table.add_column("Id", style="dim")
+    table.add_column("Accuracy", justify="right")
+    table.add_column("Speed", justify="right")
+    table.add_column("1 h audio", justify="right")
+    table.add_column("Download", justify="right")
+    table.add_column("Status")
+    for m in models:
+        spec = m["spec"]
+        marks = []
+        if m["size"] == default:
+            marks.append("[green]default[/green]")
+        if m["size"] == RECOMMENDED_MODEL:
+            marks.append("[yellow]recommended[/yellow]")
+        cached_mb = int(m["bytes"]) // (1024 * 1024)
+        if m["cached"]:
+            status = f"downloaded ({cached_mb} MB)"
+        elif m.get("partial"):
+            status = (
+                f"[yellow]incomplete ({cached_mb} MB): anyscribe model pull {m['size']}[/yellow]"
+            )
+        else:
+            status = "[dim]not downloaded[/dim]"
+        table.add_row(
+            display_name(m["size"]) + (" · " + ", ".join(marks) if marks else ""),
+            m["size"],
+            f"{spec['accuracy']}/5",
+            f"{spec['speed']}/5",
+            f"~{spec['min_per_hour']} min",
+            f"~{spec['download_mb']} MB",
+            status,
+        )
+    table.caption = f"{BENCHMARK_CAPTION} `anyscribe model info <id>` explains each one."
+    return table
 
 
 @models_app.command("pull")
@@ -107,7 +138,10 @@ def model_pull(
     size: str = typer.Argument(..., help="Model size to download."),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]Download[/bold] a Whisper model to the local cache. Idempotent."""
+    """[bold]Download[/bold] a local model to the cache. Idempotent.
+
+    A Parakeet model also fetches Whisper Tiny (~75 MB), the language-check helper.
+    """
     if size not in MODEL_SIZES:
         err = {"error": f"unknown size '{size}'", "choices": list(MODEL_SIZES)}
         if output_json:
@@ -132,6 +166,23 @@ def model_pull(
             )
         raise typer.Exit(code=2)
 
+    if engine_of(size) == "parakeet" and not engine_importable(size):
+        # set up before Parakeet existed: add onnx-asr now, on first pick
+        from anyscribe.core.local_setup import ensure_runtime
+
+        if not output_json:
+            console.print("[dim]• Installing the Parakeet engine (onnx-asr)…[/dim]")
+        failed = ensure_runtime()
+        if failed:
+            err = {"error": "engine install failed", "install": failed}
+            if output_json:
+                _write_json_err(err)
+            else:
+                err_console.print(
+                    f"[red]Engine install failed.[/red] Command: {' '.join(failed['command'])}"
+                )
+            raise typer.Exit(code=1)
+
     try:
         result = pull_model(size)
     except Exception as e:
@@ -150,6 +201,11 @@ def model_pull(
             console.print(f"[green]{size} already cached[/green] ({mb} MB).")
         else:
             console.print(f"[green]Downloaded {size}[/green] ({mb} MB).")
+        if result.get("helpers_downloaded"):
+            console.print(
+                "[dim]Also downloaded Whisper Tiny (~75 MB): the language check that "
+                "keeps Parakeet away from languages it can't transcribe.[/dim]"
+            )
 
 
 @models_app.command("rm")
@@ -163,7 +219,7 @@ def model_rm(
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]Remove[/bold] a cached Whisper model from disk."""
+    """[bold]Remove[/bold] a cached local model from disk."""
     if size not in MODEL_SIZES:
         err = {"error": f"unknown size '{size}'", "choices": list(MODEL_SIZES)}
         if output_json:
@@ -174,7 +230,7 @@ def model_rm(
             )
         raise typer.Exit(code=2)
 
-    if not is_cached(size):
+    if not bytes_on_disk(size):  # a partial download can be removed too
         payload = {"status": "not_present", "size": size, "bytes_freed": 0}
         if output_json:
             _write_json(payload)
@@ -217,7 +273,7 @@ def model_reinstall(
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]Reinstall[/bold] a Whisper model — delete + re-download in one step.
+    """[bold]Reinstall[/bold] a local model — delete + re-download in one step.
 
     Useful if cached weights look corrupted. If the model wasn't cached, this
     is equivalent to ``anyscribe model pull`` (no delete needed).
@@ -263,7 +319,7 @@ def model_reinstall(
             raise typer.Exit(code=0)
 
     bytes_freed = 0
-    if is_cached(size):
+    if bytes_on_disk(size):
         delete_result = delete_model(size)
         bytes_freed = int(delete_result.get("bytes_freed", 0))
 
@@ -311,7 +367,7 @@ def model_info(
     size: str = typer.Argument(..., help="Model size to inspect."),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]Inspect[/bold] a single Whisper model."""
+    """[bold]Inspect[/bold] a single local model."""
     try:
         validate_size(size)
     except ValueError as e:
@@ -323,17 +379,14 @@ def model_info(
         raise typer.Exit(code=2)
 
     cached = is_cached(size)
-    bytes_on_disk = 0
-    for entry in list_cached_models():
-        if entry["size"] == size:
-            bytes_on_disk = int(entry["bytes"])
-            break
+    on_disk = bytes_on_disk(size)
 
     settings = load_config()
     payload = {
         "size": size,
         "cached": cached,
-        "bytes": bytes_on_disk,
+        "partial": bool(on_disk) and not cached,
+        "bytes": on_disk,
         "repo": MODEL_REPOS[size],
         "default": size == settings.local_model,
         "spec": MODEL_SPECS[size],
@@ -341,14 +394,24 @@ def model_info(
     if output_json:
         _write_json(payload)
     else:
-        console.print(f"[bold]{size}[/bold]")
-        console.print(f"  Repo:     [cyan]{payload['repo']}[/cyan]")
-        console.print(f"  Status:   {'cached' if cached else 'not cached'}")
-        if cached:
-            console.print(f"  Disk:     {bytes_on_disk // (1024 * 1024)} MB")
-        console.print(f"  Download: ~{payload['spec']['download_mb']} MB")
-        console.print(f"  RAM:      ~{payload['spec']['ram_mb']} MB")
-        console.print(f"  Speed:    {payload['spec']['relative_speed']}")
-        console.print(f"  Quality:  {payload['spec']['quality']}")
+        spec = payload["spec"]
+        console.print(f"[bold]{spec['display_name']}[/bold] [dim]({size})[/dim]")
+        console.print(f"  For:       {spec['use_for']}")
+        console.print(f"  Languages: {spec['languages']}")
+        console.print(f"  Accuracy:  {spec['accuracy']}/5  (English word error {spec['en_wer']}%)")
+        console.print(
+            f"  Speed:     {spec['speed']}/5  (1 hour of audio ≈ {spec['min_per_hour']} min)"
+        )
+        console.print(f"  Download:  ~{spec['download_mb']} MB")
+        console.print(f"  Memory:    ~{spec['ram_mb']} MB while transcribing")
+        if spec["tucked"]:
+            console.print(f"  Note:      {spec['tucked']}")
+        console.print(f"  Repo:      [cyan]{payload['repo']}[/cyan]")
+        state = "downloaded" if cached else "incomplete" if payload["partial"] else "not downloaded"
+        console.print(f"  Status:    {state}")
+        if on_disk:
+            console.print(f"  Disk:      {on_disk // (1024 * 1024)} MB")
+        if payload["partial"]:
+            console.print(f"  [yellow]Resume the download: anyscribe model pull {size}[/yellow]")
         if payload["default"]:
             console.print("  [green]This is the default model.[/green]")

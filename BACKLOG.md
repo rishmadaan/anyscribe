@@ -134,6 +134,7 @@ All features originally planned for v0.2.0–v0.5.0, built in one session:
 - [x] ElevenLabs provider — Scribe v1 STT API, word-level timestamps
 - [x] Sargam/Sarvam provider — Indic languages, auto-chunks to 30s for REST API limit
 - [x] Local provider — faster-whisper, CPU/GPU, no API key, offline
+- [x] Local-first (unreleased): Parakeet v3/v2 via onnx-asr, recommended `parakeet-v3`; Whisper Tiny language guard with notes on every surface; measured `MODEL_SPECS` registry + one Web UI picker + "Help me choose" (`core/local_recommend.py`); `av<19` pin, uv install fallback, English punctuation prompt, `model:` recorded for local runs, loaded-model cache (journal 2026-11-19)
 - [x] `ascli batch <file>` — batch transcribe URLs from a file
 - [x] Updated user docs for all new commands
 - [x] Per-provider API key management in onboarding wizard

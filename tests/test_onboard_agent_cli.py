@@ -228,3 +228,31 @@ class TestModelPicker:
         with patch("anyscribe.cli.onboard.bselect", side_effect=lambda opts, **kw: opts[-1]):
             _pick_model("openrouter", settings)
         assert settings.provider_models["openrouter"] == "vendor/custom"
+
+
+def test_yes_human_output_says_restart_when_setup_replaced_a_loaded_engine(tmp_path, monkeypatch):
+    from anyscribe.core.local_setup import RESTART_MESSAGE
+
+    monkeypatch.setattr("anyscribe.cli.onboard.CONFIG_FILE", tmp_path / "config.yaml")
+
+    def result(restart):
+        return {
+            "status": "onboarded",
+            "provider": "local",
+            "quality": "custom",
+            "model": "parakeet-v3",
+            "workspace": str(tmp_path / "vault"),
+            "local_enabled": True,
+            "api_keys_set": [],
+            "skill_installed": False,
+            "local_setup": {"status": "set_up", "restart_needed": restart},
+            "config_file": str(tmp_path / "config.yaml"),
+        }
+
+    args = ["--yes", "--provider", "local", "--local-model", "parakeet-v3"]
+    with patch("anyscribe.core.onboard_headless.run_headless_onboard", return_value=result(True)):
+        out = runner.invoke(_make_app(), args)
+    assert out.exit_code == 0 and RESTART_MESSAGE in out.stdout
+    with patch("anyscribe.core.onboard_headless.run_headless_onboard", return_value=result(False)):
+        out = runner.invoke(_make_app(), args)
+    assert out.exit_code == 0 and RESTART_MESSAGE not in out.stdout

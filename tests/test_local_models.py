@@ -50,9 +50,9 @@ def test_is_cached_short_circuits_when_hub_missing():
         assert local_models.is_cached("base") is False
 
 
-def test_any_model_cached_false_when_hub_missing():
+def test_any_model_runnable_false_when_hub_missing():
     with patch.object(local_models, "_safe_import_hub", return_value=None):
-        assert local_models.any_model_cached() is False
+        assert local_models.any_model_runnable() is False
 
 
 def test_delete_model_no_op_when_hub_missing():

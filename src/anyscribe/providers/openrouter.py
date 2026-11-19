@@ -18,6 +18,7 @@ import httpx
 
 from anyscribe.core.errors import classify_api_error, with_retry
 from anyscribe.providers.base import (
+    local_hint,
     TranscriptionProvider,
     TranscriptResult,
 )
@@ -45,7 +46,7 @@ class OpenRouterProvider(TranscriptionProvider):
     def _get_api_key(self) -> str:
         key = os.environ.get("OPENROUTER_API_KEY", "")
         if not key:
-            raise RuntimeError("OPENROUTER_API_KEY not set. Add it to ~/.anyscribe/.env")
+            raise RuntimeError("OPENROUTER_API_KEY not set. Add it to ~/.anyscribe/.env" + local_hint())
         return key
 
     @with_retry()

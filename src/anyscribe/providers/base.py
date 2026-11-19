@@ -7,6 +7,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+# Names the path that also switches the provider (both wizards set provider:
+# local); `anyscribe local setup` alone only prepares the engine.
+LOCAL_HINT = (
+    "Or transcribe free on this computer, no key needed: run `anyscribe onboard --force` and "
+    "choose On this computer (in the dashboard: Settings, then Run setup wizard)."
+)
+
+
+def local_hint() -> str:
+    """The free local option, as an extra line, when no cloud key is set at all."""
+    import os
+
+    from anyscribe.providers import PROVIDER_KEY_ENV
+
+    if any(os.environ.get(env) for env in PROVIDER_KEY_ENV.values() if env):
+        return ""
+    return "\n" + LOCAL_HINT
+
 
 @dataclass
 class TranscriptSegment:
@@ -28,6 +46,10 @@ class TranscriptResult:
     duration: float | None = None  # seconds
     segments: list[TranscriptSegment] = field(default_factory=list)
     word_count: int = 0
+    # Set by providers that choose the model at run time (local): the model
+    # that actually ran, and any switch it made (shown on every surface).
+    model: str | None = None
+    notes: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.word_count == 0 and self.text:

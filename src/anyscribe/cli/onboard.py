@@ -11,6 +11,7 @@ import typer
 from beaupy import confirm as bconfirm, select as bselect
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
 
 from anyscribe.config.paths import (
     APP_HOME,
@@ -23,13 +24,14 @@ from anyscribe.config.paths import (
 )
 from anyscribe.config.settings import Settings, save_config, save_env, load_config, load_env
 from anyscribe.core.deps import check_and_install
-from anyscribe.core.local_setup import run_setup as run_local_setup
+from anyscribe.core.local_setup import RESTART_MESSAGE, run_setup as run_local_setup
 from anyscribe.downloaders.instagram import SUPPORTED_BROWSERS
 from anyscribe.providers import get_models
 from anyscribe.providers.local_models import (
     MODEL_SIZES,
     MODEL_SPECS,
-    RECOMMENDED_MODEL,
+    featured_models,
+    list_cached_models,
 )
 from anyscribe.vault.scaffold import create_vault
 
@@ -151,6 +153,10 @@ def _run_headless(
         )
         if result["local_enabled"]:
             console.print("  Local transcription ready.")
+            if (result.get("local_setup") or {}).get("restart_needed"):
+                console.print(
+                    f"  [yellow]{RESTART_MESSAGE}[/yellow] (Stop any running anyscribe ui first.)"
+                )
 
 
 def _mask_key(value: str) -> str:
@@ -201,7 +207,7 @@ PROVIDER_INFO = {
         "key_url": "https://console.groq.com/keys",
     },
     "local": {
-        "label": "Local (faster-whisper)",
+        "label": "Local (Parakeet / Whisper)",
         "description": "Offline, free, runs on your machine (CPU or GPU)",
         "env_var": None,
         "key_url": None,
@@ -215,52 +221,104 @@ PROVIDER_OPTIONS = [
 PROVIDER_NAMES = list(PROVIDER_INFO.keys())
 
 
+def _model_option(model_id: str) -> str:
+    spec = MODEL_SPECS[model_id]
+    badge = f" [yellow]({spec['badge']})[/yellow]" if spec["badge"] else ""
+    return (
+        f"[cyan]{spec['display_name']}[/cyan]{badge} — {spec['use_for']}"
+        f" [dim]· accuracy {spec['accuracy']}/5 · speed {spec['speed']}/5"
+        f" · 1 h audio ≈ {spec['min_per_hour']} min · ~{spec['download_mb']} MB[/dim]"
+    )
+
+
+def _ask_language() -> str:
+    """The guided question; returns a LANGUAGE_ANSWERS key (English if skipped)."""
+    from anyscribe.core.local_recommend import LANGUAGE_ANSWERS
+
+    console.print("\n  [bold]What language is most of your audio?[/bold]\n")
+    keys = list(LANGUAGE_ANSWERS)
+    labels = list(LANGUAGE_ANSWERS.values())
+    picked = bselect(labels, cursor_index=0, cursor="❯ ", cursor_style="cyan")
+    return "english" if picked is None else keys[labels.index(picked)]
+
+
 def _offer_local_setup(settings: Settings, make_primary: bool) -> None:
-    """Interactive size picker + run_setup. Shared between 'picked local as
-    primary provider' and 'opted into offline as a secondary' paths.
+    """Guided question + model picker + run_setup. Shared between 'picked
+    local as primary provider' and 'opted into offline as a secondary' paths.
 
     make_primary=True is informational — the caller already set
     settings.provider. Setup itself never touches provider.
     """
+    from anyscribe.core.local_recommend import HINDI_SET_VS_AUTO, recommend
+    from anyscribe.core.local_setup import RESTART_MESSAGE
+    from anyscribe.providers.local_models import BENCHMARK_CAPTION, display_name, pull_model
+
     console.print(
         Panel(
-            "Offline transcription runs locally via faster-whisper — no API "
-            "key, no internet.\n"
-            "Pick a model size. Larger is more accurate but slower and bigger "
-            "on disk.\n\n"
-            f"[dim]Recommended: [bold]{RECOMMENDED_MODEL}[/bold] — near-best accuracy at "
-            f"good speed (~{MODEL_SPECS[RECOMMENDED_MODEL]['download_mb']} MB download). "
-            "On an older laptop, pick base.[/dim]",
+            "Local transcription runs on this computer: free, private, no API key,\n"
+            "works offline. One question first, so anyscribe can suggest a model.",
             title="Local Transcription",
             border_style="blue",
         )
     )
-    size_options = []
-    for size in MODEL_SIZES:
-        spec = MODEL_SPECS[size]
-        marker = " [dim](recommended)[/dim]" if size == RECOMMENDED_MODEL else ""
-        size_options.append(
-            f"[cyan]{size}[/cyan] — ~{spec['download_mb']} MB, {spec['quality']}{marker}"
-            f" [dim]· use it for {spec['use_for']}[/dim]"
+    cached = {m["size"] for m in list_cached_models() if m["cached"]}
+    rec = recommend(_ask_language(), cached=cached)
+    if rec["primary"] is None:
+        console.print(
+            Panel("\n".join(rec["reasons"]), title="Not enough disk space", border_style="red")
         )
-    default_idx = MODEL_SIZES.index(RECOMMENDED_MODEL)
-    console.print("  Use [bold]↑↓ arrow keys[/bold] to navigate, [bold]Enter[/bold] to select:\n")
-    selected = bselect(size_options, cursor_index=default_idx, cursor="❯ ", cursor_style="cyan")
-    chosen = RECOMMENDED_MODEL if selected is None else MODEL_SIZES[size_options.index(selected)]
-    console.print(f"\n  [green]Selected:[/green] {chosen}")
+        return
+    suggested = " + ".join(display_name(m) for m in [rec["primary"], *rec["also"]])
+    console.print(
+        Panel("\n".join(rec["reasons"]), title=f"Suggested: {suggested}", border_style="green")
+    )
+    if rec["set_language"] and bconfirm(
+        f"  Is most of your audio Hindi? Setting the language to Hindi makes Turbo "
+        f"{HINDI_SET_VS_AUTO} more accurate on it. (Every recording will then be treated "
+        "as Hindi.)"
+    ):
+        settings.language = rec["set_language"]
+        console.print("  [green]Language set to Hindi.[/green]")
 
-    console.print(f"  Installing faster-whisper and downloading [bold]{chosen}[/bold] model…")
+    featured = featured_models()
+    more = "More models (5) — older or slower options"
+    options = [_model_option(m) for m in featured] + [more]
+    default_idx = featured.index(rec["primary"]) if rec["primary"] in featured else 0
+    console.print(f"  [dim]{BENCHMARK_CAPTION}[/dim]")
+    console.print("  Use [bold]↑↓ arrow keys[/bold] to navigate, [bold]Enter[/bold] to select:\n")
+    selected = bselect(options, cursor_index=default_idx, cursor="❯ ", cursor_style="cyan")
+    if selected == more:
+        rest = [m for m in MODEL_SIZES if m not in featured]
+        rest_opts = [
+            f"[cyan]{MODEL_SPECS[m]['display_name']}[/cyan] — {MODEL_SPECS[m]['tucked']}"
+            f" [dim]· accuracy {MODEL_SPECS[m]['accuracy']}/5 · speed {MODEL_SPECS[m]['speed']}/5[/dim]"
+            for m in rest
+        ]
+        picked = bselect(rest_opts, cursor_index=0, cursor="❯ ", cursor_style="cyan")
+        chosen = rec["primary"] if picked is None else rest[rest_opts.index(picked)]
+    else:
+        chosen = rec["primary"] if selected is None else featured[options.index(selected)]
+    console.print(f"\n  [green]Selected:[/green] {MODEL_SPECS[chosen]['display_name']}")
+    if MODEL_SPECS[chosen]["engine"] == "parakeet":
+        console.print(
+            "  [dim]Also downloads Whisper Tiny (+75 MB): a language check that sends "
+            "audio Parakeet can't handle to Whisper instead.[/dim]"
+        )
+
+    console.print("  Installing the local engines and downloading the model…")
 
     def _progress(event: dict) -> None:
         name = event.get("event", "")
         if name == "installing_package":
             console.print(
-                f"    [dim]• Installing faster-whisper via {event.get('method', '?')}…[/dim]"
+                f"    [dim]• Installing faster-whisper and onnx-asr via "
+                f"{event.get('method', '?')}…[/dim]"
             )
         elif name == "package_installed":
-            console.print("    [green]• faster-whisper installed.[/green]")
+            console.print("    [green]• Engines installed.[/green]")
         elif name == "downloading_model":
-            console.print(f"    [dim]• Downloading {event.get('size', '?')} model…[/dim]")
+            size = event.get("size", "?")
+            console.print(f"    [dim]• Downloading {display_name(size)}…[/dim]")
         elif name == "model_downloaded":
             mb = int(event.get("bytes", 0)) // (1024 * 1024)
             console.print(f"    [green]• Model downloaded ({mb} MB).[/green]")
@@ -284,9 +342,42 @@ def _offer_local_setup(settings: Settings, make_primary: bool) -> None:
                 "complete — run [bold]anyscribe local setup --model "
                 f"{chosen}[/bold] to retry.[/yellow]"
             )
-    else:
+        return
+
+    # run_setup saved local_model to disk; keep the wizard's copy in step so
+    # its final save_config doesn't write the old value back.
+    settings.local_model = chosen
+    also_ready: list[str] = []
+    for extra in rec["also"] if chosen == rec["primary"] else []:
         console.print(
-            f"\n  [green]Local transcription ready.[/green] Default model: [bold]{chosen}[/bold]."
+            f"  Downloading {display_name(extra)} ({MODEL_SPECS[extra]['download_mb']} MB) "
+            "for the other language…"
+        )
+        try:
+            with Progress(
+                TextColumn("    {task.description}"),
+                BarColumn(),
+                DownloadColumn(),
+                console=console,
+            ) as bar:
+                task = bar.add_task(display_name(extra), total=None)
+                pull_model(
+                    extra, progress_cb=lambda d, t: bar.update(task, completed=d, total=t or None)
+                )
+            also_ready.append(extra)
+        except Exception as e:
+            console.print(
+                f"  [yellow]Couldn't download {display_name(extra)} ({e}). Hindi and other "
+                f"languages need it: [bold]anyscribe model pull {extra}[/bold][/yellow]"
+            )
+    also_txt = "".join(f" Also ready: {display_name(m)}." for m in also_ready)
+    console.print(
+        f"\n  [green]Local transcription ready.[/green] Default model: "
+        f"[bold]{display_name(chosen)}[/bold].{also_txt}"
+    )
+    if result.get("restart_needed"):
+        console.print(
+            f"  [yellow]{RESTART_MESSAGE}[/yellow] (Stop any running anyscribe ui first.)"
         )
 
 
@@ -388,7 +479,7 @@ def onboard(
     local_model: Optional[str] = typer.Option(
         None,
         "--local-model",
-        help="Whisper model size (required when --provider=local). "
+        help="Local model id (required when --provider=local), e.g. parakeet-v3. "
         f"Choices: {', '.join(MODEL_SIZES)}.",
     ),
     quality: Optional[str] = typer.Option(
@@ -519,8 +610,8 @@ def onboard(
     if change_provider:
         console.print(
             Panel(
-                "Choose your default transcription provider.\n"
-                "You can change this later with [bold]anyscribe config set provider <name>[/bold]",
+                "How should anyscribe transcribe?\n"
+                "You can change this any time with [bold]anyscribe config set provider <name>[/bold]",
                 title="Provider",
                 border_style="blue",
             )
@@ -528,19 +619,26 @@ def onboard(
         console.print(
             "  Use [bold]↑↓ arrow keys[/bold] to navigate, [bold]Enter[/bold] to select:\n"
         )
+        where_options = [
+            "[cyan]On this computer[/cyan] — free, private, no API key [dim](recommended)[/dim]",
+            "[cyan]With a cloud service[/cyan] — needs an API key; adds speaker labels, very fast",
+        ]
+        where_idx = 1 if reconfiguring and settings.provider != "local" else 0
+        where = bselect(where_options, cursor_index=where_idx, cursor="❯ ", cursor_style="cyan")
 
-        # Find current default index
-        default_idx = (
-            PROVIDER_NAMES.index(settings.provider) if settings.provider in PROVIDER_NAMES else 0
-        )
-        selected = bselect(
-            PROVIDER_OPTIONS, cursor_index=default_idx, cursor="❯ ", cursor_style="cyan"
-        )
-
-        if selected is None:
-            provider = "openai"
+        if where is None or where == where_options[0]:
+            provider = "local"
         else:
-            provider = PROVIDER_NAMES[PROVIDER_OPTIONS.index(selected)]
+            cloud_names = [n for n in PROVIDER_NAMES if n != "local"]
+            cloud_options = [PROVIDER_OPTIONS[PROVIDER_NAMES.index(n)] for n in cloud_names]
+            default_idx = (
+                cloud_names.index(settings.provider) if settings.provider in cloud_names else 0
+            )
+            console.print()
+            selected = bselect(
+                cloud_options, cursor_index=default_idx, cursor="❯ ", cursor_style="cyan"
+            )
+            provider = "openai" if selected is None else cloud_names[cloud_options.index(selected)]
         settings.provider = provider
         # Same invariant as core.config_set.set_value("provider", ...) — an
         # explicit pick only sticks if the quality tier stops overriding it.

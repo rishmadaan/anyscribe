@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from datetime import date
@@ -81,12 +82,16 @@ def write_transcript(
         f'duration: "{duration_str}"',
         f"language: {transcript.language}",
         f"provider: {settings.provider}",
+        *([f"model: {transcript.model}"] if transcript.model else []),
         f"date_processed: {today}",
         f"word_count: {word_count}",
         f'reading_time: "{reading_time}"',
     ]
     if settings.diarize:
         fm_lines.append("diarized: true")
+    if transcript.notes:
+        fm_lines.append("notes:")
+        fm_lines.extend(f"  - {json.dumps(n, ensure_ascii=False)}" for n in transcript.notes)
     fm_lines.extend(
         [
             "tags:",
@@ -113,6 +118,8 @@ def write_transcript(
     body_parts.append(
         f"**Duration:** {duration_str} | **Words:** {word_count} | **Reading time:** {reading_time}\n"
     )
+    for note in transcript.notes:
+        body_parts.append(f"> **Note:** {note}\n")
     body_parts.append("\n---\n")
 
     # Transcript body — format depends on output_format setting

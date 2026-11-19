@@ -41,7 +41,7 @@ anyscribe "url" -p groq -m whisper-large-v3          # higher accuracy than the 
 anyscribe "url" -p openrouter -m google/gemini-2.5-flash
 ```
 
-Unknown models are rejected before any download or API call, with the valid list in the error — **except `openrouter`**, which accepts any slug (including anything in `extra_models.openrouter`) and only fails at the API. Providers with one model (`elevenlabs`, `sargam`) accept only that model. `local` has no `-m`: use `anyscribe local setup --model <size>` or `anyscribe config set local_model <size>`.
+Unknown models are rejected before any download or API call, with the valid list in the error — **except `openrouter`**, which accepts any slug (including anything in `extra_models.openrouter`) and only fails at the API. Providers with one model (`elevenlabs`, `sargam`) accept only that model. `local` has no `-m`: use `anyscribe local setup --model <id>` or `anyscribe config set local_model <id>`.
 
 **Timestamp caveat — and why you usually do nothing.** `gpt-transcribe` (the OpenAI default), `gpt-4o-transcribe`, and `gpt-4o-mini-transcribe` don't return segment timestamps. When `output_format` is `timestamped` / `diarized`, anyscribe switches the run to `whisper-1` itself and emits `switched to whisper-1 — gpt-transcribe can't produce timestamps`. **Passing `-m` suppresses that switch** — an explicit per-run model always wins — so don't pass `-m gpt-transcribe` for a user who wants timestamps. A config pin does not suppress it.
 
@@ -509,7 +509,7 @@ Or pick a tier:  anyscribe config set quality accuracy|balanced|cost|free|custom
 | `quality` | accuracy, balanced, cost, free, custom | Tier that picks the provider, or `custom` to use `provider` |
 | `provider_models.<provider>` | a model id from that provider's list | Pin a model for one provider (see below) |
 | `extra_models.openrouter` | comma-separated slugs (empty clears) | Add your own OpenRouter models to the pickers. Openrouter only |
-| `local_model` | tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5 | Default offline Whisper size. Not checked against the cache; an uncached size downloads on the first local run. Run `anyscribe model pull <size>` to download it up front |
+| `local_model` | parakeet-v3, parakeet-v2, tiny, base, small, medium, large-v3, large-v3-turbo, distil-large-v3.5 | Default offline model. Only a model that is ready (downloaded, plus Parakeet's language check) is accepted; otherwise refused with the command. Run `anyscribe model pull <id>` first |
 | `language` | auto, en, es, fr, hi, ar, zh, ja, ko, ... | Default language |
 | `keep_media` | true, false | Keep audio after transcription |
 | `output_format` | clean, timestamped, diarized | Transcript format |
@@ -593,11 +593,11 @@ anyscribe providers test <name>            # Test a specific provider
 
 ## anyscribe local
 
-Lifecycle for offline transcription — installs / uninstalls faster-whisper and the first Whisper model. All three subcommands accept `--json`.
+Lifecycle for offline transcription — installs / uninstalls the local engines (faster-whisper, onnx-asr) and the first model. All three subcommands accept `--json`.
 
 ```bash
-anyscribe local setup --model base --yes --json     # Install + download + persist
-anyscribe local status --json                       # Report readiness, cached sizes
+anyscribe local setup --model parakeet-v3 --yes --json  # Install + download + persist
+anyscribe local status --json                       # Readiness, cached models, recommendations
 anyscribe local teardown --yes --json               # Reverse setup
 ```
 
@@ -605,11 +605,11 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--model` | `-m` | **Required.** `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). | *none — must specify* |
+| `--model` | `-m` | **Required.** `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `parakeet-v3` (`large-v3-turbo` for Hindi, `base` under ~4 GB RAM). | *none — must specify* |
 | `--yes` | `-y` | Skip confirmation. Required in non-TTY contexts. | Off |
 | `--json` | `-j` | NDJSON progress events on stdout. | Off |
 
-**Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Default to `large-v3-turbo` unless the user asks otherwise or is on an older, low-memory machine (then `base`).
+**Agent rule:** always pass `--model` — the CLI refuses to pick one silently. Ask what language most of the audio is in and use `local status --json` → `recommendations[<answer>].primary` (and pull each id in `also`); without an answer, `parakeet-v3`.
 
 **Setup does not switch the provider.** Setup leaves provider, quality and diarize unchanged. For one local run pass `-p local` (local has no speaker labels). To make local the default: (1) if the user already uses another provider, ask first; (2) if `diarize` is true in `anyscribe config --json`, run `anyscribe config set diarize false` (local has no speaker labels; otherwise runs still go to Deepgram when a key is set); (3) run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`. Confirm `resolved.provider` is `local`.
 
@@ -620,33 +620,33 @@ anyscribe local teardown --yes --json               # Reverse setup
 
 ### anyscribe local status
 
-Always exits 0. Reports `set_up`, `faster_whisper_installed`, `faster_whisper_version`, `ffmpeg_ok`, `default_model`, `models` (cache state per size), `total_disk_bytes`, `install_method`.
+Always exits 0. Reports `set_up`, `faster_whisper_installed`, `faster_whisper_version`, `onnx_asr_installed`, `runtime_ready`, `ffmpeg_ok`, `default_model`, `recommended_model`, `suggestion` (a one-line Parakeet tip for Whisper users on English/auto, else null), `models` (cache state + `spec` per model: `display_name`, `engine`, `accuracy`/`speed` 1-5, `min_per_hour`, `download_mb`, `ram_mb`, `languages`, `use_for`, `tucked`), `total_disk_bytes`, `install_method`, and with `--json` also `question`, `recommendations` (per answer: `primary` (null when nothing fits on disk), `also`, `reasons`, `download_mb`, `set_language`: offer to set it, e.g. `hi`) and `hardware`. Each model also carries `partial` (some bytes on disk but not every file: resume with `anyscribe model pull <id>`), and `restart_needed` is true when setup replaced an engine this process had loaded (restart anyscribe).
 
 ### anyscribe local teardown
 
-`--yes` is required. Uninstalls faster-whisper, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
+`--yes` is required. Uninstalls faster-whisper and onnx-asr, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
 
 ---
 
 ## anyscribe model
 
-Cache management for offline Whisper models. All subcommands accept `--json`.
+Cache management for offline models. All subcommands accept `--json`.
 
-Valid sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [providers.md](providers.md) for the size/RAM/speed table.
+Valid ids: `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [providers.md](providers.md) for the measured table. `pull` of a Parakeet model also fetches `tiny` (`helpers_downloaded`), and installs onnx-asr first on an install that predates Parakeet.
 
 > This is the **local** provider only. Cloud provider models are picked with `-m` / `provider_models` — nothing to download.
 
 ```bash
-anyscribe model list --json                      # Show every size + cache state
-anyscribe model pull <size> --json               # Download (idempotent)
-anyscribe model rm <size> --yes --json           # Delete cached weights
-anyscribe model reinstall <size> --yes --json    # Delete + re-download (corrupted weights)
-anyscribe model info <size> --json               # Inspect a single size
+anyscribe model list --json                      # Every model: spec, cached, default, recommended
+anyscribe model pull <id> --json                 # Download (idempotent)
+anyscribe model rm <id> --yes --json             # Delete cached weights
+anyscribe model reinstall <id> --yes --json      # Delete + re-download (corrupted weights)
+anyscribe model info <id> --json                 # Inspect a single model
 ```
 
 **Not set up?** `pull` and `reinstall` exit 2 with `{error: "local transcription not set up", hint: "run anyscribe local setup ..."}`; `list`, `info` and `rm` still work (`list` shows everything as `cached: false`).
 
-**Size-already-cached semantics:** `pull` returns `{status: "already_present"}` with exit 0. `rm` on a non-cached size returns `{status: "not_present"}` with exit 0.
+**Already-cached semantics:** `pull` returns `{status: "already_present"}` with exit 0. `rm` on a non-cached model returns `{status: "not_present"}` with exit 0.
 
 ---
 
@@ -662,7 +662,7 @@ anyscribe onboard --skip-deps              # Skip dependency check
 
 # Headless — for agents / CI / scripts.
 anyscribe onboard --provider openai --api-key "$OPENAI_API_KEY" --yes --json
-anyscribe onboard --provider local --local-model base --yes --json
+anyscribe onboard --provider local --local-model parakeet-v3 --yes --json
 anyscribe onboard --provider openai --model whisper-1 --yes --json   # pin a model at setup
 anyscribe onboard --provider deepgram --quality balanced --yes --json # set a tier instead
 ```
@@ -674,7 +674,7 @@ anyscribe onboard --provider deepgram --quality balanced --yes --json # set a ti
 | `--yes` / `-y` | yes (to opt in) | off | Turn on headless mode. |
 | `--provider` / `-p` | yes | none | `openai`, `deepgram`, `elevenlabs`, `sargam`, `groq`, `openrouter`, `local`. |
 | `--api-key` | for API providers (or env var) | none | Stored in `.env`. Prefer the env-var form. |
-| `--local-model` | yes when `--provider=local` | none | `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). |
+| `--local-model` | yes when `--provider=local` | none | `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `parakeet-v3` (`large-v3-turbo` for Hindi). |
 | `--model` | no | provider default | Pin `--provider`'s model (writes `provider_models.<provider>`). Exit 2 with the valid list if the provider doesn't offer it. Not for `local`. |
 | `--quality` | no | `custom` | `accuracy`, `balanced`, `cost`, `free`, `custom`. **Omitting it writes `custom`**, so `--provider` is what runs. Only pass it if the user asked for a tier. |
 | `--workspace` | no | `~/anyscribe` | Obsidian vault path. |

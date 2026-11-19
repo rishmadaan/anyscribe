@@ -90,7 +90,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
   - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
   - History: GET `/api/transcripts`, GET/DELETE `/api/transcripts/{transcript_id}`, GET `/api/workspace/info`
   - System: GET `/api/health`, GET/PUT `/api/autostart`, GET/PUT `/api/tailnet`, POST `/api/shutdown`
-  - Local: GET `/api/local/status`, GET `/api/local/setup/log`, POST `/api/local/setup`, POST `/api/local/teardown`
+  - Local: GET `/api/local/status`, GET `/api/local/setup/log`, POST `/api/local/setup` (`{model, also}`: the background setup queues `also` itself), POST `/api/local/choose` (`{model, also}`: one server-side pending default; the download queue's worker switches `local_model` only once the model is `runnable()`, a failure keeps the old default; a later call replaces it; reported as `pending_default` in status), POST `/api/local/teardown`. Readiness everywhere is `providers/local_models.runnable()` (engine imports, weights complete, Parakeet's Tiny + VAD too); `cached` means weights only (sizes, disk maths). `config_set.set_value('local_model', X)` refuses a change to a model that isn't runnable: the one guarded switch for CLI, Web and MCP
   - Models: GET `/api/models/local`, POST `/api/models/local/{size}/pull`, POST `/api/models/local/{size}/reinstall`, DELETE `/api/models/local/{size}`
   - Onboarding: GET `/api/onboarding/status`, POST `/api/onboarding/save`
 - WebSocket: `/api/ws/jobs/{job_id}` for real-time transcription progress
@@ -196,7 +196,7 @@ the pipeline in-process, and the dashboard reads history from the vault.
   - **OpenRouter**: Audio-via-chat (`openai/gpt-audio-mini`), no timestamps, freeform model slugs
   - **Sargam/Sarvam**: Indic languages, `saaras:v3` only, auto-chunks to 28 s (sync REST limit is 30 s, exclusive)
   - **Groq**: `whisper-large-v3-turbo`, OpenAI-compatible — thin subclass of `OpenAIProvider`. Cheapest + fastest.
-  - **Local**: faster-whisper, offline, CPU/GPU, no API key
+  - **Local**: Parakeet (onnx-asr) or Whisper (faster-whisper), offline, CPU/GPU, no API key; a Whisper Tiny language guard keeps Parakeet to its 25 languages
 - Lazy-import registry — each provider only loaded when requested
 - Provider selected via config, overridable per-run with `--provider`
 - **One resolution point**: `core/resolve.py::resolve_run(settings, cli_provider=, cli_model=, diarize=)` returns `RunPlan(provider, model, via, notes)` and is the only implementation of the ladder — explicit `--provider` → `--diarize` → `quality` tier → configured provider. All four run surfaces (CLI transcribe, batch, web, MCP) call it; none may reimplement it. `via` explains the choice; `notes` carry every automatic decision (keyless-tier fallback, whisper-1 timestamp switch, hi-Latn, diarize reroute) so no surface can silently swallow one.
@@ -219,7 +219,8 @@ the pipeline in-process, and the dashboard reads history from the vault.
 - Checkpoint (`core/checkpoint.py`) — chunk save/resume for partial transcriptions
 - Errors (`core/errors.py`) — structured provider errors + retry logic
 - File utilities (`core/fileutil.py`) — atomic writes + file locking
-- Local setup (`core/local_setup.py`) — local faster-whisper install/teardown
+- Local setup (`core/local_setup.py`) — local engine install/teardown (faster-whisper, av<19, onnx-asr; uv fallback)
+- Local recommendation (`core/local_recommend.py`) — "Help me choose": one language question + detected hardware -> a model pick, shared by CLI, Web UI and MCP
 - Config writes (`core/config_set.py`) — the single validated settings write path (CLI, Web UI, MCP)
 - Tailnet sharing (`core/tailnet.py`) — finds the tailscale CLI (PATH; macOS app bundle), reads `tailscale status --json` and `tailscale serve status --json`, adds the serve rule only when the port is free (never replaces another rule, never Funnel), removes it only if anyscribe recorded creating it (`~/.anyscribe/tailnet-owned.json`) and it is still exactly ours (a matching hand-made rule is used but left in place), re-checks a held share on every `GET /api/tailnet`, outside the lock with a 3 s timeout (`BackendState` Stopped, NeedsLogin or NeedsMachineAuth: shown failed as stopped; a failed or slow read, or Starting: shown as unconfirmed, other devices may still reach it; both keep the hold; Running and the rule ours: shown live again; Running and the rule gone: released; `GET /api/tailnet` returns `held` beside `active`, and the card's privacy line follows `held`, the field the Host gate uses), and words each failure as one reason + fix (plus `card_fix`, the Settings card's switch wording). With sharing off it starts no Tailscale command (a read already running at switch-off finishes, at most 3 s, and is discarded)
 - Dependency checker detects OS (macOS, Linux, Windows), checks/installs yt-dlp, ffmpeg, Python; auto-updates stale yt-dlp (>60 days) before download. Uses module-based detection for pip-installed tools (`python -m module --version`) and `shutil.which` for system binaries
@@ -235,7 +236,7 @@ the pipeline in-process, and the dashboard reads history from the vault.
 - **Dataclasses** over pydantic for config/results; pydantic only for web request/response models (`web/models.py`), via FastAPI
 - **src/ layout**: prevents accidental imports from project root
 - **Audio: 16kHz mono 64kbps**: proven optimal for Whisper from AnyScribe web app
-- **Lazy imports**: optional deps (faster-whisper for local provider) only imported when needed
+- **Lazy imports**: optional deps (faster-whisper, onnx-asr for the local provider) only imported when needed
 - **Three install paths**: install.sh (users), pip from PyPI (recommended), git clone (devs)
 - **SemVer**: 0.x for pre-stable, 1.0.0 when all platforms + providers stable
 - **Auto-migration**: Startup migrations handle legacy state transparently (app home `~/.anyscribecli` → `~/.anyscribe`, workspace rename, media → downloads, date-folder flattening, stale Sarvam model pin)
@@ -320,7 +321,8 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 | Onboard (first-run setup) | ✓ (TUI + `--yes` headless) | ✓ (wizard) | Both call `run_headless_onboard()` |
 | Config read/write | ✓ (`anyscribe config`) | ✓ (Settings page) | Same `settings.load_config` / `save_config` |
 | Provider test | ✓ (`anyscribe providers test`) | ✓ (Test/Diagnose buttons) | Same `/providers/{name}/test` logic |
-| Local model mgmt | ✓ (`anyscribe model`) | ✓ (Models table) | Same `providers/local_models.py` |
+| Local model mgmt | ✓ (`anyscribe model`) | ✓ (model cards + More models table) | Same `providers/local_models.py` registry |
+| Local model guidance ("Help me choose") | ✓ (`onboard` language question) | ✓ (wizard, setup modal, Settings) | Same `core/local_recommend.py`; MCP gets it through `doctor` (`local.recommendations`) |
 | Local setup/teardown | ✓ (`anyscribe local`) | ✓ (Setup modal, Teardown button) | Same `core/local_setup.py` |
 | History browse | Obsidian vault directly | ✓ (History page with search) | Web UI has richer UX; CLI leans on Obsidian |
 | Progress | Terminal progress | ✓ (WebSocket) | Same `on_progress` callback |

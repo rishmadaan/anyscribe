@@ -136,7 +136,7 @@ hours at ~$0.30/hr).</p>
 <h2 id="privacy-who-sees-your-audio">Privacy — who sees your audio?</h2>
 <p>Worth knowing before you pick. anyscribe itself doesn't phone home — everything runs on your own machine — but your audio has to go wherever the transcription happens.</p>
 <ul>
-<li><strong>Local provider:</strong> audio stays on your machine. Nothing leaves. Fully offline once the Whisper model is downloaded.</li>
+<li><strong>Local provider:</strong> audio stays on your machine. Nothing leaves. Fully offline once the model is downloaded.</li>
 <li><strong>API providers (OpenAI / Deepgram / ElevenLabs / Sarvam / Groq / OpenRouter):</strong> anyscribe sends your audio to the API you picked and nothing else. No intermediary, no third party, no anyscribe-operated cloud. Your trust boundary is exactly the provider you chose — same as if you called their API directly.</li>
 <li><strong>YouTube / Instagram source URLs:</strong> downloading the video obviously requires internet, and the source host sees the request. The transcribed audio then follows the same rule above (stays local with the local provider; goes to the API provider otherwise).</li>
 </ul>
@@ -169,7 +169,7 @@ hours at ~$0.30/hr).</p>
 </tr>
 <tr>
 <td><code>free</code></td>
-<td>Local faster-whisper</td>
+<td>Local (Parakeet or Whisper)</td>
 <td>Offline, $0</td>
 </tr>
 <tr>
@@ -250,7 +250,7 @@ anyscribe providers list    # same model info, provider-focused
 <tr>
 <td>Local</td>
 <td>—</td>
-<td>Downloaded separately, see <a href="#local-faster-whisper">Local</a></td>
+<td>Downloaded separately, see <a href="#local-parakeet-and-whisper">Local</a></td>
 </tr>
 </tbody>
 </table>
@@ -561,24 +561,143 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 <p><strong><code>OPENROUTER_MODEL</code> in <code>.env</code> is no longer read</strong> (removed in 0.15.0). Use <code>anyscribe config set provider_models.openrouter &lt;slug&gt;</code> instead, and delete the line from <code>~/.anyscribe/.env</code>. <!-- version-pin-ok --></p>
 <p><strong>When to use:</strong> When you need a specific model that's only available on OpenRouter. Not recommended as a primary transcription provider — dedicated STT APIs are faster, cheaper, and more accurate.</p>
 </blockquote>
-<h3 id="local-faster-whisper">Local (faster-whisper)</h3>
-<p>Runs entirely on your machine. No API key, no internet connection, no cost. Uses faster-whisper, a CTranslate2-based reimplementation of OpenAI Whisper that's up to 4x faster.</p>
+<h3 id="local-parakeet-and-whisper">Local (Parakeet and Whisper)</h3>
+<p>Runs entirely on your machine. No API key, no internet connection after setup, no cost. Two engines sit behind the one <code>local</code> provider: <strong>Parakeet v3</strong> (NVIDIA's speech model, run with onnx-asr) for English and 24 European languages, and <strong>Whisper</strong> (run with faster-whisper) for Hindi and 95+ other languages.</p>
 <blockquote>
-<p><strong>Also needs <code>ffmpeg</code></strong> on your system PATH. anyscribe uses ffmpeg to pre-process audio before handing it to Whisper — if ffmpeg isn't installed, local transcription will fail even after setup. Install via <code>brew install ffmpeg</code> (macOS), <code>winget install Gyan.FFmpeg</code> (Windows), or your distro's package manager (Linux).</p>
+<p><strong>Also needs <code>ffmpeg</code></strong> on your system PATH. anyscribe uses ffmpeg to pre-process audio before handing it to the model — if ffmpeg isn't installed, local transcription will fail even after setup. Install via <code>brew install ffmpeg</code> (macOS), <code>winget install Gyan.FFmpeg</code> (Windows), or your distro's package manager (Linux).</p>
 </blockquote>
-<p><strong>Setup is a single action</strong> — pick whichever path fits your workflow; all four do the same thing:</p>
-<pre><code class="language-bash">anyscribe local setup --model base
+<p><strong>Setup is a single action</strong> — pick whichever path fits your workflow; all of them do the same thing:</p>
+<pre><code class="language-bash">anyscribe local setup --model parakeet-v3
 </code></pre>
 <p>or in the Web UI, either:
-- <strong>First-run onboarding wizard</strong> (opens automatically on your first <code>anyscribe ui</code> launch) — pick "local" as your provider, or say Yes to the "Also enable offline transcription?" step.
+- <strong>First-run onboarding wizard</strong> (opens automatically on your first <code>anyscribe ui</code> launch) — choose <strong>On this computer</strong>, answer "What language is most of your audio?", and click <strong>Download … and set up</strong>.
 - <strong>Settings → Providers → Local → "Set up local transcription"</strong> at any time after onboarding.</p>
-<p>or during the terminal wizard, answer <strong>Yes</strong> when <code>anyscribe onboard</code> asks <em>"Also enable offline/local transcription?"</em>.</p>
-<p>Setup installs <code>faster-whisper</code> into the same Python environment as anyscribe, downloads the Whisper model you picked, and records it as your local default. After that, local transcription is fully offline.</p>
-<p><strong>Recommended model:</strong> <code>large-v3-turbo</code> — close to the most accurate model while running about six times faster than real time on a CPU. It's a ~1.6 GB download and needs about 3 GB of free memory. On an older laptop, or if the download is too big, use <code>base</code> (~145 MB) instead.</p>
+<p>or in the terminal wizard, choose <strong>On this computer</strong> when <code>anyscribe onboard</code> asks how to transcribe.</p>
+<p>Setup installs the engines (faster-whisper and onnx-asr) into the same Python environment as anyscribe, downloads the model you picked, and records it as your local default. After that, local transcription is fully offline.</p>
+<p><strong>Which model?</strong></p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Id</th>
+<th>Accuracy</th>
+<th>Speed</th>
+<th>1 hour of audio</th>
+<th>Download</th>
+<th>Memory</th>
+<th>Languages</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Parakeet v3</strong> (recommended)</td>
+<td><code>parakeet-v3</code></td>
+<td>5/5</td>
+<td>4/5</td>
+<td>~10 min</td>
+<td>~670 MB</td>
+<td>~2.2 GB</td>
+<td>English + 24 European languages</td>
+</tr>
+<tr>
+<td><strong>Whisper Large v3 Turbo</strong> (for Hindi)</td>
+<td><code>large-v3-turbo</code></td>
+<td>5/5</td>
+<td>2/5</td>
+<td>~40 min</td>
+<td>~1.6 GB</td>
+<td>~3.1 GB</td>
+<td>Hindi and 95+ others</td>
+</tr>
+<tr>
+<td><strong>Whisper Small</strong></td>
+<td><code>small</code></td>
+<td>4/5</td>
+<td>3/5</td>
+<td>~22 min</td>
+<td>~460 MB</td>
+<td>~1.3 GB</td>
+<td>Hindi and 95+ others</td>
+</tr>
+<tr>
+<td><strong>Whisper Base</strong></td>
+<td><code>base</code></td>
+<td>3/5</td>
+<td>4/5</td>
+<td>~8 min</td>
+<td>~140 MB</td>
+<td>~1 GB</td>
+<td>Hindi and 95+ others</td>
+</tr>
+<tr>
+<td>Parakeet v2</td>
+<td><code>parakeet-v2</code></td>
+<td>4/5</td>
+<td>4/5</td>
+<td>~9 min</td>
+<td>~670 MB</td>
+<td>~2.5 GB</td>
+<td>English only (v3 is as fast and more accurate)</td>
+</tr>
+<tr>
+<td>Whisper Medium</td>
+<td><code>medium</code></td>
+<td>4/5</td>
+<td>1/5</td>
+<td>~67 min</td>
+<td>~1.5 GB</td>
+<td>~3.2 GB</td>
+<td>slower than real time, no better than Small</td>
+</tr>
+<tr>
+<td>Whisper Large v3</td>
+<td><code>large-v3</code></td>
+<td>4/5</td>
+<td>1/5</td>
+<td>~2.5 hours</td>
+<td>~2.9 GB</td>
+<td>~6.4 GB</td>
+<td>needs a graphics card to be practical</td>
+</tr>
+<tr>
+<td>Distil-Whisper Large v3.5</td>
+<td><code>distil-large-v3.5</code></td>
+<td>3/5</td>
+<td>2/5</td>
+<td>~32 min</td>
+<td>~1.4 GB</td>
+<td>~2.7 GB</td>
+<td>English; scored below Small in our test</td>
+</tr>
+<tr>
+<td>Whisper Tiny</td>
+<td><code>tiny</code></td>
+<td>2/5</td>
+<td>5/5</td>
+<td>~4 min</td>
+<td>~75 MB</td>
+<td>~0.9 GB</td>
+<td>very rough; used for the language check</td>
+</tr>
+</tbody>
+</table>
+<p>Times and ratings were measured on a 6-core desktop processor (Intel i5-10600K) with
+no graphics card, on 15 minutes of real English recordings. A Mac with Apple silicon
+or a computer with an NVIDIA graphics card will likely be faster. <code>anyscribe model list</code>
+shows the same table with what you have downloaded.</p>
+<ul>
+<li><strong>English or another European language:</strong> <code>parakeet-v3</code>. It was as accurate as the best Whisper model in our test, at about four times its speed.</li>
+<li><strong>Hindi or another Indian language:</strong> <code>large-v3-turbo</code> (or <code>small</code> on a computer with less than 6 GB of memory).</li>
+<li><strong>A mix, e.g. English and Hindi:</strong> keep <code>parakeet-v3</code> as the default and also run <code>anyscribe model pull large-v3-turbo</code>. anyscribe switches between them by itself.</li>
+<li><strong>Not sure?</strong> Click <strong>Help me choose</strong> in <strong>Settings → Providers → Local</strong>: one question, and a suggestion in plain words based on your answer and your computer.</li>
+</ul>
+<blockquote>
+<p><strong>The language check (Parakeet only).</strong> Parakeet writes nonsense on a language it doesn't know, so before it runs, anyscribe checks the language at the start, middle and end of each recording with Whisper Tiny (speech only, a few seconds; a 75 MB helper downloaded with Parakeet). If any of them is another language, it uses Whisper Large v3 Turbo (or the best other Whisper model you have) instead, and says so: in the terminal, in <code>--json</code> <code>notes</code>, in the dashboard's result, and in the transcript (<code>model:</code> and <code>notes:</code> in the frontmatter, plus a <strong>Note</strong> line under the details). If no Whisper model is downloaded it stops, tells you what to download, and writes nothing. If the check can't tell, it uses Whisper when one is downloaded, or runs Parakeet and says the check was unsure. If one recording switches language mid-sentence (Hinglish), make Whisper Large v3 Turbo your default instead. Set your language explicitly (for example <code>--language en</code>) to skip the check.</p>
+</blockquote>
 <p><strong>Switching the default model:</strong></p>
-<pre><code class="language-bash">anyscribe config set local_model small
+<pre><code class="language-bash">anyscribe config set local_model parakeet-v3
 </code></pre>
-<p>or pick from the dropdown in the Web UI's Local provider panel. (Pull it first with <code>anyscribe model pull &lt;size&gt;</code>; the Web UI only lists cached models, but <code>config set</code> does not check.)</p>
+<p>or pick a card in the Web UI's Local provider panel. In the Web UI, picking a model that isn't downloaded yet downloads it (and, for Parakeet, its language check) and makes it the default only once it's ready; if the download fails, your default stays as it was. <code>config set</code> only accepts a model that is ready and otherwise names the command, so pull it first with <code>anyscribe model pull &lt;id&gt;</code>.</p>
 <p><strong>Managing downloaded models</strong> (after setup):</p>
 <table>
 <thead>
@@ -590,100 +709,34 @@ anyscribe config set extra_models.openrouter ""     # clears them</code></p>
 <tbody>
 <tr>
 <td><code>anyscribe model list</code></td>
-<td>Show all 7 sizes with cache status and disk usage</td>
+<td>Show all 9 models with accuracy, speed, download size and cache status</td>
 </tr>
 <tr>
-<td><code>anyscribe model pull small</code></td>
-<td>Download an additional model size</td>
+<td><code>anyscribe model pull large-v3-turbo</code></td>
+<td>Download an additional model</td>
 </tr>
 <tr>
-<td><code>anyscribe model rm tiny --yes</code></td>
+<td><code>anyscribe model rm small --yes</code></td>
 <td>Delete a cached model (asks first; <code>--yes</code> skips the prompt)</td>
 </tr>
 <tr>
-<td><code>anyscribe model info large-v3-turbo</code></td>
-<td>Inspect a single size</td>
+<td><code>anyscribe model info parakeet-v3</code></td>
+<td>Inspect a single model: what it's for, its languages, its measured numbers</td>
 </tr>
 </tbody>
 </table>
-<p>Or use the Models table inside <strong>Settings → Providers → Local</strong> in the Web UI.</p>
-<p><strong>Model size guide:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Model</th>
-<th>Download</th>
-<th>RAM (peak)</th>
-<th>Speed (CPU)</th>
-<th>Quality</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>tiny</code></td>
-<td>~75 MB</td>
-<td>~400 MB</td>
-<td>~10x realtime</td>
-<td>Lowest</td>
-</tr>
-<tr>
-<td><code>base</code></td>
-<td>~145 MB</td>
-<td>~600 MB</td>
-<td>~7x realtime</td>
-<td>Good for most</td>
-</tr>
-<tr>
-<td><code>small</code></td>
-<td>~480 MB</td>
-<td>~1.2 GB</td>
-<td>~4x realtime</td>
-<td>Noticeably better than base</td>
-</tr>
-<tr>
-<td><code>medium</code></td>
-<td>~1.5 GB</td>
-<td>~2.5 GB</td>
-<td>~2x realtime</td>
-<td>Near-large for many languages</td>
-</tr>
-<tr>
-<td><code>large-v3</code></td>
-<td>~3 GB</td>
-<td>~5 GB</td>
-<td>~1x realtime (CPU); fast on GPU</td>
-<td>Highest</td>
-</tr>
-<tr>
-<td><code>large-v3-turbo</code> (recommended)</td>
-<td>~1.6 GB</td>
-<td>~3 GB</td>
-<td>~6x realtime</td>
-<td>Near <code>large-v3</code>, all languages</td>
-</tr>
-<tr>
-<td><code>distil-large-v3.5</code></td>
-<td>~1.5 GB</td>
-<td>~2.8 GB</td>
-<td>~6x realtime</td>
-<td>Near <code>large-v3</code> for <strong>English</strong>; weaker on other languages</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>Best quality per minute of waiting: <code>large-v3-turbo</code>.</strong> It gets close to <code>large-v3</code> accuracy while running about six times faster on a CPU, at roughly half the download. That's why it's the recommended pick.</p>
-<p><strong><code>distil-large-v3.5</code> is English-only in practice.</strong> It's a slimmed-down model that keeps <code>large-v3</code>-level accuracy for English but gets noticeably worse in other languages. Pick it only if everything you transcribe is English; otherwise <code>large-v3-turbo</code> is the safer choice at the same speed and size.</p>
-</blockquote>
+<p>Or use the model cards inside <strong>Settings → Providers → Local</strong> in the Web UI (Download, Delete and Reinstall on each card; the rest under <strong>More models</strong>).</p>
 <ul>
-<li><strong>GPU:</strong> Automatically uses NVIDIA CUDA if available; falls back to CPU.</li>
+<li><strong>GPU:</strong> Whisper uses an NVIDIA CUDA graphics card automatically if one is available; Parakeet runs on the CPU.</li>
 <li><strong>Env-var override:</strong> <code>ASCLI_LOCAL_MODEL=small anyscribe "&lt;url&gt;"</code> wins over the configured default for one invocation.</li>
+<li><strong>Existing setups don't change.</strong> If you set up local transcription before Parakeet existed, your model stays what it was; <code>anyscribe local status</code> shows a one-line tip if Parakeet v3 would suit you.</li>
 </ul>
-<p><strong>Removing local transcription</strong> (uninstalls faster-whisper and deletes every cached model):</p>
+<p><strong>Removing local transcription</strong> (uninstalls the engines and deletes every cached model):</p>
 <pre><code class="language-bash">anyscribe local teardown --yes
 </code></pre>
 <p>or click <strong>"Remove local transcription"</strong> at the bottom of the Local provider panel in the Web UI.</p>
 <blockquote>
-<p><strong>When to use:</strong> When you're offline, want zero cost, or have privacy concerns about sending audio to cloud APIs. CPU transcription on <code>base</code> runs roughly 7x faster than real time on modern laptops — a 10-minute podcast takes ~90 seconds to transcribe.</p>
+<p><strong>When to use:</strong> When you're offline, want zero cost, or have privacy concerns about sending audio to cloud APIs. On our 6-core test desktop, Parakeet v3 transcribes an hour of audio in about 10 minutes; Whisper Large v3 Turbo takes about 40.</p>
 </blockquote>
 <h2 id="switching-providers">Switching Providers</h2>
 <p>Change your default provider:</p>

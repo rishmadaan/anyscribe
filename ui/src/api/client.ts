@@ -7,6 +7,8 @@ import type {
   ProviderTestResult,
   LocalStatusResponse,
   LocalModelsResponse,
+  LocalRecommendation,
+  LocalRegistry,
   OnboardingStatus,
   OnboardingPayload,
   OnboardingResult,
@@ -126,10 +128,20 @@ export const getHealth = () =>
 export const getLocalStatus = () =>
   fetchJSON<LocalStatusResponse>("/local/status");
 
-export const setupLocal = (model: string) =>
-  fetchJSON<{ status: string; model: string }>("/local/setup", {
+/** Install, download ``model`` (and helpers), make it the default; then the
+ * server downloads each ``also`` model itself. */
+export const setupLocal = (model: string, also: string[] = []) =>
+  fetchJSON<{ status: string; model: string; also: string[] }>("/local/setup", {
     method: "POST",
-    body: JSON.stringify({ model }),
+    body: JSON.stringify({ model, also }),
+  });
+
+/** Make ``model`` the default once it can run (now, if it already can) and
+ * download it, its helpers and each ``also`` model. Settings' one commit. */
+export const chooseLocal = (model: string, also: string[] = []) =>
+  fetchJSON<{ status: "switched" | "pending"; queued: string[] }>("/local/choose", {
+    method: "POST",
+    body: JSON.stringify({ model, also }),
   });
 
 export const teardownLocal = () =>
@@ -139,6 +151,11 @@ export const teardownLocal = () =>
     bytes_freed: number;
     provider_reset: boolean;
   }>("/local/teardown", { method: "POST" });
+
+export const getLocalRegistry = () => fetchJSON<LocalRegistry>("/local/registry");
+
+export const recommendLocal = (answer: string) =>
+  fetchJSON<LocalRecommendation>(`/local/recommend?answer=${encodeURIComponent(answer)}`);
 
 // ── Local model cache ────────────────────────────────
 

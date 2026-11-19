@@ -22,6 +22,7 @@ from anyscribe.providers import (
     validate_model,
 )
 from anyscribe.providers.openai import OpenAIProvider
+from anyscribe.providers.base import local_hint
 
 # output formats that need per-segment timestamps from the provider
 _TIMED_FORMATS = {"timestamped", "diarized"}
@@ -79,7 +80,7 @@ def resolve_run(
         elif tier:
             notes.append(
                 f"WARNING: quality '{settings.quality}' wants {tier} but no "
-                f"{PROVIDER_KEY_ENV[tier]} is set — using {provider} instead"
+                f"{PROVIDER_KEY_ENV[tier]} is set — using {provider} instead{local_hint() if provider != 'local' else ''}"
             )
         elif settings.quality != "custom":
             # A hand-edited unknown tier would otherwise be silently ignored —

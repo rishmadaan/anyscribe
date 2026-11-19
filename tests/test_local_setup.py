@@ -38,24 +38,26 @@ def test_install_command_uses_pipx_inject_for_pipx_method():
     with patch.object(local_setup, "detect_install_method", return_value="pipx"):
         with patch.object(local_setup, "_pipx_venv_name", return_value="anyscribe"):
             cmd = local_setup._install_command("pipx")
-    assert cmd == ["pipx", "inject", "anyscribe", local_setup.FASTER_WHISPER_SPEC]
+    assert cmd == ["pipx", "inject", "anyscribe", *local_setup.LOCAL_RUNTIME_SPECS]
 
 
-def test_install_command_uses_pip_for_venv_method():
+def test_install_command_uses_pip_for_venv_method(monkeypatch):
+    monkeypatch.setattr(local_setup, "_pip_available", lambda: True)
     cmd = local_setup._install_command("venv")
     assert cmd[:3] == [local_setup.sys.executable, "-m", "pip"]
-    assert cmd[-1] == local_setup.FASTER_WHISPER_SPEC
+    assert cmd[-3:] == local_setup.LOCAL_RUNTIME_SPECS
 
 
 def test_install_is_noop_when_already_importable():
-    with patch.object(local_setup, "faster_whisper_importable", return_value=True):
+    with patch.object(local_setup, "local_runtime_ready", return_value=True):
         with patch.object(local_setup, "faster_whisper_version", return_value="1.0.3"):
             result = local_setup.install_faster_whisper()
     assert result["status"] == "already_installed"
     assert result["version"] == "1.0.3"
 
 
-def test_install_reports_failure_with_stderr():
+def test_install_reports_failure_with_stderr(monkeypatch):
+    monkeypatch.setattr(local_setup, "_pip_available", lambda: True)
     with patch.object(local_setup, "faster_whisper_importable", return_value=False):
         with patch.object(local_setup, "detect_install_method", return_value="venv"):
             with patch.object(local_setup, "_run", return_value=(1, "", "error: no permission")):
@@ -97,7 +99,7 @@ def test_local_ready_false_when_no_models_cached():
         with patch.object(
             local_setup, "_ffmpeg_status", return_value={"ok": True, "message": "ok"}
         ):
-            with patch.object(local_setup, "any_model_cached", return_value=False):
+            with patch.object(local_setup, "any_model_runnable", return_value=False):
                 assert local_setup.local_ready() is False
 
 
@@ -207,19 +209,20 @@ def test_run_setup_short_circuits_when_already_installed_and_cached(tmp_path, mo
         "repo": "Systran/faster-whisper-base",
         "bytes": 100,
     }
+    # The default switches through the one guarded write (config_set.set_value).
+    from anyscribe.config.settings import Settings
+    from anyscribe.core import config_set
+    from anyscribe.providers import local_models
+
     with patch.object(local_setup, "install_faster_whisper", return_value=install_result):
         with patch.object(local_setup, "pull_model", return_value=pull_result):
-            with patch.object(local_setup, "save_config") as save:
-                with patch.object(
-                    local_setup,
-                    "load_config",
-                    return_value=type(
-                        "S",
-                        (),
-                        {"local_model": "tiny"},
-                    )(),
-                ):
-                    result = local_setup.run_setup("base")
+            with patch.object(local_models, "runnable", return_value=True):
+                with patch.object(config_set, "save_config") as save:
+                    with patch.object(
+                        config_set, "load_config", return_value=Settings(local_model="tiny")
+                    ):
+                        result = local_setup.run_setup("base")
     assert result["status"] == "set_up"
     assert result["default_model"] == "base"
     save.assert_called_once()
+    assert save.call_args.args[0].local_model == "base"

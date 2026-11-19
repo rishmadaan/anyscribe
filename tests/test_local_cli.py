@@ -25,7 +25,7 @@ def test_setup_without_model_exits_2_with_json_error():
     assert result.exit_code == 2
     err = json.loads(result.stderr.strip().splitlines()[-1])
     assert err["error"] == "--model is required"
-    assert err["recommended"] == "large-v3-turbo"
+    assert err["recommended"] == "parakeet-v3"
     assert "tiny" in err["choices"]
 
 
@@ -47,7 +47,10 @@ def test_setup_without_yes_in_non_tty_exits_2():
 def test_setup_already_set_up_is_noop():
     fake_status = {
         "faster_whisper_installed": True,
-        "models": [{"size": "base", "cached": True, "bytes": 100, "repo": "r", "spec": {}}],
+        "runtime_ready": True,
+        "models": [
+            {"size": "base", "cached": True, "runnable": True, "bytes": 100, "repo": "r", "spec": {}}
+        ],
     }
     # load_config / save_config are imported lazily inside the command;
     # patch them at their definition site.
@@ -66,6 +69,7 @@ def test_setup_already_set_up_is_noop():
 def test_setup_runs_run_setup_and_reports_set_up():
     fake_status = {
         "faster_whisper_installed": False,
+        "runtime_ready": False,
         "models": [{"size": "base", "cached": False, "bytes": 0, "repo": "r", "spec": {}}],
     }
     setup_result = {
@@ -198,7 +202,7 @@ def test_model_pull_already_present():
 
 
 def test_model_rm_not_cached_is_noop():
-    with patch("anyscribe.cli.models_cmd.is_cached", return_value=False):
+    with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=0):
         result = runner.invoke(models_app, ["rm", "base", "--json"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
@@ -206,13 +210,13 @@ def test_model_rm_not_cached_is_noop():
 
 
 def test_model_rm_without_yes_in_non_tty_exits_2():
-    with patch("anyscribe.cli.models_cmd.is_cached", return_value=True):
+    with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=100):
         result = runner.invoke(models_app, ["rm", "base", "--json"])
     assert result.exit_code == 2
 
 
 def test_model_rm_with_yes_calls_delete_model():
-    with patch("anyscribe.cli.models_cmd.is_cached", return_value=True):
+    with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=100):
         with patch(
             "anyscribe.cli.models_cmd.delete_model",
             return_value={"status": "removed", "size": "base", "bytes_freed": 100},
@@ -255,7 +259,7 @@ def test_model_reinstall_not_cached_returns_downloaded_only():
         "bytes": 300,
     }
     with patch("anyscribe.cli.models_cmd.faster_whisper_importable", return_value=True):
-        with patch("anyscribe.cli.models_cmd.is_cached", return_value=False):
+        with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=0):
             with patch("anyscribe.cli.models_cmd.pull_model", return_value=pull_result) as pull:
                 with patch("anyscribe.cli.models_cmd.delete_model") as delete:
                     result = runner.invoke(models_app, ["reinstall", "base", "--yes", "--json"])
@@ -277,7 +281,7 @@ def test_model_reinstall_cached_deletes_then_pulls():
         "bytes": 300,
     }
     with patch("anyscribe.cli.models_cmd.faster_whisper_importable", return_value=True):
-        with patch("anyscribe.cli.models_cmd.is_cached", return_value=True):
+        with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=100):
             with patch(
                 "anyscribe.cli.models_cmd.delete_model", return_value=delete_result
             ) as delete:
@@ -298,7 +302,7 @@ def test_model_reinstall_pull_failure_reports_bytes_freed():
     much damage was done."""
     delete_result = {"status": "removed", "size": "base", "bytes_freed": 150}
     with patch("anyscribe.cli.models_cmd.faster_whisper_importable", return_value=True):
-        with patch("anyscribe.cli.models_cmd.is_cached", return_value=True):
+        with patch("anyscribe.cli.models_cmd.bytes_on_disk", return_value=100):
             with patch("anyscribe.cli.models_cmd.delete_model", return_value=delete_result):
                 with patch(
                     "anyscribe.cli.models_cmd.pull_model",

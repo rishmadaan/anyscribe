@@ -16,8 +16,8 @@ Shared backend, shared state: a transcription started from any surface is visibl
 - **Internet is only involved when *you* ask for it:**
   - **Downloading a YouTube or Instagram source** — obvious; you gave it the URL.
   - **Calling an API provider** (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — your audio goes to the provider you picked, and nothing else. Your data stays between you and them.
-  - **Installing what you set up** — for example, local transcription installs faster-whisper and downloads Whisper model weights from Hugging Face.
-- **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model base`) work with no internet connection. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
+  - **Installing what you set up** — for example, local transcription installs faster-whisper and onnx-asr and downloads model weights (Parakeet or Whisper) from Hugging Face.
+- **Fully offline is available.** Local files + the local provider (`anyscribe local setup --model parakeet-v3`) work with no internet connection. Your audio never leaves your machine. Same pipeline, same output format as the cloud providers.
 - **No analytics or telemetry.** Besides the above, anyscribe checks for new versions when you run `anyscribe update --check` or `anyscribe doctor` (through pip's package index, or your git remote if you installed from a cloned repo). A download also upgrades yt-dlp first if your copy is over 60 days old.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -32,7 +32,7 @@ Shared backend, shared state: a transcription started from any surface is visibl
 - **Python 3.11 or newer** — [python.org](https://www.python.org/downloads/)
 - **ffmpeg and yt-dlp** — the installers below put both in place. Installing anyscribe with pip includes yt-dlp and its default extras; install ffmpeg separately (`brew install ffmpeg`, or [ffmpeg.org](https://ffmpeg.org/))
 - **Deno or Node 22+ for YouTube** — YouTube makes downloaders solve a small JavaScript puzzle, and yt-dlp runs it on one of these. The installers add Deno when neither is present; with the pip route, `brew install deno` or [deno.com](https://docs.deno.com/runtime/getting_started/installation/). Without one, YouTube downloads warn and may miss formats.
-- **An API key** for one cloud provider (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter) — or none at all if you run offline with the local provider
+- **Nothing else to transcribe on your own computer:** the local provider (Parakeet v3, or Whisper for Hindi and 95+ other languages) needs no API key and works offline. **Or** an API key for one cloud provider (OpenAI, Deepgram, ElevenLabs, Sarvam, Groq, OpenRouter)
 
 `anyscribe doctor` checks all of this at any time, and the setup wizard checks it for you on first run.
 
@@ -65,7 +65,7 @@ anyscribe ui                  # opens the web dashboard — guides you through s
 anyscribe desktop install     # optional: the app icon + start at login, like the installer
 ```
 
-On first launch the web UI opens a full-screen onboarding wizard — pick a provider, paste the API key (with a Test key button), optionally enable offline transcription, confirm your workspace, done. Prefer the terminal? `anyscribe onboard` does the same thing with arrow keys, and `anyscribe onboard --provider openai --api-key "$OPENAI_API_KEY" --yes --json` does it headlessly for agents and CI.
+On first launch the web UI opens a full-screen onboarding wizard. It starts with one choice: transcribe **on this computer** (free, private, no API key; it asks what language your audio is in and suggests a model, Parakeet v3 for English and European languages, Whisper Large v3 Turbo for Hindi) or **with a cloud service** (paste the API key, with a Test key button). Then confirm your workspace, done. Prefer the terminal? `anyscribe onboard` does the same thing with arrow keys, and `anyscribe onboard --provider openai --api-key "$OPENAI_API_KEY" --yes --json` does it headlessly for agents and CI.
 
 > **Windows:** if `anyscribe` isn't recognized, use `python -m anyscribe ui`.
 

@@ -1,6 +1,7 @@
 import { Check, Copy, FileText, Plus } from "lucide-react";
 import { useState } from "react";
 import type { JobResult } from "../api/types";
+import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
 interface ResultCardProps {
   result: JobResult;
@@ -9,6 +10,7 @@ interface ResultCardProps {
 
 export default function ResultCard({ result, onReset }: ResultCardProps) {
   const [copied, setCopied] = useState(false);
+  const modelName = useLocalModelNames();
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(result.file_path);
@@ -20,7 +22,12 @@ export default function ResultCard({ result, onReset }: ResultCardProps) {
     { label: "Duration", value: result.duration || "—" },
     { label: "Language", value: result.language },
     { label: "Words", value: result.word_count.toLocaleString() },
-    { label: "Provider", value: result.provider },
+    {
+      label: "Provider",
+      value: result.model
+        ? `${result.provider} · ${result.provider === "local" ? modelName(result.model) : result.model}`
+        : result.provider,
+    },
   ];
 
   return (
@@ -43,8 +50,20 @@ export default function ResultCard({ result, onReset }: ResultCardProps) {
         {result.title}
       </p>
 
+      {/* Run-time switches (e.g. the language check sent Hindi to Whisper):
+          never silent, so they lead the card. */}
+      {(result.notes ?? []).map((n) => (
+        <p
+          key={n}
+          role="note"
+          className="mb-4 text-[13px] text-text-secondary border-l-[3px] border-blue bg-blue/[0.07] rounded-md px-3 py-2.5"
+        >
+          {n}
+        </p>
+      ))}
+
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {stats.map(({ label, value }) => (
           <div
             key={label}

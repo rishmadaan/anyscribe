@@ -18,7 +18,7 @@
  * isn't set. Settings has a button to re-open it manually.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, AlertCircle, ChevronRight, ChevronLeft, Sparkles, X } from "lucide-react";
 import Modal from "./Modal";
 import {
@@ -28,8 +28,13 @@ import {
   setupLocal,
   getLocalStatus,
   getSetupLog,
+  getLocalRegistry,
 } from "../api/client";
-import type { LocalModelEntry, LocalStatusResponse } from "../api/types";
+import type { LocalRecommendation, LocalRegistry, LocalStatusResponse } from "../api/types";
+import LocalModelPicker from "./LocalModelPicker";
+import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
+import { downloadMbFor, formatMB, formatPerHour } from "../api/models";
+import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
 // Keep these in lock-step with backend ``onboard_headless.PROVIDER_KEY_ENV``.
 const API_PROVIDERS = [
@@ -55,6 +60,11 @@ type FormState = {
   workspace: string;
   enableLocal: boolean;
   localModel: string | null;
+  /** "Set my language to Hindi" from Help me choose; saved at Finish */
+  language: string | null;
+  /** extra models setup downloads afterwards (Turbo for a mix), from the server */
+  alsoModels: string[];
+  restartNeeded: boolean;
 };
 
 interface Props {
@@ -69,10 +79,20 @@ export default function OnboardingWizard({ onClose }: Props) {
     workspace: "",
     enableLocal: false,
     localModel: null,
+    language: null,
+    alsoModels: [],
+    restartNeeded: false,
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
+  const modelName = useLocalModelNames(); // fetched now, so All set shows names at once
+  // The recommended card as the starting pick, unless a pick was made first
+  // (a functional update, so a late status response can't undo a choice).
+  const presetSize = useCallback(
+    (s: string) => setForm((f) => (f.localModel ? f : { ...f, localModel: s })),
+    []
+  );
 
   // Preload the default workspace so StepWorkspace can show it as a hint.
   useEffect(() => {
@@ -123,6 +143,7 @@ export default function OnboardingWizard({ onClose }: Props) {
         provider: form.provider,
         api_key: form.provider !== "local" ? form.apiKey || undefined : undefined,
         workspace: form.workspace || undefined,
+        language: form.language || undefined,
         local_model:
           form.provider === "local"
             ? form.localModel || undefined
@@ -136,8 +157,12 @@ export default function OnboardingWizard({ onClose }: Props) {
     }
   };
 
-  const stepIndex = STEPS.indexOf(step);
-  const totalSteps = STEPS.length - 1; // welcome doesn't count
+  // Count only the steps on the chosen path (the local path has no API key step).
+  const path: Step[] =
+    form.provider === "local"
+      ? ["provider", "offline_opt_in", "workspace"]
+      : ["provider", "api_key", "offline_opt_in", "workspace"];
+  const stepIndex = path.indexOf(step) + 1;
 
   return (
     <Modal
@@ -158,7 +183,8 @@ export default function OnboardingWizard({ onClose }: Props) {
           </h2>
           {step !== "welcome" && step !== "done" && (
             <p className="text-[10px] font-mono text-text-muted mt-0.5">
-              Step {stepIndex} of {totalSteps}
+              Step {stepIndex}
+              {form.provider ? ` of ${path.length}` : ""}
             </p>
           )}
         </div>
@@ -208,7 +234,10 @@ export default function OnboardingWizard({ onClose }: Props) {
           selected={form.localModel}
           enabled={form.enableLocal}
           onSetEnabled={(e) => setForm((f) => ({ ...f, enableLocal: e }))}
-          onSelectSize={(s) => setForm((f) => ({ ...f, localModel: s }))}
+          onSelectSize={(s: string | null) => setForm((f) => ({ ...f, localModel: s }))}
+          onPresetSize={presetSize}
+          onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
+          onSetupDone={(done) => setForm((f) => ({ ...f, ...done }))}
           onBack={() =>
             setStep(form.provider === "local" ? "provider" : "api_key")
           }
@@ -227,6 +256,7 @@ export default function OnboardingWizard({ onClose }: Props) {
       {step === "done" && (
         <StepDone
           form={form}
+          name={modelName}
           saving={saving}
           onBack={() => setStep("workspace")}
           onFinish={finish}
@@ -236,18 +266,16 @@ export default function OnboardingWizard({ onClose }: Props) {
   );
 }
 
-const STEPS: Step[] = ["welcome", "provider", "api_key", "offline_opt_in", "workspace", "done"];
-
 function stepTitle(step: Step): string {
   switch (step) {
     case "welcome":
       return "Welcome to anyscribe";
     case "provider":
-      return "Pick a transcription provider";
+      return "How should anyscribe transcribe?";
     case "api_key":
       return "Add your API key";
     case "offline_opt_in":
-      return "Offline transcription";
+      return "Local transcription";
     case "workspace":
       return "Workspace location";
     case "done":
@@ -283,40 +311,76 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 }
 
 function StepProvider({ onPick }: { onPick: (provider: string) => void }) {
+  const [cloud, setCloud] = useState(false);
+  // The registry alone (no disk scan, no engine import), so this line never
+  // waits on a slow status call.
+  const [registry, setRegistry] = useState<LocalRegistry | null>(null);
+  useEffect(() => {
+    getLocalRegistry()
+      .then(setRegistry)
+      .catch(() => undefined);
+  }, []);
+  const rec = registry?.specs[registry.recommended_model];
+
   return (
     <>
-      <p className="text-sm text-text-muted mb-4">
-        Pick the service that transcribes your audio. You can change this
-        later or add more providers in Settings.
-      </p>
-      <div className="space-y-2 mb-6">
-        {API_PROVIDERS.map((p) => (
-          <button
-            key={p.name}
-            onClick={() => onPick(p.name)}
-            className="w-full text-left rounded-lg border border-border-subtle bg-surface hover:border-amber/40 hover:bg-amber/5 px-4 py-3 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-mono text-text font-bold">{p.name}</span>
-              <span className="text-xs text-text-muted">· {p.label}</span>
-            </div>
-            <p className="text-xs text-text-muted">{p.description}</p>
-          </button>
-        ))}
+      <p className="text-sm text-text-muted mb-4">You can change this any time in Settings.</p>
+      <div className="grid gap-2.5 mb-6">
         <button
           onClick={() => onPick("local")}
-          className="w-full text-left rounded-lg border border-border-subtle bg-surface hover:border-amber/40 hover:bg-amber/5 px-4 py-3 transition-colors cursor-pointer"
+          data-choice="local"
+          className="w-full text-left rounded-[10px] border border-amber bg-amber/[0.06] hover:bg-amber/10 p-4 transition-colors cursor-pointer"
         >
-          <div className="flex items-center gap-2 mb-1">
+          <span className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-text">
             <Sparkles className="w-3.5 h-3.5 text-amber" />
-            <span className="text-sm font-mono text-text font-bold">local</span>
-            <span className="text-xs text-text-muted">· Offline, free, runs on your machine</span>
-          </div>
-          <p className="text-xs text-text-muted">
-            No API key, no internet. Installs faster-whisper + a Whisper model
-            on your device (~145 MB for the recommended size).
-          </p>
+            On this computer
+            <span className="text-[10px] font-mono font-medium px-[7px] py-[2px] rounded-[5px] bg-amber-dim text-amber">
+              recommended
+            </span>
+          </span>
+          <span className="block text-[13px] text-text-secondary mt-1">
+            Free and private. No account, no API key, works offline.
+            {rec && (
+              <>
+                {" "}
+                Downloads {rec.display_name} ({formatMB(rec.download_mb)}) once. About{" "}
+                {formatPerHour(rec.min_per_hour)} per hour of audio on our 6-core test desktop;
+                your computer may be faster or slower.
+              </>
+            )}
+          </span>
         </button>
+        <button
+          onClick={() => setCloud(!cloud)}
+          aria-expanded={cloud}
+          data-choice="cloud"
+          className={`w-full text-left rounded-[10px] border p-4 transition-colors cursor-pointer ${
+            cloud ? "border-amber bg-amber/[0.06]" : "border-border-subtle bg-surface-raised hover:bg-surface-hover"
+          }`}
+        >
+          <span className="block text-[15px] font-semibold text-text">With a cloud service</span>
+          <span className="block text-[13px] text-text-secondary mt-1">
+            Slightly more accurate on hard audio, adds speaker labels, very fast. Needs an
+            API key from ElevenLabs, Deepgram, OpenAI, Groq or others. Paid per minute.
+          </span>
+        </button>
+        {cloud && (
+          <div className="space-y-2 pl-3 border-l-2 border-border-subtle">
+            {API_PROVIDERS.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => onPick(p.name)}
+                className="w-full text-left rounded-lg border border-border-subtle bg-surface hover:border-amber/40 hover:bg-amber/5 px-4 py-3 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-mono text-text font-bold">{p.name}</span>
+                  <span className="text-xs text-text-muted">· {p.label}</span>
+                </div>
+                <p className="text-xs text-text-muted">{p.description}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );
@@ -454,6 +518,9 @@ function StepOfflineOptIn({
   selected,
   onSetEnabled,
   onSelectSize,
+  onPresetSize,
+  onSetLanguage,
+  onSetupDone,
   onBack,
   onNext,
 }: {
@@ -461,7 +528,10 @@ function StepOfflineOptIn({
   enabled: boolean;
   selected: string | null;
   onSetEnabled: (v: boolean) => void;
-  onSelectSize: (s: string) => void;
+  onSelectSize: (s: string | null) => void;
+  onPresetSize: (s: string) => void;
+  onSetLanguage: (code: string) => void;
+  onSetupDone: (done: Pick<FormState, "alsoModels" | "restartNeeded">) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -471,13 +541,14 @@ function StepOfflineOptIn({
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const logCursorRef = useRef(0);
+  const [rec, setRec] = useState<LocalRecommendation | null>(null);
 
   useEffect(() => {
     getLocalStatus().then((s) => {
       setStatus(s);
-      if (!selected) onSelectSize(s.recommended_model);
+      onPresetSize(s.recommended_model);
     });
-  }, [onSelectSize, selected]);
+  }, [onPresetSize]);
 
   // Poll during setup.
   useEffect(() => {
@@ -500,6 +571,9 @@ function StepOfflineOptIn({
             setSetupError(s.setup_error);
             setLogOpen(true);
           } else if (s.set_up) {
+            // The server queued the extras (Turbo for a mix) itself; All set
+            // shows their progress.
+            onSetupDone({ alsoModels: s.setup_also, restartNeeded: s.restart_needed });
             onNext();
           }
         }
@@ -508,8 +582,10 @@ function StepOfflineOptIn({
       }
     }, 1500);
     return () => clearInterval(id);
-  }, [settingUp, onNext]);
+  }, [settingUp, onNext, onSetupDone]);
 
+  // The only way forward with local on: setup (quick when the model can
+  // already run) switches the default and queues the extras server-side.
   const handleStartSetup = async () => {
     if (!selected) return;
     setSettingUp(true);
@@ -517,7 +593,7 @@ function StepOfflineOptIn({
     setLogLines([]);
     logCursorRef.current = 0;
     try {
-      await setupLocal(selected);
+      await setupLocal(selected, keptRec?.also ?? []);
       const s = await getLocalStatus();
       setStatus(s);
     } catch (e) {
@@ -526,17 +602,24 @@ function StepOfflineOptIn({
     }
   };
 
-  const recommended = status?.recommended_model || "base";
   const models = status?.models || [];
+  const pick = models.find((m) => m.size === selected)?.spec;
+  // What the button downloads: the pick, a mix's second model, and the
+  // language check for Parakeet, minus anything already on disk.
+  const keptRec = rec && rec.primary === selected ? rec : null;
+  const toFetch = [selected, ...(keptRec?.also ?? [])].filter(Boolean) as string[];
+  const downloadMb = downloadMbFor(models, toFetch);
+  const allRunnable =
+    toFetch.length > 0 && toFetch.every((id) => models.find((m) => m.size === id)?.runnable);
+  const names = toFetch.map((id) => models.find((m) => m.size === id)?.spec.display_name ?? id);
 
   return (
     <>
       {!required && (
         <div className="mb-4">
           <p className="text-sm text-text-muted mb-3">
-            You can also run transcription offline (on your machine, no API
-            needed). Larger models are more accurate but use more disk and
-            memory.
+            You can also transcribe on this computer: free, private, no API key.
+            Useful as a backup when you're offline or out of credits.
           </p>
           <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface px-3 py-2">
             <input
@@ -558,20 +641,33 @@ function StepOfflineOptIn({
 
       {required && (
         <p className="text-sm text-text-muted mb-4">
-          Pick a Whisper model size. Larger means more accurate but slower and
-          bigger on disk.
+          One question first, so anyscribe can suggest a model for your audio and this
+          computer. Or pick a card yourself.
         </p>
       )}
 
-      {(enabled || required) && (
-        <ModelSizeList
-          models={models}
-          recommended={recommended}
-          selected={selected}
-          onSelect={onSelectSize}
-          disabled={settingUp}
-        />
-      )}
+      {(enabled || required) &&
+        (status ? (
+          <LocalModelPicker
+            models={models}
+            featured={status.featured}
+            languageAnswers={status.language_answers}
+            caption={status.benchmark_caption}
+            selected={selected}
+            onSelect={onSelectSize}
+            disabled={settingUp}
+            guideOpen={required}
+            onRecommendation={(r) => {
+              setRec(r);
+              onSelectSize(r.primary); // "nothing fits" clears it: no download offered
+            }}
+            onSetLanguage={onSetLanguage}
+          />
+        ) : (
+          <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
+        ))}
+
+      {status?.restart_needed && <RestartBanner />}
 
       {setupError && (
         <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
@@ -591,7 +687,9 @@ function StepOfflineOptIn({
               {settingUp && <Loader2 className="w-4 h-4 animate-spin text-amber" />}
               <p className="text-xs text-text font-mono">
                 {settingUp
-                  ? "Installing faster-whisper and downloading the model…"
+                  ? status?.setup_progress?.percent != null
+                    ? `Downloading ${pick?.display_name ?? "the model"}… ${status.setup_progress.percent}%`
+                    : "Installing the local engines and downloading the model…"
                   : "Install log"}
               </p>
             </div>
@@ -631,10 +729,17 @@ function StepOfflineOptIn({
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Setting up…
                 </>
-              ) : status?.set_up ? (
-                "Installed — continue"
-              ) : (
+              ) : !pick ? (
                 "Install now"
+              ) : downloadMb > 0 ? (
+                `Download ${names.join(" + ")} (${formatMB(downloadMb)})`
+              ) : allRunnable && status?.runtime_ready ? (
+                <>
+                  Installed — continue
+                  <ChevronRight className="w-3 h-3" />
+                </>
+              ) : (
+                `Set up ${names.join(" + ")}`
               )}
             </button>
           )}
@@ -647,86 +752,9 @@ function StepOfflineOptIn({
               <ChevronRight className="w-3 h-3" />
             </button>
           )}
-          {(enabled || required) && status?.set_up && (
-            <button
-              onClick={onNext}
-              className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer flex items-center gap-1"
-            >
-              Next
-              <ChevronRight className="w-3 h-3" />
-            </button>
-          )}
         </div>
       </div>
     </>
-  );
-}
-
-function ModelSizeList({
-  models,
-  recommended,
-  selected,
-  onSelect,
-  disabled,
-}: {
-  models: LocalModelEntry[];
-  recommended: string;
-  selected: string | null;
-  onSelect: (s: string) => void;
-  disabled: boolean;
-}) {
-  if (models.length === 0) {
-    return (
-      <div className="text-xs text-text-muted font-mono py-4">
-        Loading model sizes…
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2 mb-3">
-      {models.map((m) => {
-        const isRecommended = m.size === recommended;
-        const isSelected = selected === m.size;
-        return (
-          <button
-            key={m.size}
-            disabled={disabled}
-            onClick={() => onSelect(m.size)}
-            className={`w-full text-left rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
-              isSelected
-                ? "border-amber bg-amber/5"
-                : "border-border-subtle bg-surface hover:border-border"
-            } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-mono text-text font-bold">
-                {m.size}
-              </span>
-              {isRecommended && (
-                <span className="text-[10px] font-mono text-amber bg-amber/10 border border-amber/30 rounded px-1.5 py-0.5">
-                  recommended
-                </span>
-              )}
-              {m.cached && (
-                <span className="text-[10px] font-mono text-green bg-green/10 border border-green/30 rounded px-1.5 py-0.5">
-                  cached
-                </span>
-              )}
-              <span className="ml-auto text-xs text-text-muted font-mono">
-                ~{m.spec.download_mb} MB
-              </span>
-            </div>
-            <p className="text-xs text-text-muted mt-1">
-              {m.spec.quality} · {m.spec.relative_speed}
-            </p>
-            <p className="text-xs text-text mt-0.5">
-              Use it for {m.spec.use_for}
-            </p>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -786,38 +814,52 @@ function StepWorkspace({
 
 function StepDone({
   form,
+  name,
   saving,
   onBack,
   onFinish,
 }: {
   form: FormState;
+  name: (id: string) => string;
   saving: boolean;
   onBack: () => void;
   onFinish: () => void;
 }) {
+  const cloud = API_PROVIDERS.find((p) => p.name === form.provider);
   return (
     <>
+      {form.restartNeeded && <RestartBanner />}
       <p className="text-sm text-text-muted mb-4">
         One click and we'll save everything. You can change any of this in
         Settings later.
       </p>
       <div className="rounded-lg border border-border-subtle bg-surface-raised p-4 mb-5 space-y-2">
-        <SummaryRow label="Provider" value={form.provider || "—"} />
+        <SummaryRow
+          label="Transcribe"
+          value={form.provider === "local" ? "On this computer" : cloud?.label ?? form.provider ?? "—"}
+        />
         {form.provider && form.provider !== "local" && form.apiKey && (
           <SummaryRow label="API key" value="••••" />
         )}
-        {form.provider === "local" && form.localModel && (
-          <SummaryRow label="Local model" value={form.localModel} />
+        {form.localModel && (form.provider === "local" || form.enableLocal) && (
+          <SummaryRow
+            label={form.provider === "local" ? "Model" : "Offline model"}
+            value={`${name(form.localModel)} · ready`}
+          />
         )}
+        {form.language && <SummaryRow label="Language" value="Hindi" />}
         <SummaryRow
           label="Workspace"
           value={form.workspace || "(default)"}
         />
-        {form.provider !== "local" && form.enableLocal && form.localModel && (
-          <SummaryRow
-            label="Offline model"
-            value={form.localModel}
-          />
+        {form.alsoModels.length > 0 && (
+          <div className="pt-1 border-t border-border-subtle">
+            <ExtraDownloads
+              ids={form.alsoModels}
+              name={name}
+              pendingNote={`Switching to ${form.alsoModels.map(name).join(" + ")} for Hindi and other languages works once it finishes downloading. You can start transcribing now; the download carries on.`}
+            />
+          </div>
         )}
       </div>
       <div className="flex items-center justify-between">

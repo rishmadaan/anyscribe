@@ -4,7 +4,7 @@ Three commands, all agentic-first (flag-driven, ``--json``-capable, idempotent,
 no interactive prompts outside the setup confirmation which is guarded by
 ``--yes`` in non-TTY contexts):
 
-* ``anyscribe local setup --model SIZE`` — install faster-whisper + download model.
+* ``anyscribe local setup --model ID`` — install the engines + download a model.
 * ``anyscribe local status`` — report readiness (safe before setup).
 * ``anyscribe local teardown`` — reverse setup: uninstall + delete cached models.
 
@@ -23,14 +23,18 @@ from rich.console import Console
 from rich.table import Table
 
 from anyscribe.core.local_setup import (
+    RESTART_MESSAGE,
+    use_local_tip,
     check_status,
     run_setup,
     run_teardown,
 )
 from anyscribe.providers.local_models import (
+    LANGUAGE_CHECK_MODEL,
     MODEL_SIZES,
     MODEL_SPECS,
     RECOMMENDED_MODEL,
+    engine_of,
 )
 
 console = Console()
@@ -38,7 +42,7 @@ err_console = Console(stderr=True)
 
 local_app = typer.Typer(
     name="local",
-    help="Set up and manage offline transcription (faster-whisper).",
+    help="Set up and manage offline transcription (Parakeet, Whisper).",
     rich_markup_mode="rich",
     no_args_is_help=True,
 )
@@ -57,11 +61,14 @@ def _human_phase(event: dict) -> None:
     if name == "detecting_install_method":
         console.print("[dim]• Detecting install method…[/dim]")
     elif name == "installing_package":
-        console.print(f"[dim]• Installing faster-whisper via {event.get('method', '?')}…[/dim]")
+        console.print(
+            "[dim]• Installing the local engines (faster-whisper, onnx-asr) "
+            f"via {event.get('method', '?')}…[/dim]"
+        )
     elif name == "pipx_not_on_path_fallback":
         console.print("[yellow]  pipx not on PATH — falling back to pip.[/yellow]")
     elif name == "package_installed":
-        console.print("[green]• faster-whisper installed.[/green]")
+        console.print("[green]• Engines installed.[/green]")
     elif name == "downloading_model":
         console.print(f"[dim]• Downloading {event.get('size', '?')} model…[/dim]")
     elif name == "model_downloaded":
@@ -70,7 +77,7 @@ def _human_phase(event: dict) -> None:
     elif name == "deleting_models":
         console.print("[dim]• Deleting cached models…[/dim]")
     elif name == "uninstalling_package":
-        console.print("[dim]• Uninstalling faster-whisper…[/dim]")
+        console.print("[dim]• Uninstalling the local engines…[/dim]")
     elif name == "done":
         pass
 
@@ -81,7 +88,7 @@ def local_setup(
         None,
         "--model",
         "-m",
-        help=f"Whisper model size to install. Required. Recommended: [bold]{RECOMMENDED_MODEL}[/bold]. "
+        help=f"Model to install. Required. Recommended: [bold]{RECOMMENDED_MODEL}[/bold]. "
         f"Choices: {', '.join(MODEL_SIZES)}.",
     ),
     yes: bool = typer.Option(
@@ -94,13 +101,15 @@ def local_setup(
         False, "--json", "-j", help="Stream NDJSON progress events to stdout."
     ),
 ) -> None:
-    """[bold]Install[/bold] faster-whisper and download a Whisper model.
+    """[bold]Install[/bold] the local engines and download a model.
 
     Idempotent — re-running with the same model is a no-op (updates the
-    default-model setting).
+    default-model setting). A Parakeet model also downloads Whisper Tiny
+    (~75 MB), the language-check helper.
 
     [dim]The CLI never picks a model silently; --model is required every
-    time. Recommended default is `base`.[/dim]
+    time. Recommended: parakeet-v3 (English and 24 European languages);
+    large-v3-turbo for Hindi and other languages.[/dim]
     """
     if model is None:
         err = {
@@ -141,8 +150,11 @@ def local_setup(
 
     if is_tty and not yes:
         spec = MODEL_SPECS[model]
+        mb = spec["download_mb"]
+        if engine_of(model) == "parakeet":
+            mb += MODEL_SPECS[LANGUAGE_CHECK_MODEL]["download_mb"]
         if not typer.confirm(
-            f"Install faster-whisper and download the {model} model (~{spec['download_mb']} MB)?",
+            f"Install the local engines and download {spec['display_name']} (~{mb} MB)?",
             default=True,
         ):
             if output_json:
@@ -152,20 +164,23 @@ def local_setup(
             raise typer.Exit(code=0)
 
     status = check_status()
-    if status["faster_whisper_installed"] and any(
-        m["size"] == model and m["cached"] for m in status["models"]
+    if status["runtime_ready"] and any(
+        m["size"] == model and m["runnable"] for m in status["models"]
     ):
         # Already fully set up for this size — just persist default and exit.
-        from anyscribe.config.settings import load_config, save_config
+        from anyscribe.config.settings import CONFIG_LOCK, load_config, save_config
 
-        settings = load_config()
-        if settings.local_model != model:
-            settings.local_model = model
-            save_config(settings)
+        with CONFIG_LOCK:
+            settings = load_config()
+            if settings.local_model != model:
+                settings.local_model = model
+                save_config(settings)
+        tip = use_local_tip()
         payload = {
             "status": "already_set_up",
             "default_model": model,
             "size": model,
+            "use_local_tip": tip,
         }
         if output_json:
             _emit_event(payload)
@@ -173,6 +188,8 @@ def local_setup(
             console.print(
                 f"[green]Already set up.[/green] Default model is now [bold]{model}[/bold]."
             )
+            if tip:
+                console.print(tip)
         return
 
     progress_fn = _emit_event if output_json else _human_phase
@@ -194,12 +211,20 @@ def local_setup(
                 err_console.print(f"  Error: [dim]{result.get('error', '')}[/dim]")
         raise typer.Exit(code=1)
 
+    tip = use_local_tip()
     if output_json:
-        _emit_event({"status": "set_up", **result})
+        _emit_event({"status": "set_up", **result, "use_local_tip": tip})
     else:
         console.print(
-            f"\n[bold green]Local transcription ready.[/bold green] Default model: [bold]{model}[/bold]."
+            "\n[bold green]Local transcription ready.[/bold green] Default model: "
+            f"[bold]{MODEL_SPECS[model]['display_name']}[/bold]."
         )
+        if result.get("restart_needed"):
+            console.print(
+                f"[yellow]{RESTART_MESSAGE}[/yellow] (Stop any running anyscribe ui first.)"
+            )
+        if tip:
+            console.print(tip)
 
 
 @local_app.command("status")
@@ -208,10 +233,21 @@ def local_status(
 ) -> None:
     """[bold]Report[/bold] the state of local transcription.
 
-    Always exits 0; ``set_up: false`` when faster-whisper isn't installed yet.
+    Always exits 0; ``set_up: false`` when the engines aren't installed yet.
     """
     status = check_status()
     if output_json:
+        # "Help me choose" for agents: the pick for every answer to the one question
+        from anyscribe.core.local_recommend import LANGUAGE_ANSWERS, detect_hardware, recommend
+
+        hw = detect_hardware()
+        cached = {m["size"] for m in status["models"] if m["cached"]}
+        status["question"] = "What language is most of your audio?"
+        status["recommendations"] = {
+            a: {k: v for k, v in recommend(a, hw, cached).items() if k != "hardware"}
+            for a in LANGUAGE_ANSWERS
+        }
+        status["hardware"] = hw
         json.dump(status, sys.stdout, indent=2)
         sys.stdout.write("\n")
         return
@@ -233,29 +269,21 @@ def local_status(
         if status["ffmpeg_ok"]
         else f"[red]{status['ffmpeg_message']}[/red]",
     )
+    table.add_row(
+        "onnx-asr (Parakeet)",
+        "[green]installed[/green]" if status["onnx_asr_installed"] else "[red]not installed[/red]",
+    )
     table.add_row("Default model", status["default_model"])
     table.add_row("Install method", status["install_method"])
     total_mb = status["total_disk_bytes"] // (1024 * 1024)
     table.add_row("Cache on disk", f"{total_mb} MB")
     console.print(table)
 
-    models_table = Table(title="Models")
-    models_table.add_column("Size", style="bold")
-    models_table.add_column("Cached")
-    models_table.add_column("Disk")
-    models_table.add_column("Download")
-    models_table.add_column("Quality")
-    for m in status["models"]:
-        cached_mb = int(m["bytes"]) // (1024 * 1024) if m["cached"] else 0
-        marker = " (default)" if m["size"] == status["default_model"] else ""
-        models_table.add_row(
-            f"{m['size']}{marker}",
-            "[green]yes[/green]" if m["cached"] else "[dim]no[/dim]",
-            f"{cached_mb} MB" if m["cached"] else "—",
-            f"~{m['spec']['download_mb']} MB",
-            m["spec"]["quality"],
-        )
-    console.print(models_table)
+    from anyscribe.cli.models_cmd import models_table
+
+    console.print(models_table(status["models"], status["default_model"]))
+    if status.get("suggestion"):
+        console.print(f"[dim]{status['suggestion']}[/dim]")
 
 
 @local_app.command("teardown")
@@ -268,7 +296,7 @@ def local_teardown(
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON."),
 ) -> None:
-    """[bold]Remove[/bold] local transcription — uninstalls faster-whisper and deletes all cached models."""
+    """[bold]Remove[/bold] local transcription — uninstalls the engines and deletes all cached models."""
     is_tty = sys.stdin.isatty() and sys.stdout.isatty()
     if not yes:
         if not is_tty:
@@ -280,7 +308,7 @@ def local_teardown(
                 err_console.print("[red]Non-interactive run — pass --yes to confirm.[/red]")
             raise typer.Exit(code=2)
         if not typer.confirm(
-            "Uninstall faster-whisper and delete all cached models?", default=False
+            "Uninstall the local engines and delete all cached models?", default=False
         ):
             if output_json:
                 _emit_event({"status": "cancelled"})

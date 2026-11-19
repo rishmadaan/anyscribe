@@ -10,6 +10,7 @@ import LanguageInput from "../components/LanguageInput";
 import ModelInput from "../components/ModelInput";
 import { defaultModelFor } from "../api/models";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
 // User-facing label for the diarize/diarized output format. The wire value
 // stays "diarized" so the API contract doesn't change.
@@ -21,15 +22,19 @@ function PlanNotes({
 }: {
   plan: { provider: string; model: string | null; notes: string[] } | null;
 }) {
+  const modelName = useLocalModelNames();
   if (!plan) return null;
   return (
     <div className="mt-4 self-start text-xs font-mono space-y-0.5">
       <p className="text-text-muted">
         {plan.provider}
-        {plan.model ? ` · ${plan.model}` : ""}
+        {plan.model ? ` · ${plan.provider === "local" ? modelName(plan.model) : plan.model}` : ""}
       </p>
       {plan.notes.map((n) => (
-        <p key={n} className={n.startsWith("WARNING") ? "text-amber" : "text-text-muted/70"}>
+        <p
+          key={n}
+          className={`whitespace-pre-line ${n.startsWith("WARNING") ? "text-amber" : "text-text-muted/70"}`}
+        >
           {n}
         </p>
       ))}
@@ -46,6 +51,9 @@ export default function TranscribePage() {
 
   // Override fields
   const [quality, setQuality] = useState("balanced");
+  // Sent only when picked on this page; otherwise the server uses the saved
+  // config (the wizard may have changed it after this page loaded).
+  const [qualityPicked, setQualityPicked] = useState(false);
   const [provider, setProvider] = useState(""); // "" = auto (resolved from quality)
   const [model, setModel] = useState(""); // per-run model override; only when provider is explicit
   const [language, setLanguage] = useState("");
@@ -70,11 +78,12 @@ export default function TranscribePage() {
   const selectedProvider = providers.find((p) => p.name === provider);
 
   const handleSubmit = (url: string, force = false) => {
+    if (!config) return; // the input is disabled until config has loaded
     setLastUrl(url);
-    // Send quality; only send provider when the user explicitly overrode "auto".
+    // Quality only when picked here; provider only when overridden from "auto".
     submit({
       url,
-      quality,
+      quality: qualityPicked ? quality : undefined,
       provider: provider || undefined,
       // Model only travels with an explicit provider — on auto it's ambiguous.
       model: provider && model ? model : undefined,
@@ -106,7 +115,7 @@ export default function TranscribePage() {
             Paste a YouTube, Instagram, or local file URL to transcribe.
           </p>
 
-          <URLInput onSubmit={handleSubmit} />
+          <URLInput onSubmit={handleSubmit} disabled={!config} />
 
           {/* Options accordion */}
           {config && (
@@ -133,7 +142,10 @@ export default function TranscribePage() {
                       {["accuracy", "balanced", "cost", "free"].map((q) => (
                         <button
                           key={q}
-                          onClick={() => setQuality(q)}
+                          onClick={() => {
+                            setQuality(q);
+                            setQualityPicked(true);
+                          }}
                           className={`px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer ${
                             quality === q
                               ? "bg-amber/15 text-amber border-r border-border"
@@ -372,7 +384,7 @@ export default function TranscribePage() {
         <div className="w-full max-w-2xl animate-slide-up">
           <div className="rounded-lg border border-red/30 bg-red/5 px-4 py-3 mb-4">
             <p className="text-sm text-red font-medium mb-1">Transcription failed</p>
-            <p className="text-xs text-text-secondary font-mono">{error}</p>
+            <p className="text-xs text-text-secondary font-mono whitespace-pre-line">{error}</p>
           </div>
           <div className="flex gap-2">
             <button

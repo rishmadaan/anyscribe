@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -35,6 +35,10 @@ class ProcessResult:
     word_count: int
     provider: str
     cached: bool = False
+    # The model that ran when the provider picked it at run time (local), and
+    # notes about any switch it made — e.g. the Parakeet language guard.
+    model: str | None = None
+    notes: list[str] = field(default_factory=list)
 
 
 def process(
@@ -92,6 +96,7 @@ def process(
                 # Not "done"/"error" — the web layer emits its own terminal event.
                 on_progress("cached", "completed", f"Already transcribed: {existing}")
             return ProcessResult(
+                model=str(fm["model"]) if fm.get("model") else None,
                 file_path=existing,
                 title=str(fm.get("title", existing.stem)),
                 platform=str(fm.get("platform", "")),
@@ -99,6 +104,7 @@ def process(
                 language=str(fm.get("language", "")),
                 word_count=int(fm.get("word_count") or 0),
                 provider=str(fm.get("provider", "")),
+                notes=[str(n) for n in fm.get("notes") or []],
                 cached=True,
             )
 
@@ -148,6 +154,8 @@ def process(
                 f"  [green]Done:[/green] {transcript.word_count} words, "
                 f"language={transcript.language}"
             )
+            for note in transcript.notes:
+                err_console.print(f"  [yellow]Note:[/yellow] {note}")
         if on_progress:
             on_progress(
                 "transcribe",
@@ -185,6 +193,8 @@ def process(
             language=transcript.language,
             word_count=transcript.word_count,
             provider=settings.provider,
+            model=transcript.model,
+            notes=list(transcript.notes),
         )
 
     except Exception:

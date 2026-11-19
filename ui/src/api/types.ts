@@ -40,12 +40,41 @@ export interface Provider {
   freeform_model: boolean; // any slug is valid (openrouter) → text input, not select
 }
 
+/** One local model's measured figures (providers/local_models.py MODEL_SPECS). */
 export interface ModelSpec {
+  display_name: string;
+  engine: "whisper" | "parakeet";
+  accuracy: number; // 1-5
+  speed: number; // 1-5
+  min_per_hour: number; // minutes to transcribe 1 hour of audio on the reference machine
   download_mb: number;
   ram_mb: number;
-  relative_speed: string;
-  quality: string;
+  languages: string;
+  language_codes: string[] | null;
   use_for: string;
+  featured: number | null; // card order, null = under "More models"
+  badge: string | null;
+  tucked: string | null; // why it sits under "More models"
+}
+
+/** GET /api/local/recommend — the "Help me choose" answer. */
+export interface LocalRecommendation {
+  answer: string;
+  /** null when nothing fits on disk (the reason says how much is needed) */
+  primary: string | null;
+  also: string[];
+  reasons: string[];
+  download_mb: number;
+  /** a language worth offering to set (Hindi answer), else null */
+  set_language: string | null;
+}
+
+/** GET /api/local/registry — the model registry, no disk scan. */
+export interface LocalRegistry {
+  recommended_model: string;
+  featured: string[];
+  specs: Record<string, ModelSpec>;
+  benchmark_caption: string;
 }
 
 export interface DownloadProgress {
@@ -56,7 +85,12 @@ export interface DownloadProgress {
 
 export interface LocalModelEntry {
   size: string;
+  /** the model's own files are complete (sizes and disk maths only) */
   cached: boolean;
+  /** some bytes on disk but not complete (interrupted download); pull resumes it */
+  partial?: boolean;
+  /** can transcribe now: engine installed, files complete, Parakeet's helpers too */
+  runnable: boolean;
   bytes: number;
   repo: string;
   spec: ModelSpec;
@@ -85,6 +119,27 @@ export interface LocalStatusResponse {
   setup_progress: DownloadProgress | null;
   recommended_model: string;
   choices: string[];
+  featured: string[];
+  language_answers: Record<string, string>;
+  onnx_asr_installed: boolean;
+  runtime_ready: boolean;
+  /** setup replaced an engine the server had loaded: restart anyscribe */
+  restart_needed: boolean;
+  benchmark_caption: string;
+  suggestion: string | null;
+  /** extra models the last setup downloads afterwards (Turbo for a mix) */
+  setup_also: string[];
+  /** how to make local the default for every run; null when it already is */
+  use_local_tip: string | null;
+  /** a chosen model that becomes the default once it can run (server-owned) */
+  pending_default: PendingDefault | null;
+}
+
+export interface PendingDefault {
+  model: string;
+  also: string[];
+  state: "downloading" | "failed";
+  error: string | null;
 }
 
 export interface LocalModelsResponse {
@@ -210,6 +265,7 @@ export interface JobResult {
   word_count: number;
   provider: string;
   model?: string;
+  notes?: string[]; // run-time switches, e.g. the Parakeet language guard
   cached?: boolean;
 }
 

@@ -68,11 +68,19 @@ dev = [
     # <0.16: ruff 0.16.0 changed the default rule set (249 new findings) and
     # broke the v0.14.0 publish lint gate. Raise deliberately, fixing findings.
     "ruff>=0.4,<0.16",
+    # the local-model readiness tests build a real HF cache layout without the
+    # `local` extra (CI installs dev+mcp only)
+    "huggingface-hub>=0.21",
     # scripts/build-docs.py renders docs/user/*.md into landing/docs/*.html
     "markdown>=3.5,<4",
 ]
+# Keep in step with LOCAL_RUNTIME_SPECS in core/local_setup.py (what `local setup` installs).
 local = [
     "faster-whisper>=1.0",
+    # shortcut: faster-whisper 1.2.1 breaks on PyAV 19; drop once a
+    # faster-whisper release includes SYSTRAN/faster-whisper#1495
+    "av<19",
+    "onnx-asr>=0.12.0",  # Parakeet engine (MIT); floor = the version tested
 ]
 mcp = [
     # >=2: SDK v2 speaks protocol 2026-07-28 and renamed FastMCP -> MCPServer.

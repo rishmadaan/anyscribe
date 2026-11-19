@@ -84,7 +84,7 @@ Then prepend a row to `docs/building/_index.md`.
 
 - `beaupy` — arrow-key selectors in onboarding wizard
 - `yt-dlp` — YouTube + Instagram downloader (subprocess; cookies via `--cookies-from-browser` for IG)
-- `faster-whisper` — local transcription (optional, only for `local` provider)
+- `faster-whisper` + `onnx-asr` — local transcription engines (Whisper, Parakeet; optional, only for the `local` provider, installed by `local setup` or the `local` extra with `av<19`)
 
 ## Cross-Platform
 

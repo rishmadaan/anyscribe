@@ -16,6 +16,9 @@ import { getOnboardingStatus } from "./api/client";
  */
 export default function App() {
   const [showWizard, setShowWizard] = useState(false);
+  // Bumped when the wizard closes so the Transcribe page reloads the config
+  // the wizard just saved (it mounted behind the wizard with the old one).
+  const [configVersion, setConfigVersion] = useState(0);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("scribe_onboarding_dismissed") === "1";
@@ -41,14 +44,19 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<TranscribePage />} />
+          <Route index element={<TranscribePage key={configVersion} />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="history/:id" element={<TranscriptView />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
       {showWizard && (
-        <OnboardingWizard onClose={() => setShowWizard(false)} />
+        <OnboardingWizard
+          onClose={() => {
+            setShowWizard(false);
+            setConfigVersion((v) => v + 1);
+          }}
+        />
       )}
     </BrowserRouter>
   );

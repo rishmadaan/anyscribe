@@ -113,7 +113,9 @@ export default function Modal({
         aria-label={ariaLabelledBy ? undefined : ariaLabel}
         aria-labelledby={ariaLabelledBy}
         tabIndex={-1}
-        className={`relative w-full ${SIZE_CLASS[size]} rounded-xl border border-border-subtle bg-surface p-5 shadow-2xl animate-fade-in outline-none`}
+        // tall content (the model picker) scrolls inside the dialog instead of
+        // pushing its buttons off-screen
+        className={`relative w-full ${SIZE_CLASS[size]} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-border-subtle bg-surface p-5 shadow-2xl animate-fade-in outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

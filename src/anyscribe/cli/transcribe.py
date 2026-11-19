@@ -106,6 +106,7 @@ def transcribe(
         if settings.output_format == "clean":
             settings.output_format = "diarized"
 
+    plan = None
     try:
         plan = resolve_run(settings, cli_provider=provider, cli_model=model, diarize=diarize)
         settings.provider = plan.provider
@@ -120,6 +121,10 @@ def transcribe(
             json.dump({"success": False, "data": None, "error": error_msg}, sys.stdout, indent=2)
             sys.stdout.write("\n")
         else:
+            from anyscribe.providers.base import LOCAL_HINT
+
+            if plan and not quiet and any(LOCAL_HINT in n for n in plan.notes):
+                error_msg = error_msg.replace("\n" + LOCAL_HINT, "")  # the plan's warning said it
             err_console.print(f"[red]Error:[/red] {error_msg}")
         if _debug_mode:
             import traceback
@@ -139,9 +144,9 @@ def transcribe(
                     "language": result.language,
                     "word_count": result.word_count,
                     "provider": result.provider,
-                    "model": plan.model,
+                    "model": result.model or plan.model,
                     "via": plan.via,
-                    "notes": plan.notes,
+                    "notes": plan.notes + result.notes,
                     "cached": result.cached,
                 },
                 "error": None,
@@ -161,6 +166,10 @@ def transcribe(
         console.print(f"  Duration: {result.duration}")
         console.print(f"  Language: {result.language}")
         console.print(f"  Words:    {result.word_count}")
+        if result.model:
+            console.print(f"  Model:    {result.model}")
+        for note in result.notes:
+            console.print(f"  [yellow]Note:[/yellow] {note}")
 
         # Post-transcription download prompt (skip for local files)
         if url.startswith("http://") or url.startswith("https://"):

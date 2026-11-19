@@ -169,7 +169,8 @@ class JobManager:
                 "language": result.language,
                 "word_count": result.word_count,
                 "provider": result.provider,
-                "model": model,
+                "model": result.model or model,
+                "notes": result.notes,
                 "cached": result.cached,
             }
             # Send completion event

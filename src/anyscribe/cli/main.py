@@ -344,6 +344,16 @@ def doctor() -> None:
 
     if not CONFIG_FILE.exists():
         console.print("\n  [yellow]Run [bold]anyscribe onboard[/bold] to set up.[/yellow]")
+    else:
+        from anyscribe.config.settings import load_config
+        from anyscribe.core.local_recommend import parakeet_suggestion
+
+        settings = load_config()
+        tip = settings.provider == "local" and parakeet_suggestion(
+            settings.local_model, settings.language
+        )
+        if tip:
+            console.print(f"\n  [dim]{tip}[/dim]")
 
     # Install info
     console.print("\n[bold]3. Installation[/bold]\n")

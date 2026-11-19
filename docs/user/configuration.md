@@ -48,7 +48,7 @@ provider_models: {}        # Which model each provider should use (empty = defau
 extra_models: {}           # Your own OpenRouter model names, added to the picker
 quality: balanced          # accuracy | balanced | cost | free | custom — picks the provider
 language: auto             # Language for transcription
-local_model: base          # Offline Whisper size (local provider only)
+local_model: base          # Offline model id, e.g. parakeet-v3 (local provider only)
 tailnet: false             # Also share `anyscribe ui` on your Tailscale tailnet
 keep_media: false          # Whether to save audio files
 output_format: clean       # How to format transcripts
@@ -113,14 +113,14 @@ Which API to use for transcription when `quality` is `custom`. Default: `openai`
 | `elevenlabs` | ElevenLabs Scribe v2 (highest accuracy, 90+ languages) | `ELEVENLABS_API_KEY` |
 | `sargam` | Sarvam AI (22 Indic languages + English) | `SARGAM_API_KEY` |
 | `groq` | Groq (fast, cheap Whisper large-v3-turbo) | `GROQ_API_KEY` |
-| `local` | faster-whisper (offline, free) | None needed |
+| `local` | Parakeet or Whisper on this computer (offline, free) | None needed |
 
 > **Tip:** If you don't have a strong opinion, leave `quality` on a tier (below)
 > and don't touch `provider` at all — the tier chooses for you.
 
 > **Why multiple providers?** Different services handle different languages better. OpenAI Whisper is a good default, ElevenLabs has high accuracy across 90+ languages, Sarvam excels at Indian languages, and the local provider is free and works offline.
 
-> **Local provider** needs a one-time `anyscribe local setup --model base` (or the Web UI's "Set up local transcription" button), which installs faster-whisper and downloads the model. Runs on CPU, or on an NVIDIA GPU with CUDA.
+> **Local provider** needs a one-time `anyscribe local setup --model parakeet-v3` (or the Web UI's "Set up local transcription" button), which installs the local engines (faster-whisper and onnx-asr) and downloads the model. Runs on CPU, or on an NVIDIA GPU with CUDA. See [local_model](#local_model) for the models.
 
 #### provider_models
 
@@ -206,7 +206,7 @@ anyscribe; you rarely need to touch `provider` directly.
 | `balanced` (default) | Deepgram `nova-3` | Strong accuracy + native speaker labels |
 | `accuracy` | ElevenLabs `scribe_v2` | Highest accuracy, primarily-English |
 | `cost` | Groq `whisper-large-v3-turbo` | Cheapest + fastest cloud (~$0.04/hr) |
-| `free` | Local faster-whisper | Offline, $0 (needs `anyscribe local setup`) |
+| `free` | Local (Parakeet or Whisper) | Offline, $0 (needs `anyscribe local setup`) |
 | `custom` | Whatever `provider` says | You picked a provider yourself |
 
 Change it with `anyscribe config set quality cost`, per-run with
@@ -306,23 +306,60 @@ What to do with the original file when transcribing local audio/video files. Def
 
 #### local_model
 
-Which Whisper model the `local` provider uses when transcribing. Default: `base`.
+Which model the `local` provider uses when transcribing on this computer. Default in
+a fresh `config.yaml`: `base`; setup (the wizard, `anyscribe onboard`, or
+`anyscribe local setup --model <id>`) sets it to what you pick, and the recommended
+pick is `parakeet-v3`.
 
-| Value | Download | RAM | Quality |
-|-------|----------|-----|---------|
-| `tiny` | ~75 MB | ~400 MB | lowest |
-| `base` (default) | ~145 MB | ~600 MB | good for most |
-| `small` | ~480 MB | ~1.2 GB | noticeably better |
-| `medium` | ~1.5 GB | ~2.5 GB | near-large for many languages |
-| `large-v3` | ~3 GB | ~5 GB | highest |
-| `large-v3-turbo` | ~1.6 GB | ~3 GB | near `large-v3`, ~6x faster on CPU |
-| `distil-large-v3.5` | ~1.5 GB | ~2.8 GB | near `large-v3` for English; weaker on other languages |
+| Model | Id | Accuracy | Speed | 1 hour of audio | Download | Memory | Languages |
+|-------|----|----------|-------|-----------------|----------|--------|-----------|
+| **Parakeet v3** (recommended) | `parakeet-v3` | 5/5 | 4/5 | ~10 min | ~670 MB | ~2.2 GB | English + 24 European languages |
+| **Whisper Large v3 Turbo** (for Hindi) | `large-v3-turbo` | 5/5 | 2/5 | ~40 min | ~1.6 GB | ~3.1 GB | Hindi and 95+ others |
+| **Whisper Small** | `small` | 4/5 | 3/5 | ~22 min | ~460 MB | ~1.3 GB | Hindi and 95+ others |
+| **Whisper Base** | `base` | 3/5 | 4/5 | ~8 min | ~140 MB | ~1 GB | Hindi and 95+ others |
+| Parakeet v2 | `parakeet-v2` | 4/5 | 4/5 | ~9 min | ~670 MB | ~2.5 GB | English only (v3 is as fast and more accurate) |
+| Whisper Medium | `medium` | 4/5 | 1/5 | ~67 min | ~1.5 GB | ~3.2 GB | slower than real time, no better than Small |
+| Whisper Large v3 | `large-v3` | 4/5 | 1/5 | ~2.5 hours | ~2.9 GB | ~6.4 GB | needs a graphics card to be practical |
+| Distil-Whisper Large v3.5 | `distil-large-v3.5` | 3/5 | 2/5 | ~32 min | ~1.4 GB | ~2.7 GB | English; scored below Small in our test |
+| Whisper Tiny | `tiny` | 2/5 | 5/5 | ~4 min | ~75 MB | ~0.9 GB | very rough; used for the language check |
 
-> **Want better quality without the wait?** `large-v3-turbo` is the sweet spot — close to `large-v3` accuracy at roughly six times the speed on a CPU, and half the download. Pick `distil-large-v3.5` only if everything you transcribe is in English.
+Times and ratings were measured on a 6-core desktop processor (Intel i5-10600K) with
+no graphics card, on 15 minutes of real English recordings. A Mac with Apple silicon
+or a computer with an NVIDIA graphics card will likely be faster. `anyscribe model list`
+shows the same table with what you have downloaded.
 
-Change it with `anyscribe config set local_model small` or from the default-model dropdown inside the Local provider panel in the Web UI. Pull it first with `anyscribe model pull <size>`; the Web UI only lists cached models, but `config set` does not check. A one-off override is available via `ASCLI_LOCAL_MODEL=medium anyscribe "<url>"` (`ASCLI_` is the legacy env prefix, still honored).
+> **Which one?** English or another European language: **Parakeet v3**, as accurate
+> as the best Whisper model on English at about four times its speed. Hindi or
+> another Indian language: **Whisper Large v3 Turbo** (or **Small** on a computer
+> with less than 6 GB of memory). A mix: keep Parakeet v3 as the default and also
+> download Turbo; anyscribe switches by itself. Not sure? The **Help me choose**
+> button in Settings → Local (or the first question in `anyscribe onboard`) asks
+> what your audio is and suggests one.
 
-> **Not set until setup.** This field has no effect until you run `anyscribe local setup --model <size>` (or the equivalent Web UI button). The field is still present in `config.yaml` with the default value of `base`.
+> **The language check.** Parakeet only knows 25 languages and writes nonsense on
+> anything else, so before it runs, anyscribe checks the language at the start,
+> middle and end of each recording with Whisper Tiny (speech only, a few seconds;
+> downloaded with Parakeet, +75 MB). If any of them is another language, it uses
+> Whisper Large v3 Turbo (or the best other Whisper model you have) instead and
+> says so in the terminal, in `--json` `notes`, in the dashboard, and in the
+> transcript's details. If the check can't tell, it uses Whisper when one is
+> downloaded, or runs Parakeet and says the check was unsure. If one recording
+> switches language mid-sentence (Hinglish), make Whisper Large v3 Turbo your
+> default instead. If no Whisper model is downloaded, it
+> stops with the command to fix it and writes nothing. Setting `language` to a
+> Parakeet language (for example `en`) skips the check.
+
+Change it with `anyscribe config set local_model parakeet-v3` or by picking a card in
+the Local provider panel in the Web UI. Pull it first with
+`anyscribe model pull <id>`: `config set` only accepts a model that is ready
+(Parakeet with its language check) and otherwise says what to download, leaving
+the default as it was. In the Web UI, picking a model that isn't downloaded
+starts its download and makes it the default once it's ready (a later pick
+replaces that; a failed download leaves the default as it was). A download that
+was interrupted shows as **incomplete** (`partial` in `--json`); picking it or
+`anyscribe model pull <id>` resumes it. A one-off override is available via
+`ASCLI_LOCAL_MODEL=medium anyscribe "<url>"` (`ASCLI_` is the legacy env prefix,
+still honored). Nothing changes for an existing setup unless you pick a new model.
 
 #### tailnet
 

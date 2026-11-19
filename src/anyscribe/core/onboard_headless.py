@@ -29,6 +29,7 @@ from anyscribe.config.paths import (
     ensure_app_dirs,
 )
 from anyscribe.config.settings import (
+    CONFIG_LOCK,
     load_config,
     load_env,
     save_config,
@@ -194,33 +195,45 @@ def run_headless_onboard(
 
     # Merge settings from current config (or defaults if none), overlaying what
     # was passed.
-    settings = load_config()
-    settings.provider = provider
-    # Same invariant as core.config_set.set_value("provider", ...): an explicit
-    # provider choice only sticks if the quality tier stops overriding it.
-    settings.quality = quality or "custom"
-    if model:
-        settings.provider_models[provider] = model
-    if language is not None:
-        settings.language = language
-    if keep_media is not None:
-        settings.keep_media = keep_media
-    if output_format is not None:
-        settings.output_format = output_format
-    if workspace is not None:
-        resolved = Path(workspace).expanduser()
-        settings.workspace_path = "" if resolved == DEFAULT_WORKSPACE else str(resolved)
-    if local_model is not None:
-        settings.local_model = local_model
-    if instagram_browser is not None:
-        normalized_browser = instagram_browser.strip().lower()
-        # "none" is the explicit user choice for "no cookies" — store as empty
-        # string so the config has a single canonical representation.
-        if normalized_browser == "none":
-            normalized_browser = ""
-        settings.instagram.browser = normalized_browser
+    with CONFIG_LOCK:  # one read-modify-write: a background save can't land in between
+        settings = load_config()
+        settings.provider = provider
+        # Same invariant as core.config_set.set_value("provider", ...): an explicit
+        # provider choice only sticks if the quality tier stops overriding it.
+        settings.quality = quality or "custom"
+        if model:
+            settings.provider_models[provider] = model
+        if language is not None:
+            settings.language = language
+        if keep_media is not None:
+            settings.keep_media = keep_media
+        if output_format is not None:
+            settings.output_format = output_format
+        if workspace is not None:
+            resolved = Path(workspace).expanduser()
+            settings.workspace_path = "" if resolved == DEFAULT_WORKSPACE else str(resolved)
+        # The local default changes only to a model that can run: with
+        # provider=local, run_setup below switches it after the download succeeds.
+        if local_model is not None and provider != "local" and local_model != settings.local_model:
+            from anyscribe.providers.local_models import runnable
 
-    save_config(settings)
+            if not runnable(local_model):
+                raise OnboardValidationError(
+                    {
+                        "error": f"local model '{local_model}' isn't downloaded yet",
+                        "hint": f"run `anyscribe local setup --model {local_model}` first",
+                    }
+                )
+            settings.local_model = local_model
+        if instagram_browser is not None:
+            normalized_browser = instagram_browser.strip().lower()
+            # "none" is the explicit user choice for "no cookies" — store as empty
+            # string so the config has a single canonical representation.
+            if normalized_browser == "none":
+                normalized_browser = ""
+            settings.instagram.browser = normalized_browser
+
+        save_config(settings)
     _emit(on_progress, {"event": "config_saved"})
 
     # Collect secrets to write to .env. Skip empty values and skip the provider
@@ -280,7 +293,9 @@ def run_headless_onboard(
         "status": status,
         "provider": provider,
         "quality": settings.quality,
-        "model": settings.provider_models.get(provider) or (catalog[0] if catalog else None),
+        "model": settings.provider_models.get(provider)
+        or (catalog[0] if catalog else None)
+        or (local_model if provider == "local" else None),
         "workspace": str(vault_path),
         "local_enabled": provider == "local"
         and (local_setup_result or {}).get("status") != "failed",

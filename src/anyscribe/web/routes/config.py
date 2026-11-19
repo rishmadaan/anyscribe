@@ -11,11 +11,14 @@ from starlette.concurrency import run_in_threadpool
 
 from anyscribe.config.paths import get_workspace_dir
 from anyscribe.config.settings import (
+    CONFIG_LOCK,
+    Settings,
     delete_env,
     env_file_keys,
     forget_env_var,
     load_config,
     load_env,
+    save_config,
     save_env,
 )
 from anyscribe.core.config_set import set_value
@@ -33,7 +36,7 @@ from anyscribe.providers.languages import PROVIDER_LANGUAGES
 from anyscribe.providers.local_models import (
     faster_whisper_importable,
     faster_whisper_version,
-    is_cached,
+    runnable,
 )
 from anyscribe.web.models import ConfigUpdateRequest, KeyUpdateRequest
 
@@ -47,7 +50,7 @@ PROVIDER_INFO: dict[str, str] = {
     "sargam": "Optimized for Indic languages (Hindi, Tamil, Telugu, etc.)",
     "openrouter": "Access various models via unified API",
     "groq": "Cheapest + fastest cloud Whisper (large-v3-turbo)",
-    "local": "Offline, free, runs on your machine (requires faster-whisper)",
+    "local": "On this computer: free, private, no API key (Parakeet or Whisper)",
 }
 
 # Maps provider name -> env var for its API key (API providers only)
@@ -102,38 +105,60 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
 
     # set_value persists per field; snapshot config.yaml so a mixed
     # valid+invalid payload rolls back instead of half-committing (a 422
-    # must mean "nothing was saved").
-    snapshot = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
-
+    # must mean "nothing was saved"). The fields and their rollback run under
+    # CONFIG_LOCK, so a background save (the model worker) can't land between
+    # them and be undone. No await inside the lock: it is held by this thread.
     def rollback() -> None:
         if snapshot is not None:
             CONFIG_FILE.write_bytes(snapshot)
         elif CONFIG_FILE.exists():
             CONFIG_FILE.unlink()
 
-    for field_name, value in req.model_dump(exclude_unset=True).items():
-        if value is None or field_name == "tailnet":  # saved below, with its live apply
-            continue
-        if field_name == "instagram" and isinstance(value, dict):
-            # Nested block -> dotted keys, the shape set_value speaks.
-            outcomes = [set_value(f"instagram.{k}", v) for k, v in value.items()]
-            outcome = next((o for o in outcomes if not o.ok), None)
-            if outcome is None:
+    with CONFIG_LOCK:
+        snapshot = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
+        before = load_config().to_dict()
+        for field_name, value in req.model_dump(exclude_unset=True).items():
+            if value is None or field_name == "tailnet":  # saved below, with its live apply
                 continue
-        else:
-            outcome = set_value(field_name, value)
-        if not outcome.ok:
-            rollback()
-            return JSONResponse(
-                status_code=422,
-                content={"success": False, "error": outcome.error, "choices": outcome.choices},
-            )
+            if field_name == "instagram" and isinstance(value, dict):
+                # Nested block -> dotted keys, the shape set_value speaks.
+                outcomes = [set_value(f"instagram.{k}", v) for k, v in value.items()]
+                outcome = next((o for o in outcomes if not o.ok), None)
+                if outcome is None:
+                    continue
+            else:
+                outcome = set_value(field_name, value)
+            if not outcome.ok:
+                rollback()
+                return JSONResponse(
+                    status_code=422,
+                    content={"success": False, "error": outcome.error, "choices": outcome.choices},
+                )
+        after = load_config().to_dict()
     if req.tailnet is not None:  # same save + live apply as PUT /api/tailnet, under one lock
+        # Outside CONFIG_LOCK: the tailnet lock is always taken first (it calls set_value).
         outcome = await run_in_threadpool(request.app.state.tailnet.save_and_apply, req.tailnet)
         if not outcome.ok:  # on: nothing applied; off: already revoked. Undo the fields above
-            rollback()
+            await run_in_threadpool(_undo_fields, rollback, before, after)
             return JSONResponse(status_code=422, content={"success": False, "error": outcome.error})
     return _config_payload()
+
+
+def _undo_fields(rollback, before: dict, after: dict) -> None:
+    """Undo a PUT's fields after its tailnet part failed. If another writer
+    saved in between, put back only the keys this request changed (and
+    tailnet), keeping that writer's change instead of the old snapshot."""
+    with CONFIG_LOCK:
+        now = load_config().to_dict()
+        if {k: v for k, v in now.items() if k != "tailnet"} == {
+            k: v for k, v in after.items() if k != "tailnet"
+        }:
+            rollback()  # nothing else wrote: the exact old file
+            return
+        for k, v in before.items():
+            if k == "tailnet" or after.get(k) != v:
+                now[k] = v
+        save_config(Settings.from_dict(now))
 
 
 @router.get("/providers")
@@ -239,6 +264,21 @@ async def test_provider(
                 f"faster-whisper {fw_version}" if fw_version else "faster-whisper not installed"
             ),
         }
+        from anyscribe.providers.local_models import (
+            MODEL_SIZES,
+            engine_of,
+            onnx_asr_importable,
+        )
+
+        if default_size in MODEL_SIZES and engine_of(default_size) == "parakeet":
+            # Parakeet runs on onnx-asr (and decodes audio through faster-whisper)
+            onnx_ok = onnx_asr_importable()
+            fw_ok = fw_ok and onnx_ok
+            fw_check = {
+                "ok": fw_ok,
+                "message": fw_check["message"]
+                + (" · onnx-asr installed" if onnx_ok else " · onnx-asr not installed"),
+            }
 
         ffmpeg_ok = False
         ffmpeg_msg = "ffmpeg not found on PATH"
@@ -249,13 +289,14 @@ async def test_provider(
                 break
         ffmpeg_check = {"ok": ffmpeg_ok, "message": ffmpeg_msg}
 
-        model_ok = fw_ok and is_cached(default_size)
+        model_ok = default_size in MODEL_SIZES and runnable(default_size)
+        helpers = " and its language check" if model_ok and engine_of(default_size) == "parakeet" else ""
         model_check = {
             "ok": model_ok,
             "message": (
-                f"{default_size} model cached"
+                f"{default_size} model ready{helpers}"
                 if model_ok
-                else f"{default_size} model not cached — run `anyscribe local setup --model {default_size}`"
+                else f"{default_size} model not ready — run `anyscribe local setup --model {default_size}`"
             ),
             "size": default_size,
         }

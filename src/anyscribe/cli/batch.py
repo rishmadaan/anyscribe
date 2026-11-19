@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
 from rich.table import Table
 
@@ -96,6 +97,7 @@ def batch(
             settings.output_format = "diarized"
 
     from anyscribe.cli.transcribe import print_plan
+    from anyscribe.providers.base import LOCAL_HINT
     from anyscribe.core.resolve import resolve_run
 
     try:
@@ -196,11 +198,18 @@ def batch(
             for i, r in enumerate(results, 1):
                 if r["success"]:
                     status = "[yellow]CACHED[/yellow]" if r.get("cached") else "[green]OK[/green]"
-                    table.add_row(str(i), status, r["title"])
+                    notes = "".join(
+                        f"\n[yellow]Note:[/yellow] {escape(n)}" for n in r.get("notes") or []
+                    )
+                    table.add_row(str(i), status, r["title"] + notes)
                 else:
                     table.add_row(str(i), "[red]FAIL[/red]", r["error"][:80])
 
             console.print(table)
+            # rows are cut at 80 characters, past the start of the hint: say it once here
+            hinted = not quiet and any(LOCAL_HINT in n for n in plan.notes)
+            if not hinted and any(LOCAL_HINT in (r.get("error") or "") for r in results):
+                console.print(LOCAL_HINT)
 
     if failed > 0:
         raise typer.Exit(code=1)
@@ -275,6 +284,8 @@ def _process_url(
                 "duration": result.duration,
                 "language": result.language,
                 "word_count": result.word_count,
+                "model": result.model,
+                "notes": result.notes,
             }
         )
     except Exception as e:

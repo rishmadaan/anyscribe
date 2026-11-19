@@ -42,14 +42,14 @@ CLI-only.
 | `anyscribe config list-keys` | Every settable key with its current value | Settings → Providers (key status) |
 | `anyscribe providers list` | Show available providers | Settings → Providers |
 | `anyscribe providers test [name]` | Check provider loading and key presence | Settings → Providers → Test |
-| `anyscribe local setup --model <size>` | Install faster-whisper + download a Whisper model | Settings → Local provider card |
+| `anyscribe local setup --model <id>` | Install the local engines + download a model (e.g. `parakeet-v3`) | Settings → Local provider card |
 | `anyscribe local status` | Report local-transcription readiness | Settings → Local provider card |
-| `anyscribe local teardown --yes` | Uninstall faster-whisper + delete all cached models | Settings → Local provider card → Remove local transcription |
-| `anyscribe model list` | List Whisper models with cache status | Settings → Local provider card |
-| `anyscribe model pull <size>` | Download an additional Whisper model | Settings → Local provider card |
-| `anyscribe model rm <size> --yes` | Delete a cached Whisper model | Settings → Local provider card |
+| `anyscribe local teardown --yes` | Uninstall the local engines + delete all cached models | Settings → Local provider card → Remove local transcription |
+| `anyscribe model list` | List local models with ratings and cache status | Settings → Local provider card |
+| `anyscribe model pull <id>` | Download an additional local model | Settings → Local provider card |
+| `anyscribe model rm <id> --yes` | Delete a cached local model | Settings → Local provider card |
 | `anyscribe model reinstall <size> --yes` | Delete + re-download in one step (for corrupted weights) | Settings → Local provider card |
-| `anyscribe model info <size>` | Inspect a single Whisper model | — (CLI only) |
+| `anyscribe model info <id>` | Inspect a single local model | — (CLI only) |
 | `anyscribe ui` | Launch the web UI in your browser | — (it *is* the Web UI) |
 | `anyscribe desktop install` | Desktop mode: app icon, start at login, open the dashboard | — (CLI only) |
 | `anyscribe desktop uninstall` | Stop anyscribe and remove the app, login item and icons | — (CLI only) |
@@ -222,7 +222,7 @@ Anything anyscribe decided on your behalf is printed underneath, indented:
 
 The line goes to stderr, so it never mixes into `--json` output — and `--quiet` hides it.
 
-> **The `local` provider is different.** Its models are downloaded to your machine, so you pick them with `anyscribe local setup --model <size>` and `anyscribe model pull <size>`, not with `-m`.
+> **The `local` provider is different.** Its models are downloaded to your machine, so you pick them with `anyscribe local setup --model <id>` and `anyscribe model pull <id>`, not with `-m`. The model that actually ran is in `--json` `model`, and if anyscribe switched models for a language (Parakeet doesn't know Hindi, so it uses Whisper Large v3 Turbo) the run prints `Note: Detected Hindi — Parakeet v3 doesn't cover Hindi, so this used Whisper Large v3 Turbo.`, adds it to `--json` `notes`, and writes it into the transcript.
 
 > **Already transcribed something? anyscribe won't do it twice.** Before transcribing, anyscribe checks your vault for a transcript of the same URL or file (it matches the `source:` line in each note's frontmatter — the metadata block at the top). If it finds one, it hands you back that existing file instead of spending time and API credits re-transcribing. You'll see `Already transcribed: <path> — use --force to re-transcribe.` To force a fresh transcription anyway (say you switched providers, or the video was re-uploaded), add `--force`.
 
@@ -746,25 +746,25 @@ openai      gpt-transcribe    whisper-1, gpt-4o-transcribe, ...
 | `groq` | `GROQ_API_KEY` | Cheapest cloud option (the `cost` quality tier) |
 | `local` | None needed | Offline, free, runs on your machine |
 
-> **Local provider** requires a one-time setup: `anyscribe local setup --model base` (or click "Set up local transcription" in the Web UI). See `anyscribe local` and `anyscribe model` below.
+> **Local provider** requires a one-time setup: `anyscribe local setup --model parakeet-v3` (or click "Set up local transcription" in the Web UI). See `anyscribe local` and `anyscribe model` below.
 
 ---
 
 ## anyscribe local
 
-Three subcommands that manage offline transcription as a single opt-in lifecycle: install faster-whisper, download a model, persist the default; or reverse the whole thing. See also [providers.md → Local](providers.md).
+Three subcommands that manage offline transcription as a single opt-in lifecycle: install the local engines (faster-whisper and onnx-asr), download a model, persist the default; or reverse the whole thing. See also [providers.md → Local](providers.md).
 
 ### anyscribe local setup
 
 ```bash
-anyscribe local setup --model base --yes
+anyscribe local setup --model parakeet-v3 --yes
 ```
 
-Installs faster-whisper into the same Python environment as anyscribe, downloads the Whisper model you picked, and saves it as your default. **Idempotent** — re-running with a model that's already cached just updates the default-model setting.
+Installs the local engines into the same Python environment as anyscribe (with `uv` when that environment has no pip, as with `uv tool install`), downloads the model you picked, and saves it as your default. A Parakeet model also downloads Whisper Tiny (~75 MB), the language check. **Idempotent** — re-running with a model that's already cached just updates the default-model setting.
 
 | Flag | Description |
 |------|-------------|
-| `--model`, `-m` | **Required.** Whisper size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `large-v3-turbo` (`base` on an older laptop). No default — the CLI refuses to pick silently. |
+| `--model`, `-m` | **Required.** Model id: `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended: `parakeet-v3` (English and European languages); `large-v3-turbo` for Hindi and other languages; `base` on a computer with under 4 GB of memory. See [configuration.md → local_model](configuration.md#local_model) for the measured table. No default — the CLI refuses to pick silently. |
 | `--yes`, `-y` | Skip the confirmation prompt. Required in non-TTY (agent) contexts. |
 | `--json`, `-j` | Stream NDJSON progress events to stdout (one JSON object per phase). |
 
@@ -774,7 +774,7 @@ Installs faster-whisper into the same Python environment as anyscribe, downloads
 anyscribe local status --json
 ```
 
-Reports faster-whisper version, ffmpeg presence, cached models, disk usage, and the detected install method (pip-venv / pipx / system). Always exits 0 — safe to call before setup.
+Reports the engines (faster-whisper version, onnx-asr), ffmpeg presence, every model with accuracy, speed, minutes per hour of audio and cache status, disk usage, and the detected install method (pip-venv / pipx / system). When your default is a Whisper model and your language is English or auto, it adds a one-line tip about Parakeet v3 (a suggestion only; nothing changes). `--json` also carries `recommendations`: the suggested model for each answer to "What language is most of your audio?" (`english`, `indian`, `european`, `mix`, `other`), with the reasons and the detected hardware. Always exits 0 — safe to call before setup.
 
 ### anyscribe local teardown
 
@@ -782,15 +782,15 @@ Reports faster-whisper version, ffmpeg presence, cached models, disk usage, and 
 anyscribe local teardown --yes
 ```
 
-Uninstalls faster-whisper via the same method it was installed with, deletes every cached Whisper model, resets `provider` to `openai` if it was `local`, and sets `quality` to `custom` if the provider was `local` or the tier was `free`, so runs stop routing to what you just removed. Asks before uninstalling; pass `--yes` to skip the prompt (required when run from a script or agent).
+Uninstalls the local engines (faster-whisper, onnx-asr) via the same method they were installed with, deletes every cached local model, resets `provider` to `openai` if it was `local`, and sets `quality` to `custom` if the provider was `local` or the tier was `free`, so runs stop routing to what you just removed. Asks before uninstalling; pass `--yes` to skip the prompt (required when run from a script or agent).
 
 ---
 
 ## anyscribe model
 
-Day-to-day management of the Whisper cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `reinstall` error out with a hint pointing you at setup).
+Day-to-day management of the local model cache. Requires `anyscribe local setup` to have run first (otherwise `pull` and `reinstall` error out with a hint pointing you at setup). Pulling a Parakeet model on an install from before Parakeet installs its engine (onnx-asr) first.
 
-Valid sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [providers.md → Local](providers.md) for download sizes, RAM needs, and speed.
+Valid ids: `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. See [configuration.md → local_model](configuration.md#local_model) for download sizes, memory, accuracy and speed.
 
 > **This is offline models only.** Cloud providers' models don't need downloading — you pick those with `-m` or `provider_models` (see above).
 
@@ -801,7 +801,7 @@ anyscribe model list
 anyscribe model list --json
 ```
 
-Shows every size with cache status, disk usage, and which one is your default.
+Shows every model with its accuracy and speed (out of 5), minutes per hour of audio, download size, cache status, and which one is your default and which is recommended.
 
 ### anyscribe model pull
 
@@ -810,7 +810,7 @@ anyscribe model pull small
 anyscribe model pull large-v3-turbo --json
 ```
 
-Downloads an additional model into the cache. Idempotent — re-running on a cached size returns `{status: "already_present"}`.
+Downloads an additional model into the cache. Idempotent — re-running on a cached model returns `{status: "already_present"}`. A Parakeet model also downloads Whisper Tiny if it's missing (`helpers_downloaded: ["tiny"]`).
 
 ### anyscribe model rm
 

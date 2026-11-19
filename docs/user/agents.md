@@ -95,7 +95,8 @@ Both paths hit the same engine — the difference is how much of it is exposed.
 | Update anyscribe (`update`) | ✓ | — |
 | Run the setup wizard (`onboard`) | ✓ | — |
 | Set up offline transcription (`local setup`) | ✓ | — |
-| Manage Whisper models (`model list` / `pull` / `rm`) | ✓ | — |
+| Manage local models (`model list` / `pull` / `rm`) | ✓ | — |
+| Suggest a local model ("Help me choose") | ✓ (`local status --json` → `recommendations`) | ✓ (`doctor` → `local.recommendations`) |
 | Desktop app | ✗ | ✗ |
 
 The desktop app is the one row where the agent runs out of road partway. Claude Code can *set it up* with `anyscribe desktop install --yes --json` (and check or remove it with `anyscribe desktop status --json` and `anyscribe desktop uninstall --yes --json`), because those are ordinary commands. What no agent can do is use it: the app's whole point is an icon you click and a dashboard you look at, and there's nothing to click on from a transcript. See [Getting Started → Two ways to install](getting-started.md#two-ways-to-install).

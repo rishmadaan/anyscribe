@@ -110,8 +110,8 @@ def transcribe(
                 "language": result.language,
                 "word_count": result.word_count,
                 "provider": result.provider,
-                "model": plan.model,
-                "notes": plan.notes,
+                "model": result.model or plan.model,
+                "notes": plan.notes + result.notes,
                 "cached": result.cached,
             }
         )
@@ -187,6 +187,8 @@ def batch_transcribe(
                     "duration": result.duration,
                     "language": result.language,
                     "word_count": result.word_count,
+                    "model": result.model,
+                    "notes": result.notes,
                     "cached": result.cached,
                 }
             )
@@ -411,6 +413,8 @@ def set_config(key: str, value: str) -> str:
     and dot-notation nested keys ("instagram.browser").
 
     Setting "provider" also sets quality="custom" so the choice sticks.
+    "local_model" accepts only a model that is ready to run (downloaded, with
+    Parakeet's language check); otherwise it is refused with the command to run.
 
     Args:
         key: Setting key (provider, quality, language, keep_media, ...).
@@ -502,7 +506,14 @@ def test_provider(name: Optional[str] = None) -> str:
 def doctor() -> str:
     """Run diagnostic checks on anyscribe installation.
 
-    Checks dependencies, config, workspace, and skill status.
+    Checks dependencies, config, workspace, and skill status. The ``local``
+    block helps pick an offline model: ask the user ``local.question``, then
+    apply ``local.recommendations[<answer>]`` (``primary`` becomes
+    ``local_model`` via set_config once it is downloaded: set_config refuses a
+    model that isn't ready and names the command for the user to run; null
+    when nothing fits on disk;
+    ``also`` lists extra downloads; ``set_language`` is a language worth
+    offering to set, e.g. ``hi``; read the ``reasons`` to the user).
 
     Returns:
         JSON with system health status.
@@ -558,12 +569,40 @@ def doctor() -> str:
             skill["version"] = "unknown"
         skill["current"] = skill.get("version") == __version__
 
+    # Local transcription: what's cached, plus the "help me choose" answer for
+    # each possible reply, so an agent can ask the one question and act on it.
+    from anyscribe.core.local_recommend import (
+        LANGUAGE_ANSWERS,
+        detect_hardware,
+        parakeet_suggestion,
+        recommend,
+    )
+    from anyscribe.providers.local_models import RECOMMENDED_MODEL, list_cached_models
+
+    settings = _load_settings()
+    cached = {m["size"] for m in list_cached_models() if m["cached"]}
+    hardware = detect_hardware()
+    local = {
+        "default_model": settings.local_model,
+        "recommended_model": RECOMMENDED_MODEL,
+        "cached_models": sorted(cached),
+        "suggestion": parakeet_suggestion(settings.local_model, settings.language),
+        "question": "What language is most of your audio?",
+        "answers": LANGUAGE_ANSWERS,
+        "recommendations": {
+            a: {k: v for k, v in recommend(a, hardware, cached).items() if k != "hardware"}
+            for a in LANGUAGE_ANSWERS
+        },
+        "hardware": hardware,
+    }
+
     return json.dumps(
         {
             "dependencies": deps,
             "config": config,
             "installation": install,
             "skill": skill,
+            "local": local,
         }
     )
 

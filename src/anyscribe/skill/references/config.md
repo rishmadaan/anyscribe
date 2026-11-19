@@ -18,7 +18,7 @@
 provider: openai          # used when quality is `custom`: openai | deepgram | elevenlabs | sargam | groq | openrouter | local
 provider_models: {}       # provider -> pinned model id; missing key = that provider's default
 extra_models: {}          # openrouter -> [user-added slugs], merged into the pickers
-local_model: base         # offline Whisper size (local provider only)
+local_model: base         # offline model id, e.g. parakeet-v3 (local provider only)
 tailnet: false            # also share `anyscribe ui` on the user's Tailscale tailnet
 quality: balanced         # accuracy | balanced | cost | free | custom — picks the provider
 language: auto            # auto | ISO code (en, es, fr, hi, hi-Latn, ar, zh, ja, ko...)
@@ -68,7 +68,7 @@ extra_models:
 
 `extra_models.<any other provider>` is rejected: *custom models are only supported for openrouter (curated lists elsewhere)*. Those catalogs ship with anyscribe releases because each model needs response-parsing code — the fix for "my provider added a model" is `anyscribe update`.
 
-**local_model** — Which cached Whisper size the `local` provider loads: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Set by `anyscribe local setup --model <size>`, or with `anyscribe config set local_model <size>`. Not checked against the cache; an uncached size downloads on the first local run. Run `anyscribe model pull <size>` to download it up front.
+**local_model** — Which model the `local` provider loads: `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`. Recommended `parakeet-v3` (English + European languages; a Whisper Tiny language check sends other languages to Whisper with a note); `large-v3-turbo` for Hindi. Set by `anyscribe local setup --model <id>`, or with `anyscribe config set local_model <id>`, which refuses a model that isn't ready (downloaded, plus Whisper Tiny and the VAD for Parakeet) and names the command: run `anyscribe model pull <id>` first. A fresh config holds `base`; nothing changes for an existing config unless the user picks.
 
 **quality** — Accuracy↔cost preset that picks a provider: `accuracy`→ElevenLabs scribe_v2, `balanced`→Deepgram nova-3, `cost`→Groq, `free`→local, or `custom`→whatever `provider` says. Default `balanced`. Override per-command with `--quality`; `--provider` wins over it for that run.
 
@@ -118,7 +118,7 @@ ELEVENLABS_API_KEY=...
 OPENROUTER_API_KEY=sk-or-...
 SARGAM_API_KEY=...
 GROQ_API_KEY=...
-ASCLI_LOCAL_MODEL=base                   # Optional: tiny|base|small|medium|large-v3|large-v3-turbo|distil-large-v3.5
+ASCLI_LOCAL_MODEL=base                   # Optional: parakeet-v3|parakeet-v2|tiny|base|small|medium|large-v3|large-v3-turbo|distil-large-v3.5
 ```
 
 > `OPENROUTER_MODEL` was removed in 0.15.0 and is no longer read. Use <!-- version-pin-ok -->

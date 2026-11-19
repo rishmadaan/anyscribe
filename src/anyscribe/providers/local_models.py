@@ -1,36 +1,55 @@
-"""Local Whisper model vocabulary and on-disk cache management.
+"""Local model vocabulary and on-disk cache management.
 
-Single source of truth for the sizes the user can pick and the HuggingFace
-repos they map to. Wraps ``huggingface_hub`` for list/download/delete so the
-rest of the codebase never has to touch the HF cache layout directly.
+Single source of truth for the local models the user can pick (Whisper via
+faster-whisper, Parakeet via onnx-asr), the HuggingFace repos they map to and
+the measured figures every surface shows. Wraps ``huggingface_hub`` for
+list/download/delete so the rest of the codebase never has to touch the HF
+cache layout directly.
 
-These helpers are safe to import before ``faster-whisper`` is installed:
-``list_cached_models()`` returns ``[]`` and ``is_cached()`` returns ``False``
-when the hub library isn't available, so status UIs can render a "not set up"
-state without crashing.
+These helpers are safe to import before the engines are installed:
+``list_cached_models()`` returns all-uncached and ``is_cached()`` returns
+``False`` when the hub library isn't available, so status UIs can render a
+"not set up" state without crashing.
+
+"Cached" means the model's own files are complete: every file the engine
+loads is on disk and nothing is half-downloaded (used for sizes and disk
+maths). Some bytes without that is ``partial`` (an interrupted or running
+download), which pull resumes. "Runnable" (``runnable()``) is the one
+readiness test everything else uses: the engine imports, the weights are
+complete and, for Parakeet, its helpers (Tiny, VAD) are too.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import threading
+from pathlib import Path
 from typing import Any, Callable
 
+# Model ids: the strings stored in settings.local_model and accepted on the CLI
+# and API. Order is display order: the four featured cards, then the rest.
 MODEL_SIZES: list[str] = [
-    "tiny",
-    "base",
+    "parakeet-v3",
+    "large-v3-turbo",
     "small",
+    "base",
+    "parakeet-v2",
     "medium",
     "large-v3",
-    "large-v3-turbo",
     "distil-large-v3.5",
+    "tiny",
 ]
 
-RECOMMENDED_MODEL: str = "large-v3-turbo"
+RECOMMENDED_MODEL: str = "parakeet-v3"
 
-# faster-whisper loads these HF repos directly. Keep the keys in lockstep with
-# MODEL_SIZES; the size string is also what we accept on the CLI and store
-# in settings.local_model.
+# The Whisper model used for the pre-run language check in front of Parakeet.
+LANGUAGE_CHECK_MODEL: str = "tiny"
+
+# faster-whisper / onnx-asr load these HF repos. Keys stay in lockstep with
+# MODEL_SIZES.
 MODEL_REPOS: dict[str, str] = {
+    "parakeet-v3": "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    "parakeet-v2": "istupakov/parakeet-tdt-0.6b-v2-onnx",
     "tiny": "Systran/faster-whisper-tiny",
     "base": "Systran/faster-whisper-base",
     "small": "Systran/faster-whisper-small",
@@ -40,67 +59,233 @@ MODEL_REPOS: dict[str, str] = {
     "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
 }
 
-# Approximate figures used by the UI (CLI + Web) to help the user pick a size.
-# ``use_for`` completes the sentence "Use it for ..." shown under each size.
-# Download sizes are what HF reports for the int8 CTranslate2 weights; RAM
-# numbers are typical peak usage during transcription on CPU.
+# onnx-asr's own name for each Parakeet model (selects the decoder class).
+ONNX_ASR_NAMES: dict[str, str] = {
+    "parakeet-v3": "nemo-parakeet-tdt-0.6b-v3",
+    "parakeet-v2": "nemo-parakeet-tdt-0.6b-v2",
+}
+# Only the int8 weights onnx-asr loads with quantization="int8" (the repos
+# also hold fp32 weights several times larger).
+PARAKEET_FILES: list[str] = [
+    "config.json",
+    "config.yaml",
+    "vocab.txt",
+    "*.int8.onnx",
+    "*.int8.onnx?data",
+]
+# Silero voice-activity model: splits audio into speech segments for Parakeet.
+VAD_REPO: str = "istupakov/silero-vad-onnx"
+VAD_FILES: list[str] = ["config.json", "silero_vad.onnx"]
+
+# The files each engine can't load without (globs). A model is ready when a
+# snapshot holds all of them and no blob is still ``.incomplete``.
+WHISPER_REQUIRED: list[str] = ["config.json", "model.bin", "tokenizer.json", "vocabulary.*"]
+PARAKEET_REQUIRED: list[str] = [
+    "config.json",
+    "vocab.txt",
+    "encoder-model.int8.onnx",
+    "decoder_joint-model.int8.onnx",
+]
+VAD_REQUIRED: list[str] = ["silero_vad.onnx"]
+
+# Parakeet v3's 25 languages (ISO 639-1), from NVIDIA's model card.
+PARAKEET_V3_LANGUAGES: frozenset[str] = frozenset(
+    "bg hr cs da nl en et fi fr de el hu it lv lt mt pl pt ro sk sl es sv ru uk".split()
+)
+
+WHISPER_LANGS = "Hindi and 95+ other languages"
+
+# Shown under the model cards on every surface that shows the measured figures.
+BENCHMARK_CAPTION = (
+    "Speed and accuracy measured on English audio on a 6-core desktop processor without "
+    "a graphics card. Your computer may be faster or slower."
+)
+
+
+def accuracy_rating(en_wer: float) -> int:
+    """1-5 accuracy from English word error rate (%). Rule kept in docs/building/providers.md."""
+    return 5 if en_wer <= 6.7 else 4 if en_wer <= 7.6 else 3 if en_wer <= 10.5 else 2
+
+
+def speed_rating(x_realtime: float) -> int:
+    """1-5 speed from audio-seconds per wall-second on the reference machine."""
+    if x_realtime >= 12:
+        return 5
+    if x_realtime >= 6:
+        return 4
+    if x_realtime >= 2.5:
+        return 3
+    return 2 if x_realtime >= 1.2 else 1
+
+
+# Measured 2026-11-19 on the reference machine: Intel i5-10600K (6 cores /
+# 12 threads), 15 GB RAM, no graphics card, CPU int8, model already loaded.
+# en_wer: word error rate (%) on 15.2 min of English speech (pitch videos and
+# voice messages) against a commercial cloud transcript, after lowercasing and
+# stripping punctuation and fillers. x_realtime: audio seconds per wall second.
+# ram_mb: peak memory while transcribing. Ratings and "minutes per hour of
+# audio" are derived from these by _derive() below, never typed by hand.
+# ``use_for`` is the one-line "for" shown on each card; ``tucked`` says why a
+# non-featured model sits under "More models".
 MODEL_SPECS: dict[str, dict[str, Any]] = {
-    "tiny": {
-        "download_mb": 75,
-        "ram_mb": 400,
-        "relative_speed": "~10x realtime (CPU)",
-        "quality": "lowest",
-        "use_for": "quick rough drafts on an old or slow computer",
-    },
-    "base": {
-        "download_mb": 145,
-        "ram_mb": 600,
-        "relative_speed": "~7x realtime (CPU)",
-        "quality": "good for most use cases",
-        "use_for": "clear everyday audio on an older laptop, or when a small download matters",
-    },
-    "small": {
-        "download_mb": 480,
-        "ram_mb": 1200,
-        "relative_speed": "~4x realtime (CPU)",
-        "quality": "noticeably better than base",
-        "use_for": "accents, background noise or jargon that base gets wrong",
-    },
-    "medium": {
-        "download_mb": 1500,
-        "ram_mb": 2500,
-        "relative_speed": "~2x realtime (CPU)",
-        "quality": "near-large for many languages",
-        "use_for": "non-English audio, if you can wait longer",
-    },
-    "large-v3": {
-        "download_mb": 3000,
-        "ram_mb": 5000,
-        "relative_speed": "~1x realtime (CPU); fast on GPU",
-        "quality": "highest",
-        "use_for": "the most accurate transcript, on a computer with a graphics card (GPU)",
+    "parakeet-v3": {
+        "display_name": "Parakeet v3",
+        "engine": "parakeet",
+        "en_wer": 6.54,
+        "x_realtime": 6.3,
+        "download_mb": 670,
+        "ram_mb": 2200,
+        "languages": "English and 24 European languages",
+        "language_codes": sorted(PARAKEET_V3_LANGUAGES),
+        "use_for": "English and 24 European languages. Fastest accurate option.",
+        "featured": 1,
+        "badge": "recommended",
+        "tucked": None,
     },
     "large-v3-turbo": {
+        "display_name": "Whisper Large v3 Turbo",
+        "engine": "whisper",
+        "en_wer": 6.63,
+        "x_realtime": 1.5,
         "download_mb": 1600,
-        "ram_mb": 3000,
-        "relative_speed": "~6x realtime (CPU)",
-        "quality": "near large-v3, much faster",
-        "use_for": "most people: near-best accuracy at good speed. Start here (needs ~3 GB free memory)",
+        "ram_mb": 3100,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "Hindi and 95+ other languages. As accurate as Parakeet on English, but slower.",
+        "featured": 2,
+        "badge": "for Hindi",
+        "tucked": None,
+    },
+    "small": {
+        "display_name": "Whisper Small",
+        "engine": "whisper",
+        "en_wer": 7.06,
+        "x_realtime": 2.7,
+        "download_mb": 460,
+        "ram_mb": 1300,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "Older or low-memory computers. Any language, small download.",
+        "featured": 3,
+        "badge": None,
+        "tucked": None,
+    },
+    "base": {
+        "display_name": "Whisper Base",
+        "engine": "whisper",
+        "en_wer": 10.16,
+        "x_realtime": 7.8,
+        "download_mb": 140,
+        "ram_mb": 1000,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "Quick rough drafts. Smallest useful model.",
+        "featured": 4,
+        "badge": None,
+        "tucked": None,
+    },
+    "parakeet-v2": {
+        "display_name": "Parakeet v2",
+        "engine": "parakeet",
+        "en_wer": 7.50,
+        "x_realtime": 6.5,
+        "download_mb": 670,
+        "ram_mb": 2500,
+        "languages": "English only",
+        "language_codes": ["en"],
+        "use_for": "English-only audio, if you already have it downloaded.",
+        "featured": None,
+        "badge": None,
+        "tucked": "English only; v3 is as fast and more accurate",
+    },
+    "medium": {
+        "display_name": "Whisper Medium",
+        "engine": "whisper",
+        "en_wer": 7.28,
+        "x_realtime": 0.9,
+        "download_mb": 1500,
+        "ram_mb": 3200,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "Non-English audio when you can wait.",
+        "featured": None,
+        "badge": None,
+        "tucked": "Slower than real time, no more accurate than Small",
+    },
+    "large-v3": {
+        "display_name": "Whisper Large v3",
+        "engine": "whisper",
+        "en_wer": 7.19,
+        "x_realtime": 0.4,
+        "download_mb": 2900,
+        "ram_mb": 6400,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "Computers with a graphics card (GPU).",
+        "featured": None,
+        "badge": None,
+        "tucked": "Needs a graphics card to be practical",
     },
     "distil-large-v3.5": {
-        "download_mb": 1500,
-        "ram_mb": 2800,
-        "relative_speed": "~6x realtime (CPU)",
-        "quality": "near large-v3 for English; weaker multilingual",
-        "use_for": "English-only audio where you want near-best accuracy, fast",
+        "display_name": "Distil-Whisper Large v3.5",
+        "engine": "whisper",
+        "en_wer": 10.01,
+        "x_realtime": 1.9,
+        "download_mb": 1400,
+        "ram_mb": 2700,
+        "languages": "English (weak on other languages)",
+        "language_codes": None,
+        "use_for": "English audio; scored below Small in our test.",
+        "featured": None,
+        "badge": None,
+        "tucked": "Scored below Small in our test",
+    },
+    "tiny": {
+        "display_name": "Whisper Tiny",
+        "engine": "whisper",
+        "en_wer": 11.90,
+        "x_realtime": 14.4,
+        "download_mb": 75,
+        "ram_mb": 900,
+        "languages": WHISPER_LANGS,
+        "language_codes": None,
+        "use_for": "The language check in front of Parakeet; very rough drafts.",
+        "featured": None,
+        "badge": None,
+        "tucked": "Very rough; used for the language check",
     },
 }
+
+
+def _derive() -> None:
+    for spec in MODEL_SPECS.values():
+        spec["accuracy"] = accuracy_rating(spec["en_wer"])
+        spec["speed"] = speed_rating(spec["x_realtime"])
+        spec["min_per_hour"] = round(60 / spec["x_realtime"])
+
+
+_derive()
+
+
+def engine_of(model_id: str) -> str:
+    """``"whisper"`` or ``"parakeet"`` for a model id."""
+    return MODEL_SPECS[model_id]["engine"]
+
+
+def display_name(model_id: str) -> str:
+    return MODEL_SPECS.get(model_id, {}).get("display_name", model_id)
+
+
+def featured_models() -> list[str]:
+    """Ids shown as cards, in card order."""
+    ids = [m for m in MODEL_SIZES if MODEL_SPECS[m]["featured"]]
+    return sorted(ids, key=lambda m: MODEL_SPECS[m]["featured"])
 
 
 def validate_size(size: str) -> None:
     """Raise ValueError if ``size`` isn't one of MODEL_SIZES."""
     if size not in MODEL_SIZES:
-        raise ValueError(f"unknown model size '{size}'. Choices: {', '.join(MODEL_SIZES)}")
+        raise ValueError(f"unknown model '{size}'. Choices: {', '.join(MODEL_SIZES)}")
 
 
 def _safe_import_hub():
@@ -133,11 +318,79 @@ def faster_whisper_version() -> str | None:
         return None
 
 
-def list_cached_models() -> list[dict[str, Any]]:
-    """Return one entry per MODEL_SIZES with cache status + disk bytes.
+def onnx_asr_importable() -> bool:
+    """Return True if ``onnx_asr`` (the Parakeet engine) can be imported right now."""
+    try:
+        import onnx_asr  # type: ignore[import-not-found]  # noqa: F401
 
-    Safe before setup: if huggingface_hub isn't importable, every entry is
-    ``cached=False, bytes=0``.
+        return True
+    except ImportError:
+        return False
+
+
+def engine_importable(model_id: str) -> bool:
+    """True when the engine ``model_id`` runs on is installed (Parakeet also
+    decodes audio through faster-whisper's PyAV reader, so it needs both)."""
+    if engine_of(model_id) == "parakeet":
+        return onnx_asr_importable() and faster_whisper_importable()
+    return faster_whisper_importable()
+
+
+def _hub_cache_dir() -> Path | None:
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    return Path(HF_HUB_CACHE)
+
+
+def repo_ready(repo_id: str, required: list[str]) -> bool:
+    """True when ``repo_id`` is fully downloaded: a snapshot holds every
+    ``required`` file (each glob matches a file whose blob exists) and no blob
+    is still ``.incomplete``. A ``<hash>.<tag>.incomplete`` left by a killed
+    download whose ``<hash>`` blob has since completed is stale and ignored."""
+    cache = _hub_cache_dir()
+    if cache is None:
+        return False
+    repo_dir = cache / ("models--" + repo_id.replace("/", "--"))
+    for part in repo_dir.glob("blobs/*.incomplete"):
+        if not (part.parent / part.name.split(".")[0]).exists():
+            return False
+    for snap in repo_dir.glob("snapshots/*"):
+        names = [f.name for f in snap.iterdir() if f.exists()]  # exists() follows the link
+        if all(fnmatch.filter(names, pattern) for pattern in required):
+            return True
+    return False
+
+
+def model_ready(size: str) -> bool:
+    """True when every file ``size``'s engine loads is on disk."""
+    required = PARAKEET_REQUIRED if engine_of(size) == "parakeet" else WHISPER_REQUIRED
+    return repo_ready(MODEL_REPOS[size], required)
+
+
+def helpers_ready() -> bool:
+    """True when Parakeet's helpers are ready: Silero VAD and Whisper Tiny."""
+    return repo_ready(VAD_REPO, VAD_REQUIRED) and model_ready(LANGUAGE_CHECK_MODEL)
+
+
+def runnable(size: str) -> bool:
+    """True when ``size`` can transcribe right now: its engine imports, its
+    weights are complete and, for Parakeet, Tiny and the VAD are too. The one
+    readiness test for "set up", "ready", the Test button and switching the
+    default."""
+    if _safe_import_hub() is None or not engine_importable(size) or not model_ready(size):
+        return False
+    return engine_of(size) != "parakeet" or helpers_ready()
+
+
+def list_cached_models() -> list[dict[str, Any]]:
+    """Return one entry per MODEL_SIZES with readiness + disk bytes.
+
+    ``cached`` is True when the model's own files are complete (see
+    ``model_ready``); ``partial`` is True when some bytes are on disk but they
+    aren't; ``runnable`` is ``runnable()``. Safe before setup: if
+    huggingface_hub isn't importable, every entry is all False with 0 bytes.
     """
     cached_bytes: dict[str, int] = {}
     hub = _safe_import_hub()
@@ -153,14 +406,21 @@ def list_cached_models() -> list[dict[str, Any]]:
             # scan_cache_dir can fail on a half-written cache; treat as empty.
             pass
 
+    engines = {"whisper": faster_whisper_importable()}
+    engines["parakeet"] = engines["whisper"] and onnx_asr_importable()
+    helpers = hub is not None and helpers_ready()
     result = []
     for size in MODEL_SIZES:
         bytes_on_disk = cached_bytes.get(size, 0)
+        ready = hub is not None and model_ready(size)
+        engine = engine_of(size)
         result.append(
             {
                 "size": size,
                 "repo": MODEL_REPOS[size],
-                "cached": bytes_on_disk > 0,
+                "cached": ready,
+                "partial": bytes_on_disk > 0 and not ready,
+                "runnable": ready and engines[engine] and (engine != "parakeet" or helpers),
                 "bytes": bytes_on_disk,
                 "spec": MODEL_SPECS[size],
             }
@@ -169,17 +429,14 @@ def list_cached_models() -> list[dict[str, Any]]:
 
 
 def is_cached(size: str) -> bool:
-    """Return True if any revision of the repo for ``size`` is in the HF cache."""
+    """Return True if ``size`` is fully downloaded and ready to load."""
     validate_size(size)
-    for entry in list_cached_models():
-        if entry["size"] == size:
-            return bool(entry["cached"])
-    return False
+    return _safe_import_hub() is not None and model_ready(size)
 
 
-def any_model_cached() -> bool:
-    """Return True if at least one size is cached."""
-    return any(e["cached"] for e in list_cached_models())
+def any_model_runnable() -> bool:
+    """Return True if at least one model can transcribe right now."""
+    return any(e["runnable"] for e in list_cached_models())
 
 
 def _progress_tqdm_class(progress_cb: Callable[[int, int], None]):
@@ -254,25 +511,40 @@ def _progress_tqdm_class(progress_cb: Callable[[int, int], None]):
     return _ProgressTqdm
 
 
+def bytes_on_disk(size: str) -> int:
+    """Bytes of ``size`` in the HF cache, ready or not (0 when absent)."""
+    for entry in list_cached_models():
+        if entry["size"] == size:
+            return int(entry["bytes"])
+    return 0
+
+
 def pull_model(
     size: str,
     progress_cb: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Download the weights for ``size`` via huggingface_hub. Idempotent.
 
-    Returns a dict with keys ``{status, size, repo, bytes}``. ``status`` is
-    ``"already_present"`` if already fully cached, otherwise ``"downloaded"``.
-    Raises if huggingface_hub or faster-whisper aren't installed.
+    Always calls the downloader, which resumes a partial download and is a
+    no-op (also offline) when the snapshot is complete. Returns a dict with
+    keys ``{status, size, repo, bytes}``. ``status`` is ``"already_present"``
+    if the model was ready before the call, otherwise ``"downloaded"``.
+    Raises if huggingface_hub or the model's engine isn't installed.
+
+    A Parakeet model also pulls its helpers: the Silero voice-activity model
+    and Whisper ``tiny`` for the language check (so a run never has to fetch
+    them silently).
 
     ``progress_cb(downloaded_bytes, total_bytes)`` is called during download if
     provided — used by the Web UI to show a byte-level progress bar.
     """
     validate_size(size)
 
-    if not faster_whisper_importable():
+    if not engine_importable(size):
+        engine = "onnx-asr" if engine_of(size) == "parakeet" else "faster-whisper"
         raise RuntimeError(
-            "faster-whisper is not installed. Run `anyscribe local setup --model <size>` "
-            "to install it and pull a model."
+            f"{engine} is not installed. Run "
+            f"`anyscribe local setup --model {size}` to install it and pull a model."
         )
 
     hub = _safe_import_hub()
@@ -280,59 +552,44 @@ def pull_model(
         raise RuntimeError("huggingface_hub is not available. Reinstall anyscribe to restore it.")
 
     repo = MODEL_REPOS[size]
+    parakeet = engine_of(size) == "parakeet"
 
-    if is_cached(size):
-        bytes_on_disk = 0
-        for entry in list_cached_models():
-            if entry["size"] == size:
-                bytes_on_disk = int(entry["bytes"])
-                break
-        return {
-            "status": "already_present",
-            "size": size,
-            "repo": repo,
-            "bytes": bytes_on_disk,
-        }
+    def _snapshot(repo_id: str, allow: list[str] | None, cb) -> None:
+        kwargs: dict[str, Any] = {"repo_id": repo_id}
+        if allow:
+            kwargs["allow_patterns"] = allow
+        if cb is not None:
+            tqdm_class = _progress_tqdm_class(cb)
+            if tqdm_class is not None:
+                kwargs["tqdm_class"] = tqdm_class
+        hub.snapshot_download(**kwargs)
 
-    download_kwargs: dict[str, Any] = {"repo_id": repo}
-    if progress_cb is not None:
-        tqdm_class = _progress_tqdm_class(progress_cb)
-        if tqdm_class is not None:
-            download_kwargs["tqdm_class"] = tqdm_class
-    hub.snapshot_download(**download_kwargs)
+    status = "already_present" if is_cached(size) else "downloaded"
+    _snapshot(repo, PARAKEET_FILES if parakeet else None, progress_cb)
 
-    bytes_on_disk = 0
-    for entry in list_cached_models():
-        if entry["size"] == size:
-            bytes_on_disk = int(entry["bytes"])
-            break
+    helpers: list[str] = []
+    if parakeet:
+        _snapshot(VAD_REPO, VAD_FILES, None)  # ~2 MB; a no-op once complete
+        if not is_cached(LANGUAGE_CHECK_MODEL):
+            _snapshot(MODEL_REPOS[LANGUAGE_CHECK_MODEL], None, progress_cb)
+            helpers.append(LANGUAGE_CHECK_MODEL)
 
-    return {
-        "status": "downloaded",
-        "size": size,
-        "repo": repo,
-        "bytes": bytes_on_disk,
-    }
+    result = {"status": status, "size": size, "repo": repo, "bytes": bytes_on_disk(size)}
+    if helpers:
+        result["helpers_downloaded"] = helpers
+    return result
 
 
-def delete_model(size: str) -> dict[str, Any]:
-    """Remove all cached revisions of ``size`` from the HF cache.
-
-    Returns ``{status, size, bytes_freed}``. ``status`` is ``"not_present"``
-    if nothing was cached, otherwise ``"removed"``.
-    """
-    validate_size(size)
-
+def _delete_repo(repo_id: str) -> int:
+    """Delete every cached revision of ``repo_id``; return bytes freed (0 if absent)."""
     hub = _safe_import_hub()
     if hub is None:
-        return {"status": "not_present", "size": size, "bytes_freed": 0}
-
+        return 0
     try:
         info = hub.scan_cache_dir()
     except Exception:
-        return {"status": "not_present", "size": size, "bytes_freed": 0}
+        return 0
 
-    repo_id = MODEL_REPOS[size]
     commit_hashes: list[str] = []
     total_bytes = 0
     for repo in info.repos:
@@ -343,11 +600,22 @@ def delete_model(size: str) -> dict[str, Any]:
             total_bytes += int(rev.size_on_disk)
 
     if not commit_hashes:
-        return {"status": "not_present", "size": size, "bytes_freed": 0}
+        return 0
+    info.delete_revisions(*commit_hashes).execute()
+    return total_bytes
 
-    strategy = info.delete_revisions(*commit_hashes)
-    strategy.execute()
-    return {"status": "removed", "size": size, "bytes_freed": total_bytes}
+
+def delete_model(size: str) -> dict[str, Any]:
+    """Remove all cached revisions of ``size`` from the HF cache.
+
+    Returns ``{status, size, bytes_freed}``. ``status`` is ``"not_present"``
+    if nothing was cached, otherwise ``"removed"``.
+    """
+    validate_size(size)
+    freed = _delete_repo(MODEL_REPOS[size])
+    if not freed:
+        return {"status": "not_present", "size": size, "bytes_freed": 0}
+    return {"status": "removed", "size": size, "bytes_freed": freed}
 
 
 def delete_all_models() -> dict[str, Any]:
@@ -362,4 +630,5 @@ def delete_all_models() -> dict[str, Any]:
         if res["status"] == "removed":
             deleted.append(size)
             total += int(res["bytes_freed"])
+    total += _delete_repo(VAD_REPO)
     return {"models_deleted": deleted, "bytes_freed": total}

@@ -12,7 +12,7 @@ provider; `custom` means "use `provider` as written".
 | `balanced` (default) | Deepgram `nova-3` | Strong accuracy + speaker labels |
 | `accuracy` | ElevenLabs `scribe_v2` | Highest accuracy, primarily-English |
 | `cost` | Groq `whisper-large-v3-turbo` | Cheapest + fastest (~$0.04/hr) |
-| `free` | Local faster-whisper | Offline, $0 |
+| `free` | Local (Parakeet or Whisper) | Offline, $0 |
 | `custom` | whatever `provider` says | The user chose a provider |
 
 Recommend a tier first; only name a provider when the user wants a specific one.
@@ -194,55 +194,64 @@ Routes to various AI models via a unified API. Uses audio-capable chat models wi
 
 **When to recommend:** Only when user needs a specific model available through OpenRouter. Not recommended as primary — dedicated STT APIs are faster, cheaper, more accurate.
 
-## Local / faster-whisper (provider: `local`)
+## Local / Parakeet + Whisper (provider: `local`)
 
-Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached size can trigger a download on the next local run. Installation is **opt-in** through `anyscribe local setup`, onboarding with the local provider, or the Web UI's local setup flow.
+Transcription runs on-device without an API key, at no cost. Package installation and model downloads require internet. Download the selected model before going offline; choosing an uncached model can trigger a download on the next local run. Installation is **opt-in** through `anyscribe local setup`, onboarding with the local provider, or the Web UI's local setup flow.
 
-- **Engine:** faster-whisper (CTranslate2-based, up to 4x faster than original Whisper)
-- **Recommended model:** `large-v3-turbo` (~1.6 GB, near `large-v3` quality at ~6x realtime on CPU, ~3 GB RAM). `base` (~145 MB) for older or low-memory machines
-- **All sizes:** `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`
+- **Engines:** Parakeet (NVIDIA Parakeet TDT 0.6B, int8 ONNX via `onnx-asr`) and Whisper (`faster-whisper`). One provider; the model id picks the engine
+- **Recommended model:** `parakeet-v3` (English + 24 European languages; as accurate as `large-v3-turbo` on English at ~4x its speed). `large-v3-turbo` for Hindi and other languages
+- **All ids:** `parakeet-v3`, `parakeet-v2`, `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, `distil-large-v3.5`
 - **Also needs:** `ffmpeg` on the system PATH (local setup does not install ffmpeg)
-- **GPU:** auto-detects NVIDIA CUDA; falls back to CPU
+- **GPU:** Whisper auto-detects NVIDIA CUDA; Parakeet runs on CPU
 
 ### Setup — one command, one action
 
 ```bash
-anyscribe local setup --model base --yes --json
+anyscribe local setup --model parakeet-v3 --yes --json
 ```
 
 `--model` is **required**. The CLI never picks a model silently. In a non-TTY (agent) context, `--yes` is also required. Setup:
 
-1. Detects the install method (pipx / venv-pip / system pip).
-2. Installs `faster-whisper` into the same Python env as anyscribe.
-3. Downloads the chosen Whisper model from HuggingFace.
+1. Detects the install method (pipx / venv-pip / system pip; `uv pip --python` when the venv has no pip, as with `uv tool install`).
+2. Installs `faster-whisper`, `av<19` (PyAV 19 breaks faster-whisper 1.2.1) and `onnx-asr` into the same Python env as anyscribe. <!-- version-pin-ok -->
+3. Downloads the chosen model from HuggingFace; a Parakeet model also downloads Whisper `tiny` (~75 MB, the language check).
 4. Persists `local_model` in `config.yaml`.
 5. Does not change `provider`, `quality` or `diarize`. For one local run pass `-p local` (local has no speaker labels). To make local the default: (1) if the user already uses another provider, ask first; (2) if `diarize` is true in `anyscribe config --json`, run `anyscribe config set diarize false` (local has no speaker labels; otherwise runs still go to Deepgram when a key is set); (3) run `anyscribe config set provider local` (sticks, also writes `quality=custom`), or `anyscribe config set quality free`. Confirm `resolved.provider` is `local`.
 
-Idempotent — re-running with an already-set-up model just updates the default.
+Idempotent — re-running with an already-set-up model just updates the default. An install from before Parakeet gets onnx-asr when it first sets up or pulls a Parakeet model.
 
-### Model sizes — use this to advise the user
+### Models — use this to advise the user
 
-| Size | Download | RAM (peak) | Relative speed (CPU) | Quality |
-|------|----------|------------|----------------------|---------|
-| `tiny` | ~75 MB | ~400 MB | ~10x realtime | lowest — only use for drafts |
-| `base` | ~145 MB | ~600 MB | ~7x realtime | good for most podcasts/interviews |
-| `small` | ~480 MB | ~1.2 GB | ~4x realtime | noticeably better for accents / fast speech |
-| `medium` | ~1.5 GB | ~2.5 GB | ~2x realtime | near-large for many languages |
-| `large-v3` | ~3 GB | ~5 GB | ~1x realtime (CPU); fast on GPU | highest quality |
-| `large-v3-turbo` **(recommended)** | ~1.6 GB | ~3 GB | ~6x realtime | near `large-v3`, all languages — best quality-per-second on CPU |
-| `distil-large-v3.5` | ~1.5 GB | ~2.8 GB | ~6x realtime | near `large-v3` **for English**; weaker multilingual |
+| Model | Id | Accuracy | Speed | 1 hour of audio | Download | Memory | Languages |
+|-------|----|----------|-------|-----------------|----------|--------|-----------|
+| **Parakeet v3** (recommended) | `parakeet-v3` | 5/5 | 4/5 | ~10 min | ~670 MB | ~2.2 GB | English + 24 European languages |
+| **Whisper Large v3 Turbo** (for Hindi) | `large-v3-turbo` | 5/5 | 2/5 | ~40 min | ~1.6 GB | ~3.1 GB | Hindi and 95+ others |
+| **Whisper Small** | `small` | 4/5 | 3/5 | ~22 min | ~460 MB | ~1.3 GB | Hindi and 95+ others |
+| **Whisper Base** | `base` | 3/5 | 4/5 | ~8 min | ~140 MB | ~1 GB | Hindi and 95+ others |
+| Parakeet v2 | `parakeet-v2` | 4/5 | 4/5 | ~9 min | ~670 MB | ~2.5 GB | English only (v3 is as fast and more accurate) |
+| Whisper Medium | `medium` | 4/5 | 1/5 | ~67 min | ~1.5 GB | ~3.2 GB | slower than real time, no better than Small |
+| Whisper Large v3 | `large-v3` | 4/5 | 1/5 | ~2.5 hours | ~2.9 GB | ~6.4 GB | needs a graphics card to be practical |
+| Distil-Whisper Large v3.5 | `distil-large-v3.5` | 3/5 | 2/5 | ~32 min | ~1.4 GB | ~2.7 GB | English; scored below Small in our test |
+| Whisper Tiny | `tiny` | 2/5 | 5/5 | ~4 min | ~75 MB | ~0.9 GB | very rough; used for the language check |
 
-**Default guidance:** `large-v3-turbo`, roughly `large-v3` quality at ~6x the CPU speed and half the download. Drop to `base` (or `small`) on an older laptop, under ~4 GB free memory, or when a 1.6 GB download is a problem. Pick `distil-large-v3.5` only for English-only workloads; it's weaker on other languages. Reserve `large-v3` for a GPU or when nothing else is good enough — on CPU it's ~1x realtime.
+Times and ratings were measured on a 6-core desktop processor (Intel i5-10600K) with
+no graphics card, on 15 minutes of real English recordings. A Mac with Apple silicon
+or a computer with an NVIDIA graphics card will likely be faster. `anyscribe model list`
+shows the same table with what you have downloaded.
+
+**Default guidance (ask "What language is most of your audio?" if you don't know):** English or another European language → `parakeet-v3`. Hindi or another Indian language, or anything else → `large-v3-turbo` (`small` under ~6 GB RAM). A mix (e.g. English and Hindi) → `parakeet-v3` as the default **and** `anyscribe model pull large-v3-turbo`; the language check switches between them. Under ~4 GB RAM → `base`. `anyscribe local status --json` → `recommendations[<answer>]` gives the same pick with plain-language `reasons` (answers: `english`, `indian`, `european`, `mix`, `other`) and the detected `hardware`; read the reasons to the user. When `set_language` is set (Hindi or another Indian language), ask whether most of their audio is Hindi before offering `anyscribe config set language hi`: Turbo is about 3 times more accurate on Hindi when told the language, but every recording is then treated as Hindi (wrong for Tamil or Bengali audio, and it turns off the language check). `primary: null` means not enough disk space (the reason says how much is needed).
+
+**The language check (Parakeet only).** Before Parakeet runs on `language: auto`, Whisper Tiny checks the language at the start, middle and end of each recording (speech only). If any of them isn't one of Parakeet's languages, anyscribe uses `large-v3-turbo` (or the best other ready Whisper, never distil or tiny) and adds a note, e.g. `Detected Hindi — Parakeet v3 doesn't cover Hindi, so this used Whisper Large v3 Turbo. To skip the check, set your language to Hindi in Settings.` If the check can't tell (low confidence or no speech), it uses a ready Whisper, or runs Parakeet with a note saying the check was unsure. For recordings that switch language mid-sentence (Hinglish), suggest making `large-v3-turbo` the default. It appears in `--json` `notes` (merged with the plan notes) and in the transcript's frontmatter (`model:`, `notes:`); `model` in `--json` is the model that actually ran. **Always tell the user about such a note.** If no Whisper model is cached, the run fails with `anyscribe model pull large-v3-turbo` in the error and writes nothing; if Tiny was deleted, it fails asking for `anyscribe model pull tiny`. An explicit Parakeet language (`--language en`) skips the check.
 
 ### Cache management (after setup)
 
 | Task | Command |
 |------|---------|
-| See what's cached | `anyscribe model list --json` |
-| Add another size | `anyscribe model pull <size> --json` |
-| Delete a cached size | `anyscribe model rm <size> --yes --json` |
-| Inspect a size | `anyscribe model info <size> --json` |
-| Switch default model | `anyscribe config set local_model <size>` (not checked against the cache; an uncached size downloads on the first local run, so `anyscribe model pull <size>` first to download it up front) |
+| See what's cached (with ratings) | `anyscribe model list --json` |
+| Add another model | `anyscribe model pull <id> --json` |
+| Delete a cached model | `anyscribe model rm <id> --yes --json` (keep `tiny` while the default is Parakeet) |
+| Inspect a model | `anyscribe model info <id> --json` |
+| Switch default model | `anyscribe model pull <id>`, then `anyscribe config set local_model <id>` (refused, with the command, while the model isn't ready) |
 
 ### Teardown
 
@@ -250,7 +259,7 @@ Idempotent — re-running with an already-set-up model just updates the default.
 anyscribe local teardown --yes --json
 ```
 
-Uninstalls faster-whisper, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
+Uninstalls faster-whisper and onnx-asr, deletes every cached model; if provider was `local` it becomes `openai`, and if provider was `local` or quality was `free`, quality becomes `custom`.
 
 **When to recommend local:** offline workflows, privacy-sensitive content, bulk processing where API cost matters, or users without API keys. Don't push it for casual one-off transcriptions — the API providers are simpler and the model download is big.
 

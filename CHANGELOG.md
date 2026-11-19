@@ -11,6 +11,69 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## Unreleased
+
+**Added**
+- **Transcribe on your own computer without an API key, faster and more
+  accurately: Parakeet v3.** A new local model (`parakeet-v3`, NVIDIA's
+  Parakeet, ~670 MB) is as accurate as the best Whisper model on English in
+  our test, at about four times its speed: roughly 10 minutes per hour of
+  audio on our 6-core test desktop. It covers English and 24 European
+  languages. `anyscribe local setup --model parakeet-v3`.
+- **A language check in front of Parakeet.** Before Parakeet runs, a 75 MB
+  helper checks the language at the start, middle and end of each recording
+  (speech only, so leading silence doesn't fool it). If any of them is a
+  language Parakeet doesn't know (Hindi, for example), anyscribe uses Whisper
+  Large v3 Turbo instead and says so in the terminal, in `--json` `notes`, in
+  the dashboard, and in the transcript. If the check can't tell, it uses
+  Whisper when one is downloaded, or runs Parakeet and says the check was
+  unsure. If no Whisper model is downloaded, it stops and tells you what to
+  download.
+- **First run asks one question instead of "which API?".** The setup wizard
+  (dashboard and `anyscribe onboard`) starts with *On this computer — free,
+  private, no API key* vs *With a cloud service*. On this computer asks what
+  language your audio is in and suggests a model, with the reason in plain
+  words. **Help me choose** in Settings asks the same question any time.
+- **Model cards.** Settings → Local, the setup window and `anyscribe model
+  list` show each model's accuracy and speed out of 5 (measured, not
+  guessed), how long an hour of audio takes, download size and memory, with
+  older or slower models under **More models** and the reason they're there.
+- Transcripts made locally now record the model that ran (`model:` in the
+  frontmatter and in `--json`).
+
+**Changed**
+- **The local default model changes only to a model that is ready.**
+  `anyscribe config set local_model <id>` (and the dashboard and agents) now
+  refuse a model that isn't downloaded yet, instead of saving it and failing
+  on the next run, and name the command to download it. In the dashboard,
+  picking a model that isn't downloaded downloads it (with Parakeet's
+  language check) and switches only once it is ready; if the download fails,
+  your default stays as it was.
+- **Help me choose in Settings only suggests.** It highlights the suggested
+  model and offers one button ("Use Parakeet v3 + Whisper Large v3 Turbo
+  (downloads …)"); nothing downloads or changes until you click it.
+- With no API key set, the "key not set" errors and the quality-tier warning
+  also mention the free option: `anyscribe local setup --model parakeet-v3`.
+
+**Fixed**
+- **Local transcription crashed on new installs** (`open() got an unexpected
+  keyword argument 'metadata_errors'`): a new PyAV release broke
+  faster-whisper. anyscribe now installs a compatible version; re-run
+  `anyscribe local setup --model <id>` to repair an existing install.
+- **`anyscribe local setup` failed when anyscribe was installed with
+  `uv tool install`** ("No module named pip"). It now installs with `uv`.
+- **Whisper sometimes wrote English transcripts all lowercase with no
+  punctuation** when a recording started mid-sentence. Fixed for English.
+- **Batches with a local model reloaded it for every file** (6-17 s each).
+- The dashboard's setup windows scroll when they're taller than the screen,
+  and the dashboard fits a phone screen.
+
+**Nothing changes for an existing setup** unless you pick a new model; if you
+use a Whisper model for English, `anyscribe local status` suggests trying
+Parakeet v3.
+
+---
+
 ## 0.18.3 — 2026-11-14
 
 **Fixed**

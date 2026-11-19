@@ -9,6 +9,7 @@ import httpx
 
 from anyscribe.core.errors import classify_api_error, with_retry
 from anyscribe.providers.base import (
+    local_hint,
     TranscriptionProvider,
     TranscriptResult,
     TranscriptSegment,
@@ -38,9 +39,7 @@ class OpenAIProvider(TranscriptionProvider):
     def _get_api_key(self) -> str:
         key = os.environ.get("OPENAI_API_KEY", "")
         if not key:
-            raise RuntimeError(
-                "OPENAI_API_KEY not set. Run 'anyscribe onboard' or set it in ~/.anyscribe/.env"
-            )
+            raise RuntimeError("OPENAI_API_KEY not set. Run 'anyscribe onboard' or set it in ~/.anyscribe/.env" + local_hint())
         return key
 
     @with_retry()

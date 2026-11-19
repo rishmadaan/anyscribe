@@ -312,7 +312,7 @@ OpenAI's diarize model takes the whole file and refuses anything over 25 MB or 3
 
 Audio over 25 MB or 30 min is split into 18-min chunks; Sarvam always uses 28-s chunks. Each chunk transcribes separately. This is normal.
 
-**Estimate:** Cloud APIs process roughly at real-time speed. Local (CPU) runs from about 7x real-time for `base` down to about 1x for `large-v3`.
+**Estimate:** Cloud APIs process roughly at real-time speed. Local on our 6-core test CPU (yours may be faster or slower): about 10 min per hour of audio with `parakeet-v3`, ~40 min with `large-v3-turbo`, ~2.5 h with `large-v3` (`anyscribe model list --json` → `spec.min_per_hour`).
 
 ### Config or workspace corruption
 
@@ -329,14 +329,26 @@ anyscribe onboard
 
 Back up `~/anyscribe/` first if transcripts matter (or check `anyscribe config show` for custom workspace path).
 
-### "faster-whisper is not installed" (local provider)
+### "faster-whisper is not installed" / "onnx-asr is not installed" (local provider)
 
 **Fix:**
 ```bash
-anyscribe local setup --model base --yes --json
+anyscribe local setup --model parakeet-v3 --yes --json
 ```
 
-First run downloads the model from Hugging Face (~150 MB for base). Needs internet for that initial download.
+First run downloads the model from Hugging Face (~750 MB for Parakeet v3 plus the Tiny language check). Needs internet for that initial download. An install from before Parakeet gets onnx-asr on its first Parakeet setup or `model pull`.
+
+### "No module named pip" during local setup
+
+anyscribe was installed with `uv tool install`, whose venv has no pip. Setup falls back to `uv pip install --python <venv>` when `uv` is on PATH; if it still fails, `uv` isn't on that shell's PATH. Alternative: `uv tool install "anyscribe[local]" --force`.
+
+### "open() got an unexpected keyword argument 'metadata_errors'" (local Whisper)
+
+PyAV 19 broke faster-whisper 1.2.1. Re-run `anyscribe local setup --model <id> --yes --json`; it installs `av<19`. <!-- version-pin-ok -->
+
+### "Detected <language>, which Parakeet v3 doesn't cover, and no Whisper model … is downloaded"
+
+The language check sent the run to Whisper but none is cached; nothing was written. Offer `anyscribe model pull large-v3-turbo --json`, then rerun. If the detection was wrong, rerun with an explicit `--language en` (skips the check). "Parakeet needs its language check (Whisper Tiny …)" → `anyscribe model pull tiny --json`.
 
 ### "The tray companion needs extra packages" / tray won't start
 

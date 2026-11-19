@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Model Picker</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0B0A0F;--surface:#13121A;--raised:#1A1923;--hover:#21202C;--border:#2A2937;--subtle:#1F1E2B;--text:#F0EEF6;--text2:#9895A7;--muted:#5C5970;--amber:#F0A050;--amberdim:#4A3520;--green:#50D890;--blue:#60A0F0}
+*{box-sizing:border-box;margin:0}
+body{color:var(--text);font:14px/1.5 "DM Sans",system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;background:var(--bg);padding:24px 16px 28px;border-radius:12px}
+.stage{font:500 11px "JetBrains Mono",monospace;color:var(--amber);letter-spacing:.08em;text-transform:uppercase}
+h1{font:700 26px "Bricolage Grotesque",sans-serif;margin:6px 0 4px}
+.lede{color:var(--text2);max-width:640px}
+.tabs{display:flex;gap:6px;margin:24px 0 14px;flex-wrap:wrap}
+.tab{border:1px solid var(--border);background:transparent;color:var(--text2);padding:7px 12px;border-radius:8px;font:500 13px "DM Sans";cursor:pointer}
+.tab[aria-selected=true]{border-color:var(--amber);color:var(--amber);background:rgba(240,160,80,.08)}
+.panel{display:none}.panel.on{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+.card h2{font:700 17px "Bricolage Grotesque";display:flex;align-items:center;gap:10px}
+.pill{font:500 10px "JetBrains Mono";padding:2px 7px;border-radius:5px;border:1px solid var(--border);color:var(--text2)}
+.pill.on{color:var(--green);border-color:rgba(80,216,144,.35)}
+.sub{color:var(--text2);font-size:13px;margin:4px 0 14px}
+.models{display:grid;gap:10px}
+.m{display:grid;grid-template-columns:22px 1fr auto;gap:12px;align-items:start;padding:14px;border:1px solid var(--subtle);background:var(--raised);border-radius:10px;cursor:pointer;text-align:left;color:inherit;font:inherit;width:100%}
+.m:hover{background:var(--hover)}
+.m[aria-checked=true]{border-color:var(--amber);background:rgba(240,160,80,.06)}
+.radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted);margin-top:3px}
+.m[aria-checked=true] .radio{border-color:var(--amber);box-shadow:inset 0 0 0 3px var(--raised);background:var(--amber)}
+.name{font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{font:500 10px "JetBrains Mono";padding:2px 7px;border-radius:5px;background:var(--amberdim);color:var(--amber)}
+.for{color:var(--text2);font-size:13px;margin-top:2px}
+.facts{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text2)}
+.facts b{font:500 12px "JetBrains Mono";color:var(--text)}
+.rate{display:inline-flex;align-items:center;gap:6px}
+.dots{display:inline-flex;gap:3px}.dots i{width:7px;height:7px;border-radius:50%;background:var(--border)}.dots i.f{background:var(--text)}
+.act{font:500 12px "DM Sans";border:1px solid var(--border);color:var(--text2);background:transparent;padding:5px 10px;border-radius:7px;white-space:nowrap}
+.act.dl{border-style:dashed}
+.ready{font:500 11px "JetBrains Mono";color:var(--green);white-space:nowrap}
+details{margin-top:12px;border-top:1px solid var(--subtle);padding-top:10px}
+summary{cursor:pointer;color:var(--text2);font-size:13px}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+td,th{padding:7px 6px;border-bottom:1px solid var(--subtle);text-align:left;color:var(--text2)}
+th{font-weight:500;color:var(--muted)}td.n{font-family:"JetBrains Mono";color:var(--text)}
+.guard{margin-top:14px;padding:12px 14px;border-radius:10px;border:1px solid var(--subtle);background:var(--raised);font-size:13px;color:var(--text2)}
+.guard b{color:var(--text)}
+.switch{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:14px;padding:12px 14px;border:1px solid var(--subtle);border-radius:10px}
+.tog{width:38px;height:22px;border-radius:11px;background:var(--amber);position:relative;flex:none}.tog:after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--bg)}
+.choice{display:grid;gap:10px;margin-top:12px}
+.opt{padding:16px;border-radius:10px;border:1px solid var(--subtle);background:var(--raised)}
+.opt.sel{border-color:var(--amber);background:rgba(240,160,80,.06)}
+.opt h3{font:600 15px "DM Sans";display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.opt p{color:var(--text2);font-size:13px;margin-top:4px}
+.primary{margin-top:16px;background:var(--amber);color:#1a1005;border:0;padding:10px 16px;border-radius:9px;font:600 14px "DM Sans"}
+.result{font-size:13px}.note{margin-top:10px;padding:10px 12px;border-left:3px solid var(--blue);background:rgba(96,160,240,.07);border-radius:6px;color:var(--text2)}
+.note b{color:var(--text)}
+.foot{margin-top:22px;color:var(--muted);font-size:12px}
+@media (max-width:560px){.m{grid-template-columns:22px 1fr}.m>.right{grid-column:2}.facts{gap:10px}}
+</style>
+</head>
+<body><div class="wrap">
+<div class="stage">Mockup · not built · numbers measured on your desktop (i5-10600K, no graphics card)</div>
+<h1>Local transcription, Spokenly-style</h1>
+<p class="lede">Three screens from the proposal: where you pick a model, what a brand-new user sees first, and what a transcript says when anyscribe switches models for a language.</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-p="p1">1 · Settings → Local models</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="p2">2 · First run (new user)</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="p3">3 · Hindi audio, automatic switch</button>
+</div>
+
+<section class="panel on" id="p1">
+<div class="card">
+  <h2>Local transcription <span class="pill on">ready · works offline</span></h2>
+  <p class="sub">Runs on this computer. Free, private, no API key. Pick the model new transcripts use.</p>
+  <div class="models" role="radiogroup" aria-label="Default local model">
+    <button class="m" role="radio" aria-checked="true">
+      <span class="radio"></span>
+      <span><span class="name">Parakeet v3 <span class="badge">recommended</span></span>
+        <span class="for">English and 24 European languages. Fastest accurate option.</span>
+        <span class="facts">
+          <span class="rate">Accuracy <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span> <b>5/5</b></span>
+          <span class="rate">Speed <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> <b>4/5</b></span>
+          <span>1 hour of audio ≈ <b>10 min</b></span><span>Download <b>670 MB</b></span><span>Memory <b>2.2 GB</b></span>
+        </span></span>
+      <span class="right"><span class="ready">✓ downloaded</span></span>
+    </button>
+    <button class="m" role="radio" aria-checked="false">
+      <span class="radio"></span>
+      <span><span class="name">Whisper Large v3 Turbo <span class="badge" style="background:#1d2a3d;color:var(--blue)">for Hindi</span></span>
+        <span class="for">Hindi and 95+ other languages. As accurate as Parakeet on English, but slower.</span>
+        <span class="facts">
+          <span class="rate">Accuracy <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span> <b>5/5</b></span>
+          <span class="rate">Speed <span class="dots"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span> <b>2/5</b></span>
+          <span>1 hour of audio ≈ <b>40 min</b></span><span>Download <b>1.6 GB</b></span><span>Memory <b>3 GB</b></span>
+        </span></span>
+      <span class="right"><button class="act dl">↓ Download</button></span>
+    </button>
+    <button class="m" role="radio" aria-checked="false">
+      <span class="radio"></span>
+      <span><span class="name">Whisper Small</span>
+        <span class="for">Older or low-memory computers. Any language, small download.</span>
+        <span class="facts">
+          <span class="rate">Accuracy <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> <b>4/5</b></span>
+          <span class="rate">Speed <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span> <b>3/5</b></span>
+          <span>1 hour ≈ <b>22 min</b></span><span>Download <b>460 MB</b></span><span>Memory <b>1.3 GB</b></span>
+        </span></span>
+      <span class="right"><button class="act dl">↓ Download</button></span>
+    </button>
+    <button class="m" role="radio" aria-checked="false">
+      <span class="radio"></span>
+      <span><span class="name">Whisper Base</span>
+        <span class="for">Quick rough drafts. Smallest useful model.</span>
+        <span class="facts">
+          <span class="rate">Accuracy <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span> <b>3/5</b></span>
+          <span class="rate">Speed <span class="dots"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> <b>4/5</b></span>
+          <span>1 hour ≈ <b>8 min</b></span><span>Download <b>140 MB</b></span><span>Memory <b>1 GB</b></span>
+        </span></span>
+      <span class="right"><button class="act dl">↓ Download</button></span>
+    </button>
+  </div>
+
+  <div class="guard"><b>Language check is on.</b> Before using Parakeet, anyscribe listens to the first 30 seconds (under a second, using a 75 MB helper). If the audio isn't one of Parakeet's 25 languages, it uses Whisper Large v3 Turbo instead and says so on the transcript. If Turbo isn't downloaded yet, it stops and offers the download rather than writing gibberish.</div>
+
+
+  <details><summary>More models (5) — older or slower options</summary>
+    <table>
+      <tr><th>Model</th><th>Accuracy</th><th>Speed</th><th>1 hour of audio</th><th>Why it's tucked away</th></tr>
+      <tr><td>Parakeet v2</td><td class="n">4/5</td><td class="n">4/5</td><td class="n">~9 min</td><td>English only; v3 is as fast and more accurate</td></tr>
+      <tr><td>Whisper Medium</td><td class="n">4/5</td><td class="n">1/5</td><td class="n">~67 min</td><td>Slower than real time, no more accurate than Small</td></tr>
+      <tr><td>Whisper Large v3</td><td class="n">4/5</td><td class="n">1/5</td><td class="n">~2.5 hours</td><td>Needs a graphics card to be practical</td></tr>
+      <tr><td>Distil Large v3.5</td><td class="n">3/5</td><td class="n">2/5</td><td class="n">~32 min</td><td>Scored below Small on your recordings</td></tr>
+      <tr><td>Whisper Tiny</td><td class="n">2/5</td><td class="n">5/5</td><td class="n">~4 min</td><td>Very rough; used internally for the language check</td></tr>
+    </table>
+  </details>
+</div>
+</section>
+
+<section class="panel" id="p2">
+<div class="card">
+  <h2>How should anyscribe transcribe?</h2>
+  <p class="sub">You can change this any time in Settings.</p>
+  <div class="choice">
+    <div class="opt sel"><h3>On this computer <span class="badge">recommended</span></h3>
+      <p>Free and private. No account, no API key, works offline. Downloads Parakeet v3 (670 MB) once. About 10 minutes per hour of audio on a typical desktop.</p></div>
+    <div class="opt"><h3>With a cloud service</h3>
+      <p>Slightly more accurate on hard audio, adds speaker labels, very fast. Needs an API key from ElevenLabs, Deepgram, OpenAI, Groq or others. Paid per minute.</p></div>
+  </div>
+  <button class="primary">Download Parakeet v3 and finish setup</button>
+</div>
+</section>
+
+<section class="panel" id="p3">
+<div class="card result">
+  <h2>voice-note.ogg <span class="pill on">done · 3:48</span></h2>
+  <p class="sub">Saved to sources/local/voice-note.md</p>
+  <div class="note"><b>Detected Hindi.</b> Parakeet v3 doesn't cover Hindi, so this one used Whisper Large v3 Turbo. To skip the check, set your language to Hindi in Settings.</div>
+  <p style="margin-top:12px;color:var(--text2)">The same line is written into the transcript's details and printed in the terminal, so the switch is never silent.</p>
+</div>
+</section>
+
+<p class="foot">Times per hour of audio come from 15 minutes of your own recordings, scored against the ElevenLabs transcripts already in your vault. A Mac with Apple silicon will likely be faster; that is not yet measured.</p>
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===t));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===t.dataset.p))}));
+document.querySelectorAll('.m').forEach(m=>m.addEventListener('click',()=>document.querySelectorAll('.m').forEach(x=>x.setAttribute('aria-checked',x===m))));
+</script>
+</body></html>

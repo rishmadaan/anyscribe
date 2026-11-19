@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from anyscribe.config.paths import ENV_FILE
-from anyscribe.config.settings import Settings, load_config, save_config, save_env
+from anyscribe.config.settings import CONFIG_LOCK, Settings, load_config, save_config, save_env
 from anyscribe.providers import (
     OPEN_MODEL_PROVIDERS,
     PROVIDER_KEY_ENV,
@@ -93,19 +93,20 @@ def set_value(key: str, value) -> SetOutcome:
         os.environ[env_var] = str(value)
         return SetOutcome(True, f"Saved {env_var} to {ENV_FILE}")
 
-    data = load_config().to_dict()
     field, _, sub = key.partition(".")
-    try:
-        if field in ("provider_models", "extra_models"):
-            message = _set_models(field, sub, value, data)
-        elif key in ENUMS:
-            message = _set_enum(key, value, data)
-        else:
-            message = _set_scalar(key, value, data)
-    except _Invalid as e:
-        return SetOutcome(False, error=e.error, choices=e.choices)
+    with CONFIG_LOCK:  # the read and the save are one step: no other writer lands between
+        data = load_config().to_dict()
+        try:
+            if field in ("provider_models", "extra_models"):
+                message = _set_models(field, sub, value, data)
+            elif key in ENUMS:
+                message = _set_enum(key, value, data)
+            else:
+                message = _set_scalar(key, value, data)
+        except _Invalid as e:
+            return SetOutcome(False, error=e.error, choices=e.choices)
 
-    save_config(Settings.from_dict(data))
+        save_config(Settings.from_dict(data))
     return SetOutcome(True, message)
 
 
@@ -116,6 +117,8 @@ def _set_enum(key: str, value, data: dict) -> str:
         v = normalize_provider_name(v)
     if v not in choices:
         raise _Invalid(f"Invalid value for {key}: {v}", choices)
+    if key == "local_model" and v != data.get(key):
+        _check_runnable(v)
     data[key] = v
     if key == "provider":
         # The invariant: an explicit provider choice must survive the next run,
@@ -123,6 +126,24 @@ def _set_enum(key: str, value, data: dict) -> str:
         data["quality"] = "custom"
         return f"Set provider = {v} (quality = custom, so this choice sticks)"
     return f"Set {key} = {v}"
+
+
+def _check_runnable(model_id: str) -> None:
+    """The one guarded switch of the local default (CLI, Web and MCP): a model
+    that can't run yet is refused, with what to do instead."""
+    from anyscribe.providers.local_models import display_name, engine_importable, runnable
+
+    if runnable(model_id):
+        return
+    cmd = (
+        f"anyscribe model pull {model_id}"
+        if engine_importable(model_id)
+        else f"anyscribe local setup --model {model_id}"
+    )
+    raise _Invalid(
+        f"{display_name(model_id)} isn't ready to use yet, so the default model is unchanged. "
+        f"Download it first: `{cmd}` (or Settings, Local transcription: click its card)."
+    )
 
 
 def _set_scalar(key: str, value, data: dict) -> str:

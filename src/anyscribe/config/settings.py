@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field, asdict, fields
 
 import yaml
@@ -111,12 +112,21 @@ def load_config() -> Settings:
     return settings
 
 
+# Every read-modify-write of config.yaml in this process (web requests, the
+# download worker, setup threads) holds this, so no save writes back a stale copy
+# over a newer one. Callers wrap load -> change -> save in `with CONFIG_LOCK:`;
+# reentrant, because set_value takes it inside callers that already hold it.
+# shortcut: in-process lock only; a CLI write while the server runs can still race, upgrade to a file lock if that is ever reported
+CONFIG_LOCK = threading.RLock()
+
+
 def save_config(settings: Settings) -> None:
     """Write settings to config.yaml (atomic write)."""
     from anyscribe.core.fileutil import atomic_write
 
     content = yaml.dump(settings.to_dict(), default_flow_style=False, sort_keys=False)
-    atomic_write(CONFIG_FILE, content)
+    with CONFIG_LOCK:
+        atomic_write(CONFIG_FILE, content)
 
 
 def load_env() -> None:

@@ -329,8 +329,9 @@ always works in 28-second pieces. OpenAI with <code>--diarize</code> doesn't spl
 refuses files that long, so use Deepgram for long recordings with speakers. The
 local provider doesn't split at all; it works through the whole file in one go.)</p>
 <p><strong>Rough guide:</strong> cloud providers run at roughly real-time speed. Local
-transcription on CPU ranges from about real time (<code>large-v3</code>) to about 10× faster
-than real time (<code>tiny</code>); the usual <code>base</code> runs about 7× faster.</p>
+transcription on our 6-core test CPU takes about 10 minutes per hour of audio
+with Parakeet v3, about 40 with Whisper Large v3 Turbo, and about 2.5 hours with
+Whisper Large v3 (<code>anyscribe model list</code> shows every model).</p>
 <h3 id="audio-left-over-after-a-failed-run">Audio left over after a failed run</h3>
 <p>When a transcription fails <em>after</em> the audio downloaded, anyscribe keeps that audio
 rather than throwing it away, so you can retry without downloading it again.</p>
@@ -345,26 +346,64 @@ also works, but downloads the source again (add <code>--force</code> if it partl
 transcript). Or just delete the file if you've moved on — nothing else references it.</p>
 <hr />
 <h2 id="local-offline-transcription">Local (offline) transcription</h2>
-<h3 id="faster-whisper-is-not-installed"><code>faster-whisper is not installed</code></h3>
+<h3 id="faster-whisper-is-not-installed-onnx-asr-is-not-installed"><code>faster-whisper is not installed</code> / <code>onnx-asr is not installed</code></h3>
 <p>The local provider is opt-in and needs a one-time install:</p>
-<pre><code class="language-bash">anyscribe local setup --model base
+<pre><code class="language-bash">anyscribe local setup --model parakeet-v3
 </code></pre>
-<p>That installs faster-whisper into the same Python environment as anyscribe and
-downloads the model. The first download needs internet (~150 MB for <code>base</code>);
-everything after that is fully offline.</p>
+<p>That installs the engines (faster-whisper and onnx-asr) into the same Python
+environment as anyscribe and downloads the model. The first download needs
+internet (~750 MB for Parakeet v3 plus its language check); everything after
+that is fully offline. If you set up local transcription before Parakeet
+existed, picking a Parakeet model (setup, <code>anyscribe model pull parakeet-v3</code>, or
+a card in Settings) installs onnx-asr for you.</p>
 <blockquote>
-<p><code>--model</code> is deliberately required — anyscribe will never pick a model size for
-you. <code>large-v3-turbo</code> is the recommended pick; <code>base</code> suits older laptops.</p>
+<p><code>--model</code> is deliberately required — anyscribe will never pick a model for
+you. <code>parakeet-v3</code> is the recommended pick for English and European
+languages, <code>large-v3-turbo</code> for Hindi.</p>
 </blockquote>
+<h3 id="no-module-named-pip-during-local-setup"><code>No module named pip</code> during local setup</h3>
+<p>Your anyscribe lives in an environment without pip, which is what
+<code>uv tool install anyscribe</code> makes. anyscribe then installs with
+<code>uv pip install --python &lt;that environment&gt;</code> when <code>uv</code> is on your PATH. If you
+see this error, <code>uv</code> isn't on the PATH of the shell that ran anyscribe: open a
+new terminal, or install the engines yourself with
+<code>uv tool install "anyscribe[local]" --force</code>.</p>
+<h3 id="open-got-an-unexpected-keyword-argument-metadata_errors"><code>open() got an unexpected keyword argument 'metadata_errors'</code></h3>
+<p>PyAV 19 (released September 2026) removed an option faster-whisper 1.2.1 <!-- version-pin-ok -->
+uses, so every local Whisper run crashed. anyscribe now installs <code>av&lt;19</code>;
+re-running <code>anyscribe local setup --model &lt;id&gt;</code> downgrades a broken install.
+If the dashboard (<code>anyscribe ui</code>) was running when setup replaced PyAV, it
+says <strong>Restart anyscribe to finish setting up local transcription</strong>: the
+running server still holds the old PyAV, so stop it (Ctrl+C) and start it
+again.</p>
+<h3 id="a-model-shows-as-incomplete">A model shows as "incomplete"</h3>
+<p>Its download was interrupted, so some files are missing and anyscribe won't
+use it (it never counts as downloaded, and the language check won't switch to
+it). Click <strong>Incomplete: resume download</strong> in Settings → Local, or run
+<code>anyscribe model pull &lt;id&gt;</code>; the download picks up where it stopped.</p>
+<h3 id="detected-hindi-no-whisper-model-to-use-instead-is-downloaded">"Detected Hindi … no Whisper model to use instead is downloaded"</h3>
+<p>Your default is Parakeet, the audio is in a language Parakeet doesn't cover,
+and there's no Whisper model to hand it to. Nothing was written. Download one:</p>
+<pre><code class="language-bash">anyscribe model pull large-v3-turbo
+</code></pre>
+<p>then run the same command again. If the language check guessed wrong (it
+checks the language at the start, middle and end of each recording), set the
+language yourself:
+<code>anyscribe "&lt;file&gt;" --language en</code>.</p>
+<h3 id="parakeet-needs-its-language-check-whisper-tiny">"Parakeet needs its language check (Whisper Tiny …)"</h3>
+<p>The 75 MB language-check helper was deleted. <code>anyscribe model pull tiny</code>
+brings it back, or set an explicit language (<code>--language en</code>) to skip the
+check.</p>
 <h3 id="checking-whats-actually-installed">Checking what's actually installed</h3>
 <pre><code class="language-bash">anyscribe local status
 </code></pre>
-<p>Reports faster-whisper's version, whether ffmpeg is present, which models are
-cached, disk usage, and how anyscribe was installed. It always exits 0, so it's
+<p>Reports the engines (faster-whisper's version, whether onnx-asr is installed),
+whether ffmpeg is present, which models are cached, disk usage, and how
+anyscribe was installed. It always exits 0, so it's
 safe to run before setup.</p>
 <h3 id="model-weights-look-corrupted">Model weights look corrupted</h3>
 <p>Delete and re-download in one step:</p>
-<pre><code class="language-bash">anyscribe model reinstall base --yes
+<pre><code class="language-bash">anyscribe model reinstall parakeet-v3 --yes
 </code></pre>
 <hr />
 <h2 id="web-ui-tray-and-desktop-app">Web UI, tray and desktop app</h2>
@@ -378,8 +417,8 @@ its own — it re-checks every 30 seconds — once both are satisfied:</p>
    <strong>Settings → Providers</strong>.</li>
 </ol>
 <blockquote>
-<p><strong>Using local transcription only?</strong> That counts. Once faster-whisper is
-installed (<code>anyscribe local setup --model base</code>, or the <strong>Set up local
+<p><strong>Using local transcription only?</strong> That counts. Once the local engines are
+installed (<code>anyscribe local setup --model parakeet-v3</code>, or the <strong>Set up local
 transcription</strong> button on the Local provider card in Settings), the provider
 requirement is satisfied without any API key.</p>
 </blockquote>

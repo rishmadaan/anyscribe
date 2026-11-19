@@ -85,7 +85,10 @@ def test_model_pin_accepts_the_provider_alias():
         ("local_model", "small"),
     ],
 )
-def test_enum_values_accepted(key, value):
+def test_enum_values_accepted(key, value, monkeypatch):
+    from anyscribe.providers import local_models
+
+    monkeypatch.setattr(local_models, "runnable", lambda m: True)  # local_model needs a ready model
     assert set_value(key, value).ok
     assert getattr(load_config(), key) == value
 

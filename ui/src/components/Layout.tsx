@@ -46,9 +46,9 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex min-h-dvh">
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 border-r border-border-subtle bg-surface flex flex-col">
+    <div className="flex flex-col sm:flex-row min-h-dvh">
+      {/* Sidebar; on a phone it stacks above the page instead of eating its width */}
+      <aside className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-border-subtle bg-surface flex flex-col">
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 py-5">
           <Waves className="w-5 h-5 text-amber" />
@@ -61,7 +61,7 @@ export default function Layout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-col gap-0.5 px-3 mt-2">
+        <nav className="flex flex-row flex-wrap sm:flex-col gap-0.5 px-3 sm:mt-2">
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -104,7 +104,7 @@ export default function Layout() {
         </div>
 
         {/* Bottom — branding + shutdown */}
-        <div className="mt-auto px-3 pb-4 space-y-2">
+        <div className="mt-4 sm:mt-auto px-3 pb-4 space-y-2">
           <div className="px-3 py-2 text-xs text-text-secondary space-y-1">
             <p>&copy; 2026 Rishabh Madaan</p>
             <a href="https://github.com/rishmadaan/anyscribe#license" target="_blank" rel="noopener noreferrer" className="block hover:text-text underline">

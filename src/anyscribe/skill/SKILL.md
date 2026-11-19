@@ -67,11 +67,11 @@ When the USER wants to run commands themselves, show them the human-readable for
 | Add an OpenRouter model to the pickers | `anyscribe config set extra_models.openrouter "<slug>,<slug>"` (openrouter only) |
 | Check a provider's key is set | `anyscribe providers test <name>` (no API call: a pass does not prove the key is valid or funded) |
 | List providers | `anyscribe providers list` |
-| Set up offline transcription | `anyscribe local setup --model base --yes --json` prepares local transcription only. To make it the default, ask before changing an existing provider, then run `anyscribe config set diarize false` followed by `anyscribe config set provider local`. Confirm `resolved.provider` is `local` with `anyscribe config --json`. *(see rule below)* |
+| Set up offline transcription | `anyscribe local setup --model parakeet-v3 --yes --json` prepares local transcription only. To make it the default, ask before changing an existing provider, then run `anyscribe config set diarize false` followed by `anyscribe config set provider local`. Confirm `resolved.provider` is `local` with `anyscribe config --json`. *(see rule below)* |
 | Check offline-transcription state | `anyscribe local status --json` |
-| Download another Whisper model | `anyscribe model pull <size> --json` |
-| List downloaded Whisper models | `anyscribe model list --json` |
-| Delete a cached Whisper model | `anyscribe model rm <size> --yes --json` |
+| Download another local model | `anyscribe model pull <id> --json` |
+| List local models (ratings, cached) | `anyscribe model list --json` |
+| Delete a cached local model | `anyscribe model rm <id> --yes --json` |
 | Remove offline transcription | `anyscribe local teardown --yes --json` |
 | Initial setup (interactive, for a human) | `anyscribe onboard` (or `--force` to re-run) |
 | Initial setup (headless, agent or script) | `anyscribe onboard --provider X --api-key $KEY --yes --json` *(see rule below)* |
@@ -104,7 +104,7 @@ anyscribe onboard --provider <name> --api-key "$KEY_ENV_VAR" --yes --json
 For local/offline transcription as primary provider:
 
 ```bash
-anyscribe onboard --provider local --local-model base --yes --json
+anyscribe onboard --provider local --local-model parakeet-v3 --yes --json
 ```
 
 Two optional flags worth knowing:
@@ -116,20 +116,20 @@ The `--json` result reports what landed: `{"status", "provider", "quality", "mod
 
 **Prefer env vars over `--api-key` on argv** — argv leaks into shell history. Reference the env var by name (`"$OPENAI_API_KEY"`) in examples you give the user.
 
-**Don't guess missing flags.** If the user hasn't told you which provider or model to use, ask them — don't default to one silently. The recommended model for `--provider local` is `large-v3-turbo` per [`references/providers.md`](references/providers.md); other defaults (workspace, language, output format) are sane and the user can adjust them in Settings later.
+**Don't guess missing flags.** If the user hasn't told you which provider or model to use, ask them — don't default to one silently. The recommended model for `--provider local` is `parakeet-v3` (`large-v3-turbo` for Hindi) per [`references/providers.md`](references/providers.md); other defaults (workspace, language, output format) are sane and the user can adjust them in Settings later.
 
 **Already configured?** `anyscribe onboard --yes` without `--force` exits 2 when `~/.anyscribe/config.yaml` exists. If the user wants to reconfigure, pass `--force`.
 
 ## Local (Offline) Transcription Workflow
 
-The `local` provider runs Whisper on the user's own machine via `faster-whisper` — no API, no network. It's **opt-in** and requires a one-time setup that installs `faster-whisper` and downloads a Whisper model.
+The `local` provider runs on the user's own machine — Parakeet (via `onnx-asr`) or Whisper (via `faster-whisper`), no API, no network. It's **opt-in** and requires a one-time setup that installs the engines and downloads a model.
 
-**Critical rule — you must pass `--model` explicitly.** `anyscribe local setup` refuses to pick a model silently; it exits 2 with a hint if `--model` is omitted. When the user hasn't specified a size, default to the recommended model: **`large-v3-turbo`** (~1.6 GB, ~3 GB RAM, near `large-v3` quality at ~6x realtime on CPU). On an older or low-memory machine, or when the download size matters, use `base` (~145 MB) instead. `distil-large-v3.5` (~1.5 GB) is near `large-v3` for English only. `large-v3` is the ceiling but the slowest on CPU.
+**Critical rule — you must pass `--model` explicitly.** `anyscribe local setup` refuses to pick a model silently; it exits 2 with a hint if `--model` is omitted. When the user hasn't specified a model, ask **"What language is most of your audio?"** and follow `anyscribe local status --json` → `recommendations[<answer>]` (answers `english`, `indian`, `european`, `mix`, `other`; read its `reasons` to the user). Without an answer, default to **`parakeet-v3`** (~670 MB + 75 MB language check, ~2.2 GB RAM, ~10 min per hour of audio on our 6-core test CPU). Hindi → `large-v3-turbo`; a mix → `parakeet-v3` plus `anyscribe model pull large-v3-turbo`; under ~4 GB RAM → `base`. Full table: [references/providers.md](references/providers.md).
 
 **Setup from agent context:**
 
 ```bash
-anyscribe local setup --model base --yes --json
+anyscribe local setup --model parakeet-v3 --yes --json
 ```
 
 `--yes` is required in non-TTY (agent) contexts; the command refuses to run without it. Stream the NDJSON events to show progress; watch for `{"status": "failed", ...}` and inspect `phase`: installation failures (`"phase": "install"`) carry `install.command` and `install.stderr`, the exact pip/pipx command that failed and its captured stderr, which you can show to the user so they can resolve it (permission errors, PEP 668, etc.); model-download failures (`"phase": "download"`) carry `error`, while `install` describes the preceding installation step.
@@ -142,7 +142,9 @@ anyscribe local setup --model base --yes --json
 - User is frustrated by API rate limits or cost.
 - User asks to run without any API key.
 
-**When NOT to set it up unprompted:** don't install faster-whisper (200+ MB of dependencies) or download a model (~145 MB minimum) unless the user asked for offline transcription. Prefer suggesting an API provider for drive-by requests.
+**Parakeet's language check.** With Parakeet as the default, a run whose audio isn't in Parakeet's languages switches to Whisper and says so in `--json` `notes` (`Detected Hindi — Parakeet v3 doesn't cover Hindi, so this used Whisper Large v3 Turbo.`); `model` is the model that actually ran. Tell the user. If no Whisper model is cached, the run fails naming `anyscribe model pull large-v3-turbo` and writes nothing — offer to run that.
+
+**When NOT to set it up unprompted:** don't install the local engines (200+ MB of dependencies) or download a model (~140 MB minimum) unless the user asked for offline transcription. Prefer suggesting an API provider for drive-by requests.
 
 For detailed flag coverage see [references/commands.md](references/commands.md) and [references/providers.md](references/providers.md).
 
@@ -205,7 +207,7 @@ When the user asks which provider to use, or when you need to suggest one:
 | Mostly English + some Hindi | `--diarize` (no language flag needed) | Auto-detect handles English well, Hindi words transcribed phonetically |
 | Indian languages, English output wanted | **sargam** | 22 Indian languages; it translates to English (`mode=translate`), it does not return the original language. For an original-language transcript use Deepgram (`-p deepgram --language hi` or `hi-Latn`) |
 | High-accuracy transcription | **elevenlabs** | 90+ languages; timestamps come per ~30-word segment, not per word |
-| Offline / no API key / free | **local** | Runs locally with faster-whisper, zero cost |
+| Offline / no API key / free | **local** | Runs locally (Parakeet or Whisper), zero cost |
 | Specific model needed | **openrouter** | Access to various models, but slower and pricier |
 
 For detailed provider comparison (pricing, limits, setup), read [references/providers.md](references/providers.md).
@@ -248,7 +250,7 @@ The consequence for you: **passing `-m gpt-transcribe` disables that safety net*
 - **sargam**: `saaras:v3` only. `saaras:v2.5` was retired upstream; an old pin is dropped automatically on the next run with a one-line notice.
 - **groq**: `whisper-large-v3-turbo` (default, cheapest/fastest) or `whisper-large-v3` for higher accuracy.
 - **openrouter**: accepts *any* audio-capable slug, not just the listed ones — a typo will fail at the API, not at anyscribe. Default `openai/gpt-audio-mini`. Add slugs the user reuses with `anyscribe config set extra_models.openrouter "<slug>,<slug>"` so they show up in the pickers (marked `(custom)`); an empty value clears them.
-- **local**: model choice is separate — it's `anyscribe local setup --model <size>` / `anyscribe model pull <size>`, not `-m`.
+- **local**: model choice is separate — it's `anyscribe local setup --model <id>` / `anyscribe model pull <id>`, not `-m`.
 
 **"Can I add a model to Deepgram / ElevenLabs / OpenAI?"** No — `extra_models` is openrouter-only, by design. Those providers' lists are curated per anyscribe release because anyscribe needs code that parses each model's response. The answer is `anyscribe update`, not a config change.
 

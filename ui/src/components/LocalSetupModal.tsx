@@ -1,6 +1,7 @@
 /** Local transcription setup modal.
  *
- * Lets the user pick a model size (recommended preselected + badged), kicks
+ * Lets the user pick a model (recommended preselected; "Help me choose" asks
+ * one question and suggests one) with the shared LocalModelPicker, kicks
  * off the unified backend setup flow, polls status until done, and streams
  * the install log into a collapsible panel so diagnostic output is visible
  * when something goes wrong.
@@ -12,9 +13,13 @@ import {
   getLocalStatus,
   setupLocal,
   getSetupLog,
+  updateConfig,
 } from "../api/client";
-import type { LocalStatusResponse } from "../api/types";
+import type { LocalRecommendation, LocalStatusResponse } from "../api/types";
 import Modal from "./Modal";
+import LocalModelPicker from "./LocalModelPicker";
+import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
+import { downloadMbFor, formatMB } from "../api/models";
 
 const POLL_MS = 1500;
 const MB = 1024 * 1024;
@@ -32,6 +37,10 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const logCursorRef = useRef(0);
+  // Extra downloads from "Help me choose" (Turbo for a language mix): sent
+  // with setup, which queues them; the modal then stays open to show them.
+  const [rec, setRec] = useState<LocalRecommendation | null>(null);
+  const [finished, setFinished] = useState<{ also: string[] } | null>(null);
 
   // Initial status fetch + preselect recommended size.
   useEffect(() => {
@@ -70,7 +79,9 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
             setError(s.setup_error);
             setLogOpen(true);
           } else if (s.set_up) {
-            onDone();
+            const also = s.setup_also; // queued by the server
+            if (also.length === 0 && !s.restart_needed && !s.use_local_tip) onDone();
+            else setFinished({ also });
           }
         }
       } catch {
@@ -87,7 +98,7 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
     setLogLines([]);
     logCursorRef.current = 0;
     try {
-      await setupLocal(selected);
+      await setupLocal(selected, rec && rec.primary === selected ? rec.also : []);
       const s = await getLocalStatus();
       setStatus(s);
     } catch (e) {
@@ -109,6 +120,56 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
 
   const running = status.setup_running;
   const phase = status.setup_phase;
+  const selectedSpec = status.models.find((m) => m.size === selected)?.spec;
+  // What the button downloads: the pick, a mix's second model (when the
+  // suggestion was kept) and, for Parakeet, the Tiny language check.
+  const keptRec = rec && rec.primary === selected ? rec : null;
+  const toFetch = [selected, ...(keptRec?.also ?? [])].filter(Boolean) as string[];
+  const downloadMb = downloadMbFor(status.models, toFetch);
+  const names = toFetch
+    .map((id) => status.models.find((m) => m.size === id)?.spec.display_name ?? id)
+    .join(" + ");
+
+  if (finished) {
+    return (
+      <Modal onClose={onDone} ariaLabelledBy="local-setup-title" size="lg">
+        <h2
+          id="local-setup-title"
+          className="text-lg font-bold text-text mb-4"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Local transcription is set up
+        </h2>
+        {status.restart_needed && <RestartBanner />}
+        <p className="text-sm text-text-secondary mb-3 flex items-center gap-1.5">
+          <Check className="w-4 h-4 text-green" />
+          {status.models.find((m) => m.size === status.default_model)?.spec.display_name ??
+            status.default_model}{" "}
+          is ready and is your default{status.use_local_tip ? " local model" : ""}.
+        </p>
+        {status.use_local_tip && (
+          <p className="text-sm text-text-secondary mb-3">{status.use_local_tip}</p>
+        )}
+        {finished.also.length > 0 && (
+          <div className="rounded-md border border-border-subtle bg-surface-raised px-3 py-2.5 mb-4">
+            <ExtraDownloads
+              ids={finished.also}
+              name={(id) => status.models.find((m) => m.size === id)?.spec.display_name ?? id}
+              pendingNote="Switching to it for Hindi and other languages works once it finishes downloading. You can close this; the download carries on in Settings."
+            />
+          </div>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={onDone}
+            className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -136,10 +197,12 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
         )}
       </div>
 
-      <p className="text-sm text-text-muted mb-4">
-        Runs Whisper offline on your machine via faster-whisper. Pick a model
-        size — larger is more accurate but slower and bigger on disk.
+      <p className="text-sm text-text-secondary mb-4">
+        Runs on this computer: free, private, no API key, works offline. Pick
+        the model new transcripts use — not sure? Use “Help me choose”.
       </p>
+
+      {status.restart_needed && <RestartBanner />}
 
       {error && (
         <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-4">
@@ -164,49 +227,23 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
         </div>
       )}
 
-      <div className="space-y-2 mb-5">
-        {status.models.map((m) => {
-          const isRecommended = m.size === status.recommended_model;
-          const isSelected = selected === m.size;
-          const isCached = m.cached;
-          return (
-            <button
-              key={m.size}
-              disabled={running}
-              onClick={() => setSelected(m.size)}
-              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors cursor-pointer ${
-                isSelected
-                  ? "border-amber bg-amber/5"
-                  : "border-border-subtle bg-surface hover:border-border"
-              } ${running ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-mono text-text font-bold">
-                  {m.size}
-                </span>
-                {isRecommended && (
-                  <span className="text-[10px] font-mono text-amber bg-amber/10 border border-amber/30 rounded px-1.5 py-0.5">
-                    recommended
-                  </span>
-                )}
-                {isCached && (
-                  <span className="text-[10px] font-mono text-green bg-green/10 border border-green/30 rounded px-1.5 py-0.5">
-                    cached
-                  </span>
-                )}
-                <span className="ml-auto text-xs text-text-muted font-mono">
-                  ~{m.spec.download_mb} MB
-                </span>
-              </div>
-              <p className="text-xs text-text-muted mt-1">
-                {m.spec.quality} · {m.spec.relative_speed}
-              </p>
-              <p className="text-xs text-text mt-0.5">
-                Use it for {m.spec.use_for}
-              </p>
-            </button>
-          );
-        })}
+      <div className="mb-5">
+        <LocalModelPicker
+          models={status.models}
+          featured={status.featured}
+          languageAnswers={status.language_answers}
+          caption={status.benchmark_caption}
+          selected={selected}
+          onSelect={setSelected}
+          disabled={running}
+          onRecommendation={(r) => {
+            setRec(r);
+            setSelected(r.primary); // "nothing fits" clears it: no download offered
+          }}
+          onSetLanguage={async (code) => {
+            await updateConfig({ language: code });
+          }}
+        />
       </div>
 
       {running && (
@@ -287,7 +324,11 @@ export default function LocalSetupModal({ onClose, onDone }: Props) {
           ) : (
             <>
               <Check className="w-3 h-3" />
-              Download & set up
+              {selectedSpec
+                ? downloadMb > 0
+                  ? `Download ${names} (${formatMB(downloadMb)}) & set up`
+                  : `Set up ${names}`
+                : "Download & set up"}
             </>
           )}
         </button>
@@ -304,9 +345,9 @@ function describePhase(phase: string | null): string {
     case "detecting_install_method":
       return "Detecting install method…";
     case "installing_package":
-      return "Installing faster-whisper (this can take a minute)…";
+      return "Installing the local engines, faster-whisper and onnx-asr (this can take a minute)…";
     case "package_installed":
-      return "faster-whisper installed. Preparing to download model…";
+      return "Engines installed. Preparing to download the model…";
     case "downloading_model":
       return "Downloading model weights from HuggingFace…";
     case "model_downloaded":

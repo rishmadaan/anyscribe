@@ -56,6 +56,8 @@ class TailnetRequest(BaseModel):
 
 class LocalSetupRequest(BaseModel):
     model: str
+    # extra models to download after setup (Turbo for a language mix)
+    also: list[str] = []
 
 
 class ProviderTestRequest(BaseModel):

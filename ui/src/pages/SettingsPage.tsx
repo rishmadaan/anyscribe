@@ -9,6 +9,7 @@ import {
   updateKey,
   deleteKey,
   getLocalStatus,
+  chooseLocal,
   pullLocalModel,
   deleteLocalModel,
   reinstallLocalModel,
@@ -29,6 +30,8 @@ import LanguageInput from "../components/LanguageInput";
 import ModelInput from "../components/ModelInput";
 import { defaultModelFor, extraModelsFor, tierSummary } from "../api/models";
 import LocalSetupModal from "../components/LocalSetupModal";
+import LocalModelPicker from "../components/LocalModelPicker";
+import { RestartBanner } from "../components/LocalSetupNotes";
 import { TailnetLink } from "../components/TailnetShare";
 import { REMOTE, useTailnet } from "../hooks/useTailnet";
 import {
@@ -51,6 +54,7 @@ const MB = 1024 * 1024;
 export default function SettingsPage() {
   const location = useLocation();
   const [config, setConfig] = useState<Config | null>(null);
+  const localModel = config?.local_model;
   const [providers, setProviders] = useState<Provider[]>([]);
   const [health, setHealth] = useState<{
     ok: boolean;
@@ -138,7 +142,8 @@ export default function SettingsPage() {
       !deletingSize &&
       !reinstallingSize &&
       !localStatus?.setup_running &&
-      !anyQueueActivity
+      !anyQueueActivity &&
+      localStatus?.pending_default?.state !== "downloading"
     )
       return;
     const id = setInterval(async () => {
@@ -148,8 +153,10 @@ export default function SettingsPage() {
         setProviders(p);
         if (pullingSize) {
           const entry = l.models.find((m) => m.size === pullingSize);
-          if (entry?.cached) setPullingSize(null);
+          if (entry?.runnable) setPullingSize(null);
         }
+        // the server switched the default once a chosen model could run
+        if (l.default_model !== localModel) setConfig(await getConfig());
       } catch {
         // transient
       }
@@ -161,7 +168,24 @@ export default function SettingsPage() {
     reinstallingSize,
     localStatus?.setup_running,
     localStatus?.models,
+    localStatus?.pending_default?.state,
+    localModel,
   ]);
+
+  // Any explicit model choice (a card click, or "Use …" under Help me
+  // choose). The server makes it the default once it can run, now if it
+  // already can, downloading what it needs; a later choice replaces it.
+  const chooseLocalModel = async (size: string, also: string[] = []) => {
+    setError(null);
+    try {
+      await chooseLocal(size, also);
+      const [c, l] = await Promise.all([getConfig(), getLocalStatus()]);
+      setConfig(c);
+      setLocalStatus(l);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to choose ${size}`);
+    }
+  };
 
   const handleSave = async (updates: Partial<Config>) => {
     if (!config) return;
@@ -248,7 +272,7 @@ export default function SettingsPage() {
 
   if (!config) {
     return (
-      <div className="px-8 py-10 max-w-3xl">
+      <div className="px-4 sm:px-8 py-10 max-w-3xl">
         <div className="h-8 w-32 bg-surface rounded animate-pulse mb-6" />
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
@@ -259,11 +283,13 @@ export default function SettingsPage() {
     );
   }
 
+  const localName = (id: string) =>
+    localStatus?.models.find((m) => m.size === id)?.spec.display_name ?? id;
   const selectedProvider = providers.find((p) => p.name === config.provider);
   const providerMissingKey = selectedProvider && !selectedProvider.has_key;
   const currentDefaultModel =
     config.provider === "local"
-      ? config.local_model
+      ? localName(config.local_model)
       : defaultModelFor(selectedProvider, config.provider_models);
 
   // Language codes differ per provider, so the picker follows whichever
@@ -271,6 +297,10 @@ export default function SettingsPage() {
   const activeTier = tierSummary(config.quality, config, providers);
   const effectiveProvider =
     activeTier.provider && activeTier.hasKey ? activeTier.provider : config.provider;
+  // A local user doesn't need a key: cloud rows say so quietly, not as a warning.
+  const localUser = (config.quality === "custom" ? config.provider : activeTier.provider) === "local";
+  const keyWarn = (provider: string) =>
+    provider === "local" ? "not set up" : localUser ? "add a key to use" : "needs API key";
 
   const handlePin = (provider: string, model: string) =>
     handleSave({
@@ -286,7 +316,8 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="px-8 py-10 max-w-3xl">
+    <div className="px-4 sm:px-8 py-10 max-w-3xl">
+      {localStatus?.restart_needed && <RestartBanner />}
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1
@@ -370,8 +401,12 @@ export default function SettingsPage() {
                   <QualityChoice
                     key={tier}
                     name={tier}
-                    caption={s.provider + (s.model ? ` · ${s.model}` : "")}
-                    warn={s.hasKey ? null : s.provider === "local" ? "not set up" : "needs API key"}
+                    caption={
+                      s.provider +
+                      (s.model ? ` · ${s.provider === "local" ? localName(s.model) : s.model}` : "")
+                    }
+                    warn={s.hasKey ? null : keyWarn(s.provider)}
+                    muted={localUser && s.provider !== "local"}
                     selected={config.quality === tier}
                     disabled={saving}
                     onSelect={() => handleSave({ quality: tier })}
@@ -384,7 +419,7 @@ export default function SettingsPage() {
                   config.provider +
                   (currentDefaultModel ? ` · ${currentDefaultModel}` : "")
                 }
-                warn={providerMissingKey ? (config.provider === "local" ? "not set up" : "needs API key") : null}
+                warn={providerMissingKey ? keyWarn(config.provider) : null}
                 selected={config.quality === "custom"}
                 disabled={saving}
                 onSelect={() => handleSave({ quality: "custom" })}
@@ -421,7 +456,7 @@ export default function SettingsPage() {
             <SettingRow label="Model">
               {config.provider === "local" ? (
                 <span className="text-xs font-mono text-text-muted">
-                  {config.local_model} · change it on the local card below
+                  {localName(config.local_model)} · change it on the local card below
                 </span>
               ) : (
                 <ModelInput
@@ -579,9 +614,10 @@ export default function SettingsPage() {
                   onPull={handlePull}
                   onDelete={handleDelete}
                   onReinstall={handleReinstall}
-                  onDefaultChange={(size) =>
-                    handleSave({ local_model: size })
-                  }
+                  onDefaultChange={chooseLocalModel}
+                  onSetLanguage={async (code) => {
+                    await handleSave({ language: code });
+                  }}
                   confirmTeardown={confirmTeardown}
                   onTeardownRequest={() => setConfirmTeardown(true)}
                   onTeardownConfirm={handleTeardown}
@@ -899,6 +935,7 @@ function LocalProviderCard({
   onDelete,
   onReinstall,
   onDefaultChange,
+  onSetLanguage,
   confirmTeardown,
   onTeardownRequest,
   onTeardownConfirm,
@@ -920,7 +957,8 @@ function LocalProviderCard({
   onPull: (size: string) => void;
   onDelete: (size: string) => void;
   onReinstall: (size: string) => void;
-  onDefaultChange: (size: string) => void;
+  onDefaultChange: (size: string, also?: string[]) => Promise<void>;
+  onSetLanguage: (code: string) => Promise<void>;
   confirmTeardown: boolean;
   onTeardownRequest: () => void;
   onTeardownConfirm: () => void;
@@ -983,9 +1021,10 @@ function LocalProviderCard({
         ) : (
           <button
             onClick={onToggleExpand}
-            className="rounded-md px-1.5 py-1 text-text-muted hover:text-text transition-colors cursor-pointer"
-            title={isExpanded ? "Hide models" : "Manage models"}
+            aria-expanded={isExpanded}
+            className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted hover:text-text transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap"
           >
+            {isExpanded ? "Hide models" : "Manage models"}
             {isExpanded ? (
               <ChevronUp className="w-3.5 h-3.5" />
             ) : (
@@ -1032,163 +1071,139 @@ function LocalProviderCard({
       {/* Expanded: default-model picker, models table, teardown. */}
       {isExpanded && setUp && status && (
         <div className="px-4 pb-4 pt-0 border-t border-border-subtle">
-          {/* Default-model picker: pill strip with download-in-place for
-              uncached sizes. Cached pills act like radio buttons; uncached
-              ones trigger onPull and update the dropdown state automatically
-              once the queue completes. */}
-          <div className="mt-3 mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <label className="text-xs font-mono text-text-muted">
-                Default model
-              </label>
-              <div className="flex items-center gap-1 flex-wrap">
-                {status.models.map((m) => {
-                  const selected = config.local_model === m.size;
-                  const isPulling = pullingSize === m.size;
-                  const isDownloading = !!m.downloading || isPulling;
-                  const isQueued = !!m.queued;
-                  if (m.cached) {
-                    return (
-                      <button
-                        key={m.size}
-                        onClick={() => onDefaultChange(m.size)}
-                        aria-pressed={selected}
-                        className={`rounded-md px-2.5 py-1 text-xs font-mono border transition-colors cursor-pointer ${
-                          selected
-                            ? "border-amber bg-amber/15 text-amber"
-                            : "border-border text-text-muted hover:text-text hover:bg-surface-raised"
-                        }`}
-                        title={`Use ${m.size} as the default model`}
-                      >
-                        {m.size}
-                      </button>
-                    );
-                  }
-                  return (
-                    <button
-                      key={m.size}
-                      onClick={() => onPull(m.size)}
-                      disabled={isDownloading || isQueued}
-                      className="rounded-md px-2 py-1 text-xs font-mono border border-border-subtle border-dashed text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                      title={
-                        isDownloading
-                          ? "Downloading…"
-                          : isQueued
-                          ? "Queued"
-                          : `Download ${m.size} (~${m.spec.download_mb} MB) to enable as default`
-                      }
-                    >
-                      {isDownloading ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : isQueued ? null : (
-                        <Download className="w-3 h-3" />
-                      )}
-                      <span>
-                        {m.size}
-                        {isQueued && " (queued)"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <span className="ml-auto text-xs text-text-muted font-mono">
-                {Math.round(status.total_disk_bytes / MB)} MB on disk
-              </span>
-            </div>
+          {/* One card per model (LocalModelPicker, shared with the setup modal
+              and the wizard). Only downloaded models can become the default;
+              the others offer Download in place. */}
+          <div className="mt-3 mb-2 flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-[13px] text-text-secondary">
+              Pick the model new transcripts use. Free, private, no API key. A model
+              that isn't downloaded yet downloads when you pick it.
+            </p>
+            <span className="text-xs text-text-muted font-mono">
+              {Math.round(status.total_disk_bytes / MB)} MB on disk
+            </span>
           </div>
-
-          <div className="rounded-md border border-border-subtle bg-surface-raised overflow-hidden">
-            {status.models.map((m, i) => {
+          {status.pending_default?.state === "failed" && (
+            <p
+              role="alert"
+              className="mb-3 text-xs text-red border-l-[3px] border-red bg-red/5 rounded-md px-3 py-2"
+            >
+              Couldn't switch to{" "}
+              {status.models.find((m) => m.size === status.pending_default?.model)?.spec
+                .display_name ?? status.pending_default.model}
+              : {status.pending_default.error}. Your default is still{" "}
+              {status.models.find((m) => m.size === config.local_model)?.spec.display_name ??
+                config.local_model}
+              .
+            </p>
+          )}
+          {status.suggestion && (
+            <p className="mb-3 text-xs text-text-secondary border-l-[3px] border-blue bg-blue/[0.07] rounded-md px-3 py-2">
+              {status.suggestion}
+            </p>
+          )}
+          <LocalModelPicker
+            models={status.models}
+            featured={status.featured}
+            languageAnswers={status.language_answers}
+            caption={status.benchmark_caption}
+            selected={config.local_model}
+            onSelect={(id) => void onDefaultChange(id)}
+            onUseSuggestion={(rec) => (rec.primary ? onDefaultChange(rec.primary, rec.also) : undefined)}
+            onSetLanguage={onSetLanguage}
+            renderAction={(m) => {
               const isPulling = pullingSize === m.size;
               const isDeleting = deletingSize === m.size;
               const isReinstalling = reinstallingSize === m.size;
               const isDownloading = !!m.downloading || isPulling;
               const isQueued = !!m.queued;
-              return (
-                <div
-                  key={m.size}
-                  className={`flex items-center gap-3 px-3 py-2 ${
-                    i > 0 ? "border-t border-border-subtle" : ""
-                  }`}
-                >
-                  <span className="text-xs font-mono text-text w-20">
-                    {m.size}
+              const name = m.spec.display_name;
+              const defaultEngine = status.models.find(
+                (x) => x.size === config.local_model
+              )?.spec.engine;
+              const onlyDefault =
+                config.local_model === m.size &&
+                status.models.filter((x) => x.runnable).length === 1;
+              const languageCheck = m.size === "tiny" && defaultEngine === "parakeet";
+              const pending =
+                status.pending_default?.state === "downloading" &&
+                status.pending_default.model === m.size;
+              const becomes = pending ? "; becomes your default when done" : "";
+              if (isDownloading)
+                return (
+                  <span
+                    className="text-[11px] font-mono text-amber flex items-center gap-1"
+                    role="status"
+                  >
+                    <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                    {m.progress && m.progress.total > 0
+                      ? `Downloading ${m.progress.percent ?? 0}%${becomes}`
+                      : `Downloading${becomes}`}
                   </span>
-                  <span className="text-[10px] font-mono text-text-muted w-20">
-                    {m.cached ? `${Math.round(m.bytes / MB)} MB` : "—"}
+                );
+              if (isQueued)
+                return (
+                  <span className="text-[11px] font-mono text-amber">
+                    Waiting to download (#{m.queue_position ?? "?"}){becomes}
                   </span>
-                  <span className="text-[10px] text-text-muted flex-1 truncate">
-                    {m.spec.quality}
-                    {isQueued && (
-                      <span className="ml-2 text-[9px] font-mono text-amber bg-amber/10 border border-amber/30 rounded px-1 py-0.5">
-                        queued #{m.queue_position ?? "?"}
-                      </span>
+                );
+              if (!m.runnable)
+                return (
+                  <span className="flex flex-col items-start sm:items-end gap-1">
+                    {m.last_error && (
+                      <span className="text-[11px] text-red">Download failed: {m.last_error}</span>
                     )}
-                  </span>
-                  {m.cached ? (
-                    <>
-                      <button
-                        onClick={() => onReinstall(m.size)}
-                        disabled={isReinstalling || isDownloading}
-                        className="rounded-md border border-border px-2 py-1 text-[11px] font-mono text-text-muted hover:text-text hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-                        title="Delete and re-download (for corrupted weights)"
-                      >
-                        {isReinstalling ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-3 h-3" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => onDelete(m.size)}
-                        disabled={
-                          isDeleting ||
-                          isReinstalling ||
-                          (config.local_model === m.size &&
-                            status.models.filter((x) => x.cached).length === 1)
-                        }
-                        className="rounded-md border border-border px-2 py-1 text-[11px] font-mono text-text-muted hover:text-red hover:border-red/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-                        title={
-                          config.local_model === m.size &&
-                          status.models.filter((x) => x.cached).length === 1
-                            ? "can't delete the only cached model while it's the default"
-                            : "Delete from cache"
-                        }
-                      >
-                        {isDeleting ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3 h-3" />
-                        )}
-                      </button>
-                    </>
-                  ) : (
                     <button
                       onClick={() => onPull(m.size)}
-                      disabled={isDownloading || isQueued}
-                      className="rounded-md border border-border px-2 py-1 text-[11px] font-mono text-text-muted hover:text-text hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                      className="rounded-[7px] border border-dashed border-border px-2.5 py-1 text-xs text-text-secondary hover:text-text hover:bg-surface transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1"
                     >
-                      {isDownloading ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          {m.progress && m.progress.total > 0
-                            ? `${m.progress.percent ?? 0}%`
-                            : "downloading"}
-                        </>
-                      ) : isQueued ? (
-                        <>queued</>
+                      <Download className="w-3 h-3" />
+                      {m.partial || m.cached ? "Incomplete: resume download" : "Download"}
+                    </button>
+                  </span>
+                );
+              return (
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-mono text-green whitespace-nowrap flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    downloaded{m.bytes ? ` · ${Math.round(m.bytes / MB)} MB` : ""}
+                  </span>
+                  <button
+                    onClick={() => onReinstall(m.size)}
+                    disabled={isReinstalling}
+                    aria-label={`Reinstall ${name}`}
+                    className="rounded-md border border-border px-1.5 py-1 text-[11px] text-text-muted hover:text-text transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {isReinstalling ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    Reinstall
+                  </button>
+                  {onlyDefault || languageCheck ? (
+                    <span className="text-[10px] text-text-muted">
+                      {onlyDefault ? "only downloaded model" : "needed for the language check"}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onDelete(m.size)}
+                      disabled={isDeleting || isReinstalling}
+                      aria-label={`Delete ${name}`}
+                      className="rounded-md border border-border px-1.5 py-1 text-[11px] text-text-muted hover:text-red hover:border-red/30 transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
-                        <>
-                          <Download className="w-3 h-3" />
-                          ~{m.spec.download_mb} MB
-                        </>
+                        <Trash2 className="w-3 h-3" />
                       )}
+                      Delete
                     </button>
                   )}
-                </div>
+                </span>
               );
-            })}
-          </div>
+            }}
+          />
 
           <div className="mt-4 flex items-center justify-end gap-2">
             {!confirmTeardown ? (
@@ -1201,7 +1216,7 @@ function LocalProviderCard({
             ) : (
               <>
                 <span className="text-xs text-text-muted font-mono">
-                  Uninstall faster-whisper and delete all models?
+                  Uninstall the local engines and delete all models?
                 </span>
                 <button
                   onClick={onTeardownCancel}
@@ -1264,7 +1279,7 @@ function NextRun({ resolved }: { resolved?: ResolvedRun }) {
           {(resolved.notes ?? []).map((note) => (
             <p
               key={note}
-              className={`text-xs font-mono mt-1 ${
+              className={`text-xs font-mono mt-1 whitespace-pre-line ${
                 note.startsWith("WARNING:") ? "text-amber" : "text-text-muted"
               }`}
             >
@@ -1282,6 +1297,7 @@ function QualityChoice({
   name,
   caption,
   warn,
+  muted = false,
   selected,
   disabled,
   onSelect,
@@ -1289,6 +1305,8 @@ function QualityChoice({
   name: string;
   caption: string;
   warn: string | null;
+  /** an FYI, not a problem (a local user's cloud rows) */
+  muted?: boolean;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -1316,12 +1334,15 @@ function QualityChoice({
       >
         {caption}
       </span>
-      {warn && (
-        <span className="text-[11px] font-mono text-amber flex items-center gap-1 shrink-0">
-          <AlertCircle className="w-3 h-3" />
-          {warn}
-        </span>
-      )}
+      {warn &&
+        (muted ? (
+          <span className="text-[11px] font-mono text-text-muted shrink-0">{warn}</span>
+        ) : (
+          <span className="text-[11px] font-mono text-amber flex items-center gap-1 shrink-0">
+            <AlertCircle className="w-3 h-3" />
+            {warn}
+          </span>
+        ))}
       {selected && <Check className="w-3.5 h-3.5 text-amber shrink-0" />}
     </button>
   );

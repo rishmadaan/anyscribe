@@ -7,13 +7,14 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 
 from anyscribe.providers import local as local_mod
 from anyscribe.providers.local import ENGLISH_PROMPT, LocalProvider
 
-AUDIO = np.zeros(16_000 * 5, dtype=np.float32)
+# A stand-in for decoded audio: the engines and the language check are faked,
+# so plain floats keep these tests runnable without the optional local extra.
+AUDIO = [0.0] * (16_000 * 5)
 
 
 class FakeWhisper:
@@ -258,7 +259,8 @@ def test_no_speech_counts_as_unsure(rig):
 
 def test_speech_windows_skip_leading_silence_and_spread_out(monkeypatch):
     """The windows cover speech only: start, middle and end of it."""
-    import faster_whisper.vad as vad
+    np = pytest.importorskip("numpy")  # needs the real engine: the `local` extra
+    vad = pytest.importorskip("faster_whisper.vad")
 
     sr = 16_000
     audio = np.zeros(sr * 100, dtype=np.float32)

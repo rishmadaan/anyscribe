@@ -68,6 +68,9 @@ dev = [
     # <0.16: ruff 0.16.0 changed the default rule set (249 new findings) and
     # broke the v0.14.0 publish lint gate. Raise deliberately, fixing findings.
     "ruff>=0.4,<0.16",
+    # the local-model readiness tests build a real HF cache layout without the
+    # `local` extra (CI installs dev+mcp only)
+    "huggingface-hub>=0.21",
     # scripts/build-docs.py renders docs/user/*.md into landing/docs/*.html
     "markdown>=3.5,<4",
 ]

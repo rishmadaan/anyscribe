@@ -174,8 +174,12 @@ def test_choose_rejects_an_unknown_model(world):
     assert r.status_code == 400 and world.queue() == []
 
 
-def test_set_value_refuses_a_model_that_cannot_run_and_names_the_command(world):
+def test_set_value_refuses_a_model_that_cannot_run_and_names_the_command(world, monkeypatch):
     from anyscribe.core.config_set import set_value
+    from anyscribe.providers import local_models
+
+    # engine installed: the fix is a pull (without it, `local setup` installs it too)
+    monkeypatch.setattr(local_models, "engine_importable", lambda m: True)
 
     out = set_value("local_model", "parakeet-v3")
     assert not out.ok and "`anyscribe model pull parakeet-v3`" in out.error

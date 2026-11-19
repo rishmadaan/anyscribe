@@ -174,6 +174,7 @@ def test_making_parakeet_the_default_is_refused_until_it_can_run(monkeypatch, tm
     monkeypatch.setattr(settings, "CONFIG_FILE", cfg)
     settings.save_config(settings.Settings(local_model="large-v3-turbo"))
     monkeypatch.setattr(lm, "runnable", lambda m: m != "parakeet-v3")
+    monkeypatch.setattr(lm, "engine_importable", lambda m: True)  # so the fix named is a pull
     client = TestClient(create_app())
     r = client.put("/api/config", json={"local_model": "parakeet-v3"})
     assert r.status_code == 422 and "anyscribe model pull parakeet-v3" in r.json()["error"]

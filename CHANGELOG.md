@@ -11,7 +11,7 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
-## Unreleased
+## 0.19.0 — 2026-11-20
 
 **Added**
 - **Transcribe on your own computer without an API key, faster and more

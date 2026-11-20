@@ -362,10 +362,15 @@ function Write-Result($desktopState) {
         "Next step: open the dashboard to set up and start transcribing, with the line below this box."
     }
     if (-not $script:FfmpegOk) {
-        $fix = "ffmpeg, a free audio tool, is missing. Install it with: winget install Gyan.FFmpeg, then open anyscribe again."
-        # The running tray keeps the PATH it started with.
-        if ($desktopState -eq 'done') { $fix += " If it still isn't found after installing, quit anyscribe from the tray and open it again." }
-        Write-Box Yellow "anyscribe is installed, but can't transcribe yet" $fix $open
+        $fix = "ffmpeg, a free audio tool, is missing. Install it with: winget install Gyan.FFmpeg, then "
+        if ($desktopState -eq 'done') {
+            # The running tray keeps the PATH it started with.
+            $fix += "open anyscribe again. If it still isn't found after installing, quit anyscribe from the tray and open it again."
+            Write-Box Yellow "anyscribe is installed, but can't transcribe yet" $fix $open
+        } else {
+            # This window keeps the PATH it had before winget ran: only a new one finds ffmpeg.
+            Write-Box Yellow "anyscribe is installed, but can't transcribe yet" ($fix + "open a new PowerShell window and type: anyscribe ui")
+        }
     } elseif ($desktopState -eq 'done') {
         Write-Box Green "anyscribe is ready!" $open
     } else {
@@ -373,6 +378,7 @@ function Write-Result($desktopState) {
     }
     if (-not $found) {
         if ($desktopState -eq 'done') { Write-Warn "To type anyscribe commands in this window, use:" }
+        elseif (-not $script:FfmpegOk) { Write-Warn "If anyscribe isn't found in the new window, type:" }
         Write-Host "    & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Cyan
     }
     if ($desktopState -eq 'failed') {

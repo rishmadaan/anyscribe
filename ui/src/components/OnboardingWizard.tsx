@@ -82,8 +82,8 @@ const POLL_MS = 1500;
 // download (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12).
 const S12 =
   "Can't reach anyscribe right now. If you closed it, open it again: this page then shows the download if it is still running, or a Try again button to start it again.";
-const S14 =
-  "The setup stopped before it finished, because anyscribe was closed. Click Try again to start it again.";
+// no cause named: the server answers the same after a restart and when the start never reached it
+const S14 = "Setup didn't finish. Click Try again to start it again.";
 
 /** Send a request with a time limit; ``ctl`` lets the caller abort it too. */
 function limited<T>(
@@ -788,7 +788,7 @@ function StepOfflineOptIn({
             onNext();
           } else if (s.ffmpeg_ok) {
             const name = s.models.find((m) => m.size === selected)?.spec.display_name;
-            // no outcome and no error: anyscribe restarted mid-setup (its setup state is in memory)
+            // no outcome and no error: no setup or result is reported (S14)
             setMissing(s.setup_outcome == null ? S14 : missingPart(s, name, required));
           }
           return;

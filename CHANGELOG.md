@@ -60,8 +60,9 @@ the next release.
   **Close setup**; the wizard is never locked, and only Back is off until the
   setup finishes. Reloading the page picks the running download back up
   instead of showing an error. If the page can't reach anyscribe, the wizard
-  says "Can't reach anyscribe right now"; if anyscribe was closed mid-setup,
-  it says the setup stopped before it finished, with **Try again**.
+  says "Can't reach anyscribe right now"; if anyscribe then reports no setup
+  and no result (after a restart, for example), it says "Setup didn't
+  finish", with **Try again**.
 
 **Transcribing and reading**
 - **"Your OpenAI account has no credit."** An account with no credit now gets

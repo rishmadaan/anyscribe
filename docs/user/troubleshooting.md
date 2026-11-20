@@ -586,16 +586,17 @@ quitting anyscribe stops it.
 
 - **If you closed anyscribe, open it again** (click the app, or type
   `anyscribe ui`). The page keeps asking. When anyscribe answers, the message
-  goes away and the page shows the download if it is still running, or "The
-  setup stopped before it finished" with a **Try again** button (below).
+  goes away and the page shows the download if it is still running, or "Setup
+  didn't finish" with a **Try again** button (below).
 - **To close the wizard meanwhile:** press Escape or click **Skip for now**,
   then **Close setup** (above).
 
-### "The setup stopped before it finished, because anyscribe was closed." (setup wizard)
+### "Setup didn't finish." (setup wizard)
 
-anyscribe was closed (or restarted) during the setup, which stops the setup
-and its download. Click **Try again** to start it again. Nothing you chose on
-the wizard's screens is lost while the wizard stays open.
+anyscribe isn't reporting a running setup or its result. This can happen after
+anyscribe was closed or restarted, or if the start request never reached it.
+Click **Try again** to start it again. Nothing you chose on the wizard's
+screens is lost while the wizard stays open.
 
 ### `faster-whisper is not installed` / `onnx-asr is not installed`
 

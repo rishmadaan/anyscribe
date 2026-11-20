@@ -155,9 +155,10 @@ is allowed after a warning.
 - **Quitting stops the download.** Setup runs inside the anyscribe process and
   its state is in memory (`web/routes/local.py`), so the unreachable notice no
   longer promises the download carries on after quitting. A restarted server
-  answers "not running, no outcome, no error"; the step now says "The setup
-  stopped before it finished, because anyscribe was closed. Click Try again to
-  start it again." instead of a missing-part sentence.
+  answers "not running, no outcome, no error"; the step now says "Setup didn't
+  finish. Click Try again to start it again." instead of a missing-part
+  sentence. It names no cause: a start request that never reached a running
+  anyscribe gets the same answer (review round 1, L2).
 - **No resume across a restart.** A real Whisper Base download stopped at
   35.6% left 0 bytes of the weights on disk (huggingface_hub 2.4 with hf_xet
   writes them at the end), and Try again started again from 0%. So the new

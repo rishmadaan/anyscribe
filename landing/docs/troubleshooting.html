@@ -487,15 +487,16 @@ quitting anyscribe stops it.</p>
 <ul>
 <li><strong>If you closed anyscribe, open it again</strong> (click the app, or type
   <code>anyscribe ui</code>). The page keeps asking. When anyscribe answers, the message
-  goes away and the page shows the download if it is still running, or "The
-  setup stopped before it finished" with a <strong>Try again</strong> button (below).</li>
+  goes away and the page shows the download if it is still running, or "Setup
+  didn't finish" with a <strong>Try again</strong> button (below).</li>
 <li><strong>To close the wizard meanwhile:</strong> press Escape or click <strong>Skip for now</strong>,
   then <strong>Close setup</strong> (above).</li>
 </ul>
-<h3 id="the-setup-stopped-before-it-finished-because-anyscribe-was-closed-setup-wizard">"The setup stopped before it finished, because anyscribe was closed." (setup wizard)</h3>
-<p>anyscribe was closed (or restarted) during the setup, which stops the setup
-and its download. Click <strong>Try again</strong> to start it again. Nothing you chose on
-the wizard's screens is lost while the wizard stays open.</p>
+<h3 id="setup-didnt-finish-setup-wizard">"Setup didn't finish." (setup wizard)</h3>
+<p>anyscribe isn't reporting a running setup or its result. This can happen after
+anyscribe was closed or restarted, or if the start request never reached it.
+Click <strong>Try again</strong> to start it again. Nothing you chose on the wizard's
+screens is lost while the wizard stays open.</p>
 <h3 id="faster-whisper-is-not-installed-onnx-asr-is-not-installed"><code>faster-whisper is not installed</code> / <code>onnx-asr is not installed</code></h3>
 <p>The local provider is opt-in and needs a one-time install:</p>
 <pre><code class="language-bash">anyscribe local setup --model parakeet-v3

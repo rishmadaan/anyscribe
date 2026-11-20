@@ -120,6 +120,8 @@ found, so the local setup can't start without it.
 - **Windows, still not found after installing?** The anyscribe that is already
   running doesn't see programs installed after it started. Quit anyscribe from
   the tray (the icon near the clock), then open it again from the Start menu.
+  Installed without desktop mode? Open a new PowerShell window and type
+  `anyscribe ui`: the window you installed from doesn't see ffmpeg.
 - **The terminal finds ffmpeg but the app doesn't?** See
   [Transcribing from the app says ffmpeg (or Deno) is missing](#transcribing-from-the-app-says-ffmpeg-or-deno-is-missing-but-the-terminal-works).
 

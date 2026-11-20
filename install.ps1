@@ -357,9 +357,9 @@ function Write-Result($desktopState) {
     $open = if ($desktopState -eq 'done') {
         "Open anyscribe: click the anyscribe app (in your Start menu). Your dashboard should already be open in your browser."
     } elseif ($found) {
-        "To set up and start transcribing, open the dashboard. Type: anyscribe ui"
+        "Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"
     } else {
-        "To set up and start transcribing, open the dashboard with the line below this box."
+        "Next step: open the dashboard to set up and start transcribing, with the line below this box."
     }
     if (-not $script:FfmpegOk) {
         $fix = "ffmpeg, a free audio tool, is missing. Install it with: winget install Gyan.FFmpeg, then open anyscribe again."

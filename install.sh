@@ -678,14 +678,14 @@ main() {
     ( PATH="$ORIG_PATH"; hash -r; command_exists anyscribe ) && on_path=true
     if [[ "$DESKTOP_STATE" == "done" ]]; then
         open_line="Open anyscribe: click the anyscribe app ($(app_place)). Your dashboard should already be open in your browser."
-        [[ "$on_path" == true || "$USED_PIPX" != true ]] || after_box="To type anyscribe commands, open a new terminal window first."
+        [[ "$USED_PIPX" != true ]] || after_box="If 'anyscribe' is not found when you type it, open a new terminal window first; if it still isn't, run: pipx ensurepath"
     elif [[ "$on_path" == true ]]; then
-        open_line="To set up and start transcribing, open the dashboard. Type: anyscribe ui"
+        open_line="Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"
     elif [[ "$USED_PIPX" == true ]]; then
         open_line="Open a new terminal window, then type: anyscribe ui"
         after_box="Or, in this window: $(pipx_bin_dir)/anyscribe ui"
     else
-        open_line="To set up and start transcribing, open the dashboard. Type: $PY -m anyscribe ui"
+        open_line="Next step: open the dashboard to set up and start transcribing. Type: $PY -m anyscribe ui"
     fi
     if [[ "$FFMPEG_MISSING" == true ]]; then
         box "$YELLOW" "anyscribe is installed, but can't transcribe yet" \

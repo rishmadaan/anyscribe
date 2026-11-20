@@ -144,3 +144,78 @@ $ git diff 96b76bc --stat -- src/anyscribe ':!src/anyscribe/web/static' install.
 - Stopped by pid after reading each command line: the resume server (8492), `slowproxy.py` (8499), `diskwatch.sh`; the harness server (8491) and `serve.py` (8497) after the final run; closed my preview tab.
 - Uninstalled the 9 engine packages with `uv pip uninstall`; `uv pip freeze` matches the list taken before, and `uv pip check` reports all compatible. uv's own download cache (`~/.cache/uv`, shared) was left alone.
 - Deleted the throwaway home with the Base model (142 MB). The harness home (`home-a`), instruments, logs and screenshots stay under `~/.review-runs/2026-11-20-onboarding-wave1-lock/`.
+
+## Round 1 fixes (one entry per finding)
+
+Fixer: Claude Opus 5.5 (Agent tool). Branch `feat/onboarding-wave1-lock`, base `ffdb7cc` (checked with `git rev-parse HEAD` before editing). The fix plan (`fix-plan-r1.md`) set every wording below; L1 was kept as residue (BACKLOG only).
+
+Instruments (outside the repo, not committed): the round 0 harness in `~/.review-runs/2026-11-20-onboarding-wave1-lock/instruments/`, with S14's fixed strings updated, two new cases (`L3`, `LF3`), three new mutants in `mutate.py` (`M3`, `M3L`, `MLF3`), and one harness fix: `fresh()` now retries Skip for now up to three times, because a status read that ends watching in the 150 ms between Skip and Close setup hides S11 and left the dialog open (it failed T3's setup once in the first full run, `results/r1fix-all.json`, before T3's own checks ran; the round 0 copies are kept as `harness.r0.js`, `cases.r0.js`, `mutate.r0.py`). Server: `HOME=~/.review-runs/2026-11-20-onboarding-wave1-lock/home-r1fix .venv/bin/python -m anyscribe ui --port 8491 --no-open --local-only` (a new empty home), my own T3 preview tab, `serve.py` on 8497.
+
+**Full harness, committed bundle `index-DyrxykgW.js`: 26 of 26 cases pass** (`results/r1fix-final-all.json`): T1, T1_500, T2, T3, T4, T4_notRunning, T4_refused, T5, T5_late, T6, T7, T8, T9, T10, T11, T12, T12b, F4, F1, T13, TG, T4v2, R3C1, R3C2 (round 0's 24) plus L3 and LF3.
+
+**LF1, the resume claims. FIXED** (`261a1eb`).
+- Changed: `LocalModelPicker.tsx` "incomplete: the download resumes" → "incomplete: setup downloads it again"; troubleshooting's incomplete entry "the download picks up where it stopped." → "the download starts again.". The fix plan's grep (`git grep -n -i "resume\|picks up where" -- ui/src docs/user src/anyscribe/skill CHANGELOG.md`) found four more claims that a stopped model download resumes, fixed the same way: Settings' button "Incomplete: resume download" → "Incomplete: download again" (`SettingsPage.tsx`; troubleshooting names that button, so both changed together), `configuration.md` "`anyscribe model pull <id>` resumes it." → "downloads it again.", the skill's `references/commands.md` "resume with `anyscribe model pull <id>`" → "download it again with …", and the `types.ts` comment. These four files are outside target.md's list; the fix plan's grep scope named their folders. The wave 2 BACKLOG line about the two strings is gone; a new wave 2 line keeps what is left outside this PR's scope: `anyscribe model info` prints "Resume the download: anyscribe model pull <id>" (`cli/models_cmd.py:415`, server-side code) and code comments in `providers/local_models.py` and `web/routes/models.py` say the same. The journal's bullet says what changed.
+- Evidence the new wording holds: huggingface_hub 2.4.0 in `.venv`, `file_download.py` `_download_to_tmp_and_move` writes every download, xet or plain HTTP (`http_get` is called with no resume size), to a new `<name>.<uuid8>.incomplete` opened `"wb"`, so no process continues another's file; round 0's real run showed it (35.6%, then 0.6%). pyproject's floor is `huggingface-hub>=0.21`; an older hub could resume, which only makes "downloads it again" pessimistic.
+- Siblings: the grep above, run last, has seven hits, none a model-download claim: batch `--resume` (`commands.md:383`, skill `commands.md:94, 199, 230`), chunk checkpoints of a long transcription (`configuration.md:27, 477`), and `OnboardingWizard.tsx:81`, the LF5 comment saying Try again does not resume. Bundle: "incomplete: setup downloads it again" 1 hit, "Incomplete: download again" 1, "the download resumes" 0, "resume download" 0. `landing/docs/configuration.html` and `troubleshooting.html` regenerated; check-docs exit 0.
+
+**L2, S14 names no cause. FIXED** (`480e7c6`).
+- Changed: S14 is "Setup didn't finish. Click Try again to start it again."; the code comment on its condition no longer says anyscribe restarted. Troubleshooting's entry is headed "Setup didn't finish." and reads "anyscribe isn't reporting a running setup or its result. This can happen after anyscribe was closed or restarted, or if the start request never reached it. Click **Try again** to start it again." (plus the existing line that choices are kept while the wizard stays open); the S12 entry's pointer to it uses the new heading. CHANGELOG: "if anyscribe then reports no setup and no result (after a restart, for example), it says "Setup didn't finish", with **Try again**." The journal quote is the new S14, with why it names no cause. Harness: `S14` in `harness.js` and `S14_FULL` in `cases.js` updated.
+- Seen: T4_notRunning (the start got no answer, the real server reports no setup: the reviewer's exact path) passes with `redAlerts: ["Setup didn't finish. Click Try again to start it again."]`, `aboveButtons`, button "Try again"; T5 and T12 pass with the same sentence; T12b still shows the missing-part sentence when the outcome is `set_up`. At 1440 px: `screens/r1fix-s14-1440.png`.
+- Siblings: `git grep "stopped before it finished\|because anyscribe was closed"` outside `docs/reviews`, `landing/docs` and the bundle: one hit, `troubleshooting.md:87`, about Homebrew (unrelated). Bundle: new S14 1 hit, "because anyscribe was closed" 0.
+
+**L3, a failed setup shows no server text. FIXED** (`54e2794`).
+- Changed: on the ending read with `setup_error`, the step sets the one red line to "anyscribe couldn't finish setting up local transcription. Click Try again." (it reuses the existing `missing` block, so the button reads "Try again" and the block sits just above the buttons); the separate raw `setupError` block and its state are deleted, and the install log no longer opens by itself. The server already writes the raw text to the install log as `[error] …` before it reports the setup stopped (`web/routes/local.py`), so it stays reachable through "show install log". CHANGELOG's W6 entry says so in one sentence.
+- New case `L3`: the setup runs, its log answers `[error] HTTP 503: {"detail":"upstream timeout","status_code":503}`, then the status says stopped with `setup_error` = that text and outcome `failed`. Guarded, all six checks pass: the red line is exactly the plain sentence, above the buttons, button "Try again", not watched; the dialog's whole visible text has no `503`, `status_code`, `"detail"`, `upstream timeout` or `{"`; no `<pre>` and the control reads "show install log (2 lines)"; clicked by hand, the log shows the raw `[error]` line; with it open, the text outside the log still has none of them; Escape closes at once, flag unset. At 1440 px: `screens/r1fix-setup-failed-1440.png`.
+- Mutant M3 (`setMissing(s.setup_error ?? SETUP_FAILED)`, the server's text in place of the sentence): **L3 fails**: `redAlerts: ["HTTP 503: {\"detail\":\"upstream timeout\",\"status_code\":503}"]`, and the on-screen leak list is `["503","{\"","upstream timeout","status_code","503"]` (`results/M3.json`).
+- Mutant M3L (the sentence kept, `setLogOpen(true)` added back): **L3 fails**: the control reads "hide install log (2 lines)", a `<pre>` is on screen, and the visible text leaks the same five matches (`results/M3L.json`).
+- Restored: `git checkout`, rebuild gives `index-DyrxykgW.js` again, L3 passes in the final run. T11 (an old `setup_error` from a read sent before Download) still passes: nothing old shows.
+
+**LF2, S12 for someone who closed anyscribe. FIXED** (`4735e9c`).
+- Changed: S12 is "Can't reach anyscribe right now. If you closed it, the download stopped too: open anyscribe again and this page shows a Try again button to start it again." Troubleshooting's S12 entry now has a bullet for each reader: closed anyscribe ("the download stopped too", reopen, then "Setup didn't finish" with **Try again**) and anyscribe still open (the message clears by itself and the page shows the download or how it ended). CHANGELOG and the journal quote only S12's first sentence, which did not change.
+- Seen: T6, T7, T9, T13 and R3C1 pass (`s12` true where expected; the harness matches S12's first sentence). At 1440 px, with the reads failing: `screens/r1fix-s12-1440.png`, the new sentence in the amber notice.
+- Siblings: "if it is still running" now appears only in troubleshooting's S11 entry (`troubleshooting.md:576`), where it is right: closing the wizard does not stop anyscribe. Bundle: new S12 1 hit, the old "if it is still running, or a Try" 0.
+
+**LF3, Escape on the open confirmation. FIXED** (`f1e20f7`).
+- Changed: the Modal's close callback is `confirmClose ? setConfirmClose(false) : askOrClose(false)`. Escape and a click outside share that callback in `Modal.tsx`, so a click outside the open confirmation also hides it; Skip for now with it open leaves it open. Rule 3 above now records the change.
+- New case `LF3`, guarded, six checks pass: first Escape asks (S11, focus on Keep setting up); a second Escape hides S11 with the wizard open, still watched, flag unset; a click outside asks, a second hides it; two Skip clicks leave S11 open and the wizard open; Close setup closes with the flag unset. With the real Escape key in my tab (preview `press`): first press, S11 with focus on Keep setting up; second press, S11 gone, wizard open, "Setting up… [disabled]", flag `null`.
+- Mutant MLF3 (the round 0 callback, `onClose={() => askOrClose(false)}`; its build is byte-identical to the LF2 commit's `index-BlFO7EtI.js`): **LF3 fails** at "Escape on the open confirmation hides it" with `"s11":true,"focus":"Keep setting up"` after the second Escape, nothing visible changed; the click-outside check fails the same way (`results/MLF3.json`). Restored: LF3 passes.
+
+**LF4, CHANGELOG. FIXED** (`e28e143`): "the wizard is never locked; Back and the model choices are off until the setup finishes." `git grep "only Back is off"` outside `docs/reviews`: none.
+
+**LF5, the code comment. FIXED** (`a65b6d8`): "Try again does not resume a half-downloaded model: a real download stopped at 35.6% restarted from 0% (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12)." Comment only; the rebuilt bundle kept the same name.
+
+**L1, residue. NOT FIXED, by the fix plan; BACKLOG line added** (`2cfb7b9`), wave 2, the fix plan's wording verbatim.
+
+### Strings in the committed bundle `index-DyrxykgW.js`
+
+New S12, S14, the setup-failure sentence, "incomplete: setup downloads it again" and "Incomplete: download again": one hit each. "because anyscribe was closed", "if it is still running, or a Try", "the download resumes", "resume download": none.
+
+### Checks (run before this commit)
+
+```
+$ .venv/bin/ruff check src tests scripts
+All checks passed!
+$ .venv/bin/python -m pytest -q
+931 passed, 6 skipped, 134 warnings in 67.05s (0:01:07)
+$ cd ui && npm run lint && npm run build
+> eslint .            (no findings)
+../src/anyscribe/web/static/assets/index-BufnjB4u.css   36.47 kB
+../src/anyscribe/web/static/assets/index-DyrxykgW.js   395.95 kB   (same as committed)
+$ python3 scripts/build-docs.py && python3 scripts/check-docs.py
+rendered 6 pages + index → landing/docs        (check-docs exit 0, no diff after rebuild)
+$ git grep -n -i "resume\|picks up where" -- ui/src docs/user src/anyscribe/skill CHANGELOG.md
+7 hits, each explained under LF1 (batch --resume, chunk checkpoints, the LF5 comment)
+$ git status
+clean before this file's edit
+```
+
+### What I could not prove
+
+- L3's raw text reaching the log was faked in the harness (a set log answer); the server side, that `_background_setup` appends `[error] <text>` before it sets `running` false, is read from `web/routes/local.py`, not run with a real failing download.
+- "starts again" holds for huggingface_hub 2.4.0, what a fresh install gets; not checked against older hubs the `>=0.21` floor allows.
+- Everything round 0 listed (real Mac or Windows, screen readers, the desktop app's port after a reopen).
+
+### Cleanup
+
+- Stopped by pid after reading each command line: the dashboard (8491, pid 1606393) and `serve.py` (8497, pid 1606395); no listener left on 8490 to 8499. Closed my preview tab.
+- Kept under `~/.review-runs/2026-11-20-onboarding-wave1-lock/`: `home-r1fix`, the instruments and results, `screens/r1fix-*.png`.

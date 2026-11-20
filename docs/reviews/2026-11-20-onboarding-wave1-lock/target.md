@@ -1,0 +1,11 @@
+# Target
+
+- Repo: `rishmadaan/anyscribe` (public). The live checkout `~/labs/projects/anyscribe` stays on `main`: do not touch it.
+- Worktree: `~/labs/projects/anyscribe-wt/wave1`, branch `feat/onboarding-wave1-lock`, based on `main` @ `b70c2a5` (PR #26) plus the packet commit; the prompt names the exact base SHA. Check `git rev-parse HEAD` and the branch before editing; stop if they differ. A venv (`.venv`, dev and mcp extras, no local engines) and `ui/node_modules` already exist there: reuse them.
+- In scope: `ui/src/components/OnboardingWizard.tsx`, `ui/src/components/LocalSetupNotes.tsx` (F3-3 only), `src/anyscribe/web/static/**` (rebuilt only), `CHANGELOG.md`, `BACKLOG.md`, `docs/user/troubleshooting.md`, `landing/docs/**` (regenerated only), `docs/building/journal/2026-11-20-onboarding-wave1.md`, `docs/building/_index.md` (only if a row needs updating), the proof file `docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`.
+- Must not change: anything under `src/anyscribe/` except `web/static`, the installers, `landing/index.html`, `tests/` (no test of this behaviour exists there; the proof uses the tab harness), the version, `.github/`.
+- Test folders: `tests/` (pytest), leave alone.
+- Owner data: never read `~/.anyscribe/.env` or any key; never run against the owner's real `~/.anyscribe` or `~/anyscribe`. Real runs use `HOME=<a new empty folder under ~/.review-runs/2026-11-20-onboarding-wave1-lock/>` and ports 8491 to 8499 with `--local-only`. Never stop or touch the owner's own anyscribe server (8457 and up), Docker containers, or another session's processes; stop only your own, by a pid whose command line you have read.
+- The tab harness from the previous review is at `~/.review-runs/2026-11-20-onboarding-wave1/logs/fix2-instruments/` (`harness.js`, `cases.js`, the lead's `lead-gap.js`, `serve.py`, `mutate.py`). Copy it into `~/.review-runs/2026-11-20-onboarding-wave1-lock/instruments/` and adapt the cases there; never commit it.
+- Screenshots go to `~/.review-runs/2026-11-20-onboarding-wave1-lock/screens/`, never committed.
+- Commit after each rule group on your branch only, messages ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push, open a PR or merge.

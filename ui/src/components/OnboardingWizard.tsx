@@ -257,7 +257,7 @@ export default function OnboardingWizard({ onClose }: Props) {
         </div>
         {step !== "done" && !saving && locked && (
           <span className="text-xs font-mono text-text-muted text-right">
-            Skip, Back and the local checkbox are off until setup finishes.
+            Skip and Back are off until setup finishes.
           </span>
         )}
         {step !== "done" && !saving && !locked && (
@@ -709,7 +709,7 @@ function StepOfflineOptIn({
   const haveStatus = status !== null;
 
   // The wizard's lock has this one writer, and goes back to idle with the step.
-  const watch: SetupWatch = unreachable ? "unknown" : watching ? "running" : "idle";
+  const watch: SetupWatch = unreachable ? "unknown" : busy ? "running" : "idle"; // busy: locked from the click, not only once watching
   useEffect(() => {
     const report = (w: SetupWatch) => onRunning(w);
     report(watch);

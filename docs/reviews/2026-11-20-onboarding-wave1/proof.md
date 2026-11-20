@@ -392,3 +392,11 @@ Commit `5527913`:
 - `python3 scripts/build-docs.py && python3 scripts/check-docs.py`: exit 0.
 - `bash -n install.sh`: ok.
 - `git grep -n "onRunning("`: one code hit, `ui/src/components/OnboardingWizard.tsx:714`; the rest are in `docs/reviews`.
+
+## Lead-made changes before the round 3 re-check (2 lines of source, both flagged by the round 3 fixer)
+
+- **Lock from the click.** `OnboardingWizard.tsx`: the lock value uses `busy` (`watching || starting`) instead of `watching`, so Escape, a backdrop click and Skip cannot close the wizard while the start request is in flight (the fixer's "short gap before the lock"; up to the 10 s limit if the request hangs).
+  - New case TG (`~/.review-runs/2026-11-20-onboarding-wave1/logs/fix2-instruments/lead-gap.js`): the start answers after 3 s; Escape and a backdrop click at 0.8 s. Guarded: PASS (dialog open on Local transcription, no Skip; locked line after the answer). Mutant (back to `watching`): FAIL, `{"dialogOpen":false}` during the slow start. Restored: PASS.
+  - Regression: the fixer's 17 cases on the final bundle (`index-2r9Aqod2.js`, results `results/lead-final.json`): 16 PASS. T4_hang FAILS only on its old expectations: "no lock line yet" while the start hangs (now intended), and it waited for the lock line as its signal that the start had been aborted, which now appears at the click. Replaced by T4v2 (same file): locked while the start hangs, Escape and backdrop do nothing, the start is aborted at the limit (AbortError, about 10 s), then watching with progress, still locked: PASS (`results/lead-T4v2-TG.json`).
+- **Lock line wording (S13).** "Skip, Back and the local checkbox are off until setup finishes." named a checkbox that does not exist on the "On this computer" path; now "Skip and Back are off until setup finishes." (`git grep` finds no other copy outside docs/reviews and the packet's fix plan).
+- `cd ui && npm run lint && npm run build`: lint clean; bundle `index-2r9Aqod2.js` committed.

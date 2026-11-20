@@ -332,7 +332,7 @@ async def test_provider(
             "success": True,
             "checked": False,
             "message": (
-                "Saved, not checked: Sarvam has no way to check a key in advance. "
+                "Not checked yet: Sarvam has no way to check a key in advance. "
                 "It will be checked on your first transcript."
             ),
         }

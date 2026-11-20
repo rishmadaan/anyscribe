@@ -80,7 +80,7 @@ def test_sarvam_is_not_checked_and_says_so(calls):
         "success": True,
         "checked": False,
         "message": (
-            "Saved, not checked: Sarvam has no way to check a key in advance. "
+            "Not checked yet: Sarvam has no way to check a key in advance. "
             "It will be checked on your first transcript."
         ),
     }

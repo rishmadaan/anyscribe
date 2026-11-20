@@ -72,7 +72,7 @@ retry.
 Sarvam's the same, and OpenRouter called `/api/v1/models`, which answers 200
 with no key at all, so any text was "valid". Groq now calls
 `/openai/v1/models` and OpenRouter `/api/v1/key` with the key; Sarvam has no
-way to check a key without spending, so it says "Saved, not checked" in amber.
+way to check a key without spending, so it says "Not checked yet" in amber.
 
 ## Decisions
 

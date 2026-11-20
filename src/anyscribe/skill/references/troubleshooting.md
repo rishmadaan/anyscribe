@@ -296,7 +296,7 @@ The dashboard's key check (setup wizard **Next** / **Test key** on the typed key
 - "<Provider> refused this key. Check that you copied all of it, with no extra spaces." HTTP 401/403: wrong, partial or revoked key. The wizard offers "Use this key anyway".
 - "<Provider> answered with an error (<status>). Try again in a minute." Any other error status.
 - "Couldn't reach <Provider> to check the key. Check your internet connection, or continue: the key will be checked on your first transcript." Timeout (10 s) or network error; the wizard lets the user continue.
-- "Saved, not checked: Sarvam has no way to check a key in advance. It will be checked on your first transcript." Sarvam only, shown in amber.
+- "Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your first transcript." Sarvam only, shown in amber.
 
 The CLI's `anyscribe providers test` is different: it only checks that a key is set and makes no API call.
 

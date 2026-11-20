@@ -354,7 +354,7 @@ anyscribe couldn't get any answer from the provider within ten seconds: no
 internet, a firewall or VPN in the way, or the provider is down. You can carry
 on (in the wizard, press **Next** again): the first transcript checks the key.
 
-#### "Saved, not checked: Sarvam has no way to check a key in advance. It will be checked on your first transcript."
+#### "Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your first transcript."
 
 Sarvam has no way to check a key without running a paid transcription, so
 anyscribe doesn't pretend: it keeps the key (the wizard saves it when you

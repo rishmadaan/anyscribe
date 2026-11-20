@@ -154,4 +154,14 @@ class TestNoCredit:
     def test_groq_insufficient_quota_uses_its_display_name(self):
         err = classify_api_error(429, '{"error": {"code": "insufficient_quota"}}', "groq")
         assert type(err) is NoCreditError
-        assert err.user_message.startswith("Your Groq account has no credit. Groq is prepaid: add credit and")
+        assert err.user_message == (
+            "Your Groq account has no credit. Add credit or check your plan, then try again, "
+            "or use the free option instead (in the dashboard: Settings, then Run setup "
+            "wizard, then On this computer)."
+        )
+
+    @pytest.mark.parametrize("provider", ["groq", "deepgram", "elevenlabs", "sargam"])
+    def test_only_openai_and_openrouter_are_called_prepaid(self, provider):
+        msg = classify_api_error(402, "", provider).user_message
+        assert "prepaid" not in msg
+        assert "Add credit or check your plan" in msg

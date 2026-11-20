@@ -104,12 +104,21 @@ def display_name(provider: str) -> str:
 
 def no_credit_message(provider: str) -> str:
     name = display_name(provider)
-    billing = "https://platform.openai.com/settings/organization/billing"
-    where = f" at {billing}" if provider == "openai" else ""
-    return (
-        f"Your {name} account has no credit. {name} is prepaid: add credit{where} and try again, "
+    free = (
         "or use the free option instead (in the dashboard: Settings, then Run setup wizard, "
         "then On this computer)."
+    )
+    if provider in ("openai", "openrouter"):
+        billing = "https://platform.openai.com/settings/organization/billing"
+        where = f" at {billing}" if provider == "openai" else ""
+        return (
+            f"Your {name} account has no credit. {name} is prepaid: add credit{where} "
+            f"and try again, {free}"
+        )
+    # not every provider is prepaid (some bill a plan)
+    return (
+        f"Your {name} account has no credit. Add credit or check your plan, then try again, "
+        f"{free}"
     )
 
 

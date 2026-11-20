@@ -277,8 +277,10 @@ anyscribe onboard --force                       # or re-run the wizard
 <p>The full message reads: "Your OpenAI account has no credit. OpenAI is prepaid:
 add credit at https://platform.openai.com/settings/organization/billing and try
 again, or use the free option instead (in the dashboard: Settings, then Run
-setup wizard, then On this computer)." For other providers it names that
-provider and leaves out the billing link.</p>
+setup wizard, then On this computer)." OpenRouter's reads the same with its
+own name and no billing link. Any other provider's reads: "Your Groq account
+has no credit. Add credit or check your plan, then try again, or use the free
+option instead (...)", with that provider's name.</p>
 <p>The provider accepted your key but refused the work because the account has no
 money on it. OpenAI's API is prepaid and separate from a ChatGPT subscription:
 a new key on an account with no credit fails on the first transcript.
@@ -287,8 +289,8 @@ answers HTTP 402.) anyscribe stops at once instead of retrying, since waiting
 never adds credit.</p>
 <p><strong>Fix, either:</strong></p>
 <ul>
-<li>Add credit on the provider's billing page (OpenAI: the link in the message),
-  then run the same transcription again.</li>
+<li>Add credit, or check your plan, on the provider's billing page (OpenAI: the
+  link in the message), then run the same transcription again.</li>
 <li>Or switch to the free option that runs on your computer: in the dashboard,
   <strong>Settings</strong>, then <strong>Run setup wizard</strong>, then <strong>On this computer</strong>. From the
   terminal, <code>anyscribe onboard --force</code> and choose <strong>On this computer</strong>.</li>

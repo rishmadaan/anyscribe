@@ -274,7 +274,7 @@ HTTP 429. Wait a moment and retry, or switch providers for this run with `-p <ot
 
 ### "Your <Provider> account has no credit."
 
-Full text: "Your OpenAI account has no credit. OpenAI is prepaid: add credit at https://platform.openai.com/settings/organization/billing and try again, or use the free option instead (in the dashboard: Settings, then Run setup wizard, then On this computer)." Other providers get their own name and no billing link.
+Full text: "Your OpenAI account has no credit. OpenAI is prepaid: add credit at https://platform.openai.com/settings/organization/billing and try again, or use the free option instead (in the dashboard: Settings, then Run setup wizard, then On this computer)." OpenRouter gets the same text with its own name and no billing link. Every other provider (Groq, Deepgram, ElevenLabs, Sarvam) gets "Your <Provider> account has no credit. Add credit or check your plan, then try again, or use the free option instead (...)", since not all of them are prepaid.
 
 Raised for HTTP 402 (OpenRouter's out-of-credit answer) and for a 429 whose body says `insufficient_quota` (OpenAI's). Not retried: waiting never adds credit. The key itself is fine.
 

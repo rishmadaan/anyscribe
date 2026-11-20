@@ -264,13 +264,21 @@ Two cases that look like bugs but aren't:
 
 ### "Invalid or missing API key for <provider>."
 
-The provider rejected the key (HTTP 401/403). It is wrong, revoked, or the account has no credit.
+The provider rejected the key (HTTP 401/403). It is wrong or revoked (some providers also answer this way for an unfunded account; OpenAI and OpenRouter answer with the no-credit message below).
 
 **Fix:** `anyscribe config set <provider>_api_key YOUR_KEY` (or `anyscribe onboard --force`). `anyscribe providers test` cannot catch this, since it makes no API call.
 
 ### "Rate limited by <provider>."
 
-HTTP 429. Wait a moment and retry, or switch providers for this run with `-p <other>`.
+HTTP 429. Wait a moment and retry, or switch providers for this run with `-p <other>`. (A 429 that means the account has no credit shows the message below instead.)
+
+### "Your <Provider> account has no credit."
+
+Full text: "Your OpenAI account has no credit. OpenAI is prepaid: add credit at https://platform.openai.com/settings/organization/billing and try again, or use the free option instead (in the dashboard: Settings, then Run setup wizard, then On this computer)." OpenRouter gets the same text with its own name and no billing link. Every other provider (Groq, Deepgram, ElevenLabs, Sarvam) gets "Your <Provider> account has no credit. Add credit or check your plan, then try again, or use the free option instead (...)", since not all of them are prepaid.
+
+Raised for HTTP 402 (OpenRouter's out-of-credit answer) and for a 429 whose body says `insufficient_quota` (OpenAI's). Not retried: waiting never adds credit. The key itself is fine.
+
+**Fix:** the user adds credit on the provider's billing page and runs it again; or, free, switch to local transcription: dashboard Settings → Run setup wizard → On this computer, or `anyscribe onboard --force` and choose On this computer. For this run only, `-p local` works if local is already set up (`anyscribe local status`). Tell the user that OpenAI's API is prepaid and billed separately from a ChatGPT subscription.
 
 ### "Transient <provider> server error"
 
@@ -279,6 +287,18 @@ HTTP 5xx on the provider's side. It usually clears on its own; retry in a few se
 ### "<provider> rejected the request (4xx)"
 
 Any other client error. The text after the status code is the provider's own response; read it for the cause (bad language code, unsupported file, unknown model).
+
+### Dashboard key check results
+
+The dashboard's key check (setup wizard **Next** / **Test key** on the typed key, before saving; Settings → Providers → **Test** on the saved key) calls the provider with the key and answers with one of:
+
+- "<Provider> accepted this key." The key is known; credit is not checked (OpenAI is prepaid).
+- "<Provider> refused this key. Check that you copied all of it, with no extra spaces." HTTP 401/403: wrong, partial or revoked key. The wizard offers "Use this key anyway".
+- "<Provider> answered with an error (<status>). Try again in a minute." Any other error status.
+- "Couldn't reach <Provider> to check the key. Check your internet connection, or continue: the key will be checked on your first transcript." Timeout (10 s) or network error; the wizard lets the user continue.
+- "Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your first transcript." Sarvam only, shown in amber.
+
+The CLI's `anyscribe providers test` is different: it only checks that a key is set and makes no API call.
 
 ### "ffmpeg not found" / "ffprobe not found"
 

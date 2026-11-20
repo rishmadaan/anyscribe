@@ -116,10 +116,15 @@ function Test-Python {
 
 # ── Check ffmpeg ──────────────────────────────────────────────
 
+function Test-FfmpegFound {
+    $script:FfmpegOk = (Test-CommandExists 'ffmpeg') -and (Test-CommandExists 'ffprobe')
+    return $script:FfmpegOk
+}
+
 function Test-Ffmpeg {
     Write-Info "Checking ffmpeg..."
 
-    if ((Test-CommandExists 'ffmpeg') -and (Test-CommandExists 'ffprobe')) {
+    if (Test-FfmpegFound) {
         Write-Ok "ffmpeg found"
         return
     }
@@ -133,7 +138,7 @@ function Test-Ffmpeg {
             Write-Info "Installing ffmpeg via winget..."
             winget install Gyan.FFmpeg --accept-package-agreements --accept-source-agreements
             Refresh-Path
-            if (Test-CommandExists 'ffmpeg') {
+            if (Test-FfmpegFound) {
                 Write-Ok "ffmpeg installed"
                 return
             }
@@ -147,7 +152,7 @@ function Test-Ffmpeg {
             Write-Info "Installing ffmpeg via Chocolatey..."
             choco install ffmpeg -y
             Refresh-Path
-            if (Test-CommandExists 'ffmpeg') {
+            if (Test-FfmpegFound) {
                 Write-Ok "ffmpeg installed"
                 return
             }
@@ -324,9 +329,69 @@ function Fix-Path {
     Write-Ok "PATH updated (takes effect in new terminals)"
 }
 
+# ── Result ────────────────────────────────────────────────────
+
+# A box: a title, then each further argument as its own paragraph, wrapped to fit.
+function Write-Box($color, $title) {
+    $bar = '-' * 56
+    Write-Host "  +$bar+" -ForegroundColor $color
+    Write-Host ("  |  {0,-52}  |" -f $title) -ForegroundColor $color
+    foreach ($para in $args) {
+        Write-Host ("  |  {0,-52}  |" -f '') -ForegroundColor $color
+        foreach ($line in (($para -replace '(.{1,52})(\s+|$)', "`$1`n").TrimEnd("`n") -split "`n")) {
+            Write-Host ("  |  {0,-52}  |" -f $line) -ForegroundColor $color
+        }
+    }
+    Write-Host "  +$bar+" -ForegroundColor $color
+}
+
+function Write-Result($desktopState) {
+    Write-Host ""
+    if ($desktopState -eq 'done') {
+        Write-Ok "anyscribe is in your Start menu and running in your system tray"
+        Write-Host ""
+    }
+    # This window can run what the box says: under irm | iex the PATH changes
+    # above happened in this very session.
+    $found = Test-CommandExists 'anyscribe'
+    $open = if ($desktopState -eq 'done') {
+        "Open anyscribe: click the anyscribe app (in your Start menu). Your dashboard should already be open in your browser."
+    } elseif ($found) {
+        "Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"
+    } else {
+        "Next step: open the dashboard to set up and start transcribing, with the line below this box."
+    }
+    if (-not $script:FfmpegOk) {
+        $fix = "ffmpeg, a free audio tool, is missing. Install it with: winget install Gyan.FFmpeg, then "
+        if ($desktopState -eq 'done') {
+            # The running tray keeps the PATH it started with: only a restart sees ffmpeg.
+            $fix += "quit anyscribe from the tray (the icon near the clock) and open it again."
+            Write-Box Yellow "anyscribe is installed, but can't transcribe yet" $fix $open
+        } else {
+            # This window keeps the PATH it had before winget ran: only a new one finds ffmpeg.
+            Write-Box Yellow "anyscribe is installed, but can't transcribe yet" ($fix + "open a new PowerShell window and type: anyscribe ui")
+        }
+    } elseif ($desktopState -eq 'done') {
+        Write-Box Green "anyscribe is ready!" $open
+    } else {
+        Write-Box Green "anyscribe is installed!" $open
+    }
+    if (-not $found) {
+        if ($desktopState -eq 'done') { Write-Warn "To type anyscribe commands in this window, use:" }
+        elseif (-not $script:FfmpegOk) { Write-Warn "If anyscribe isn't found in the new window, type:" }
+        Write-Host "    & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Cyan
+    }
+    if ($desktopState -eq 'failed') {
+        Write-Host ""
+        Write-Warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
+    }
+    Write-Host ""
+}
+
 # ── Main ──────────────────────────────────────────────────────
 
 $script:PythonCmd = 'python'
+$script:FfmpegOk = $false
 
 Write-Banner
 
@@ -337,6 +402,9 @@ try {
     Test-YtDlp
     Write-Host ""
     Install-Anyscribe
+    # Install-Anyscribe reloads PATH from the registry, which can drop an
+    # ffmpeg found earlier in this window only: the box must say what is true now.
+    $null = Test-FfmpegFound
 
     # Desktop mode opens the dashboard itself. Its failure is not an install
     # failure: anyscribe works, so warn and fall back to the plain banner.
@@ -351,38 +419,7 @@ try {
         } catch { Write-Warn "$_"; 'failed' }
     }
 
-    Write-Host ""
-    if ($desktopState -eq 'done') {
-        Write-Ok "anyscribe is in your Start menu and running in your system tray"
-        Write-Host ""
-        Write-Host "  +-------------------------------------+" -ForegroundColor Green
-        Write-Host "  |  anyscribe is ready!                |" -ForegroundColor Green
-        Write-Host "  |                                     |" -ForegroundColor Green
-        Write-Host "  |  anyscribe ui       web dashboard   |" -ForegroundColor Green
-        Write-Host "  |  anyscribe `"<url>`"  transcribe now  |" -ForegroundColor Green
-        Write-Host "  +-------------------------------------+" -ForegroundColor Green
-    } else {
-        Write-Host "  +-------------------------------------+" -ForegroundColor Green
-        Write-Host "  |  anyscribe is installed!            |" -ForegroundColor Green
-        Write-Host "  |                                     |" -ForegroundColor Green
-        Write-Host "  |  Next step:                         |" -ForegroundColor Green
-        Write-Host "  |    anyscribe ui                     |" -ForegroundColor Green
-        Write-Host "  |                                     |" -ForegroundColor Green
-        Write-Host "  |  Opens a dashboard in your browser  |" -ForegroundColor Green
-        Write-Host "  |  to set up and start transcribing.  |" -ForegroundColor Green
-        Write-Host "  +-------------------------------------+" -ForegroundColor Green
-        if ($desktopState -eq 'failed') {
-            Write-Host ""
-            Write-Warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
-        }
-    }
-    Write-Host ""
-
-    if (-not (Test-CommandExists 'anyscribe')) {
-        Write-Warn "If 'anyscribe' is not recognized, use:"
-        Write-Host "    & `"$script:PythonCmd`" -m anyscribe ui" -ForegroundColor Cyan
-        Write-Host ""
-    }
+    Write-Result $desktopState
 } catch {
     Write-Fail "Installation failed: $_"
     Write-Host ""
@@ -391,5 +428,8 @@ try {
     Write-Host "    2. pip install anyscribe" -ForegroundColor Yellow
     Write-Host "    3. Install ffmpeg from https://www.gyan.dev/ffmpeg/builds/" -ForegroundColor Yellow
     Write-Host ""
-    exit 1
+    # Nothing follows this block, so the script ends here. `exit` would also
+    # close the person's whole window under irm | iex, taking this message with
+    # it; keep the failure code only when run as a .ps1 file.
+    if ($PSCommandPath) { exit 1 }
 }

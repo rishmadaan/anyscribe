@@ -51,6 +51,15 @@ class RateLimitError(ScribeAPIError):
         super().__init__(message, retryable=True, **kwargs)
 
 
+class NoCreditError(ScribeAPIError):
+    """402, or 429 with ``insufficient_quota``: the account has no credit.
+
+    Not retryable: waiting never adds credit."""
+
+    def __init__(self, message: str, **kwargs) -> None:
+        super().__init__(message, retryable=False, **kwargs)
+
+
 class ServerError(ScribeAPIError):
     """500/502/503 — transient server error."""
 
@@ -78,6 +87,41 @@ _KEY_URLS: dict[str, str] = {
 }
 
 
+# How each provider is named in messages people read.
+PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    "openai": "OpenAI",
+    "groq": "Groq",
+    "openrouter": "OpenRouter",
+    "sargam": "Sarvam",
+    "deepgram": "Deepgram",
+    "elevenlabs": "ElevenLabs",
+}
+
+
+def display_name(provider: str) -> str:
+    return PROVIDER_DISPLAY_NAMES.get(provider, provider)
+
+
+def no_credit_message(provider: str) -> str:
+    name = display_name(provider)
+    free = (
+        "or use the free option instead (in the dashboard: Settings, then Run setup wizard, "
+        "then On this computer)."
+    )
+    if provider in ("openai", "openrouter"):
+        billing = "https://platform.openai.com/settings/organization/billing"
+        where = f" at {billing}" if provider == "openai" else ""
+        return (
+            f"Your {name} account has no credit. {name} is prepaid: add credit{where} "
+            f"and try again, {free}"
+        )
+    # not every provider is prepaid (some bill a plan)
+    return (
+        f"Your {name} account has no credit. Add credit or check your plan, then try again, "
+        f"{free}"
+    )
+
+
 def classify_api_error(status_code: int, body: str, provider: str) -> ScribeAPIError:
     """Map an HTTP status + response body to the correct ScribeAPIError subclass."""
     kwargs = {"status_code": status_code, "provider": provider}
@@ -95,6 +139,12 @@ def classify_api_error(status_code: int, body: str, provider: str) -> ScribeAPIE
             ),
             **kwargs,
         )
+
+    # OpenAI answers an account with no credit with a 429 (code and type
+    # "insufficient_quota"); OpenRouter answers 402. Retrying never helps.
+    if status_code == 402 or (status_code == 429 and "insufficient_quota" in (body or "")):
+        msg = no_credit_message(provider)
+        return NoCreditError(msg, user_message=msg, **kwargs)
 
     if status_code == 429:
         return RateLimitError(

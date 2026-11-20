@@ -2,30 +2,17 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Check, Circle, Copy, X, Terminal } from "lucide-react";
+import { AlertTriangle, Check, Circle, X } from "lucide-react";
 import { getHealth, getKeysStatus } from "../api/client";
+import { FfmpegCommand } from "./FfmpegNotice";
 
 const POLL_INTERVAL_MS = 30_000;
-
-function detectPlatform(): "macos" | "windows" | "linux" {
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("win")) return "windows";
-  return "linux";
-}
-
-const FFMPEG_COMMANDS: Record<string, { cmd: string; note?: string }> = {
-  macos: { cmd: "brew install ffmpeg" },
-  windows: { cmd: "winget install Gyan.FFmpeg" },
-  linux: { cmd: "sudo apt install ffmpeg", note: "or your distro's package manager" },
-};
 
 export default function SetupBanner() {
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
   const [ffmpegOk, setFfmpegOk] = useState(true);
   const [hasAnyKey, setHasAnyKey] = useState(true);
-  const [copied, setCopied] = useState(false);
 
   const checkSetup = useCallback(async () => {
     try {
@@ -55,15 +42,6 @@ export default function SetupBanner() {
 
   // Don't render if setup is complete, loading, or dismissed
   if (loading || dismissed || (ffmpegOk && hasAnyKey)) return null;
-
-  const platform = detectPlatform();
-  const ffmpegInfo = FFMPEG_COMMANDS[platform];
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(ffmpegInfo.cmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <div className="mx-6 mt-6 rounded-lg border border-amber/30 bg-amber/5 px-5 py-4 animate-slide-up">
@@ -96,28 +74,7 @@ export default function SetupBanner() {
             <p className={`text-sm ${ffmpegOk ? "text-text-muted line-through" : "text-text"}`}>
               Install ffmpeg
             </p>
-            {!ffmpegOk && (
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-surface-raised border border-border rounded-md px-2.5 py-1">
-                  <Terminal className="w-3 h-3 text-text-muted" />
-                  <code className="text-xs font-mono text-text">{ffmpegInfo.cmd}</code>
-                </div>
-                <button
-                  onClick={handleCopy}
-                  className="text-text-muted hover:text-text transition-colors cursor-pointer p-1"
-                  title="Copy command"
-                >
-                  {copied ? (
-                    <Check className="w-3 h-3 text-green" />
-                  ) : (
-                    <Copy className="w-3 h-3" />
-                  )}
-                </button>
-                {ffmpegInfo.note && (
-                  <span className="text-xs text-text-muted">{ffmpegInfo.note}</span>
-                )}
-              </div>
-            )}
+            {!ffmpegOk && <FfmpegCommand />}
           </div>
         </div>
 

@@ -34,11 +34,16 @@ By the end of this guide you will have:
 - **A computer running macOS, Linux, or Windows** (native Windows and WSL2 both work). The one-line installer below brings the rest: Python, ffmpeg, yt-dlp, and Deno for YouTube.
 - **Then pick one engine:**
   - **On this computer (recommended)** — the **local** provider: free, private, no API key, works offline. It runs Parakeet v3 (English and 24 European languages, about 10 minutes per hour of audio on our 6-core test desktop) and Whisper Large v3 Turbo for Hindi and 95+ other languages. The setup wizard asks what language your audio is in and downloads the right model once (Parakeet v3 is 670 MB).
-  - **Or a cloud service** — needs an API key from one provider; OpenAI is the cloud default. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys); transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. Six cloud providers are supported alongside local — see [providers.md](providers.md) for the comparison.
+  - **Or a cloud service** — needs an API key from one provider; OpenAI is the cloud default. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys); transcription costs about $0.0045/minute — a 10-minute video costs around 5 cents. OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail. Six cloud providers are supported alongside local — see [providers.md](providers.md) for the comparison.
 
 > **Later, if you want cheaper or more accurate:** each provider offers a few models you can switch between — see [providers.md](providers.md). You don't need to think about this to get started; the defaults are good.
 
-> **New to the command line?** You'll be typing commands in your Terminal app (macOS), terminal emulator (Linux), or Command Prompt / PowerShell (Windows). Every command in this guide starts with `anyscribe` — just copy-paste and press Enter.
+> **New to the command line?** You'll be typing commands in your Terminal app (macOS), terminal emulator (Linux), or PowerShell / Terminal (Windows; Command Prompt can't run the Windows install line).
+>
+> - **Mac:** Open Terminal: press ⌘ Space, type Terminal, press Return. Paste the line and press Return. It may ask for your Mac password; nothing shows while you type.
+> - **Windows:** Open PowerShell: right-click the Start button and choose Terminal (or Windows PowerShell). Paste the line and press Enter.
+>
+> Every command in this guide starts with `anyscribe`: just copy-paste and press Enter.
 
 ## Step 1 — Install
 
@@ -52,7 +57,9 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex
 ```
 
-The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present).
+The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present). If ffmpeg still isn't there at the end, the installer's last box says **anyscribe is installed, but can't transcribe yet** and gives the command to install it, instead of saying it's ready.
+
+The last box also says how to open anyscribe from there: click the app when desktop mode was set up (on a Mac it says to press Cmd and Space, type anyscribe and press Return, since the app is in the Applications folder inside your home folder, not the one in Finder's sidebar), or, when the window you installed from can't find the `anyscribe` command yet, open a new terminal window first.
 
 **Then it sets up desktop mode:** an **anyscribe** app icon, anyscribe started now and at every login, and the dashboard opened in your browser. See [Two ways to install](#two-ways-to-install) for what that means and how to undo it. Want the command-line tool only? Add `--no-desktop`:
 
@@ -66,7 +73,7 @@ curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.s
 
 > **Why the longer Windows line?** The plain `irm … | iex` form can't pass options to the script, so skipping desktop mode needs this wrapped form. If the desktop step fails for any reason, the installer warns you, finishes the normal install, and tells you to retry later with `anyscribe desktop install`.
 
-Verify it worked:
+Verify it worked (in a new terminal window if the installer's last box asked for one):
 
 ```bash
 anyscribe --version
@@ -106,10 +113,11 @@ Opens a local dashboard at `http://127.0.0.1:8457`. A **setup wizard pops up on 
    - **On this computer** (recommended) — free, private, no account or API key, works offline.
    - **With a cloud service** — slightly more accurate on hard audio, adds speaker labels, very fast, paid per minute. Opens the list: `openai`, `deepgram`, `groq`, `elevenlabs`, `sargam` (Sarvam AI, Indic languages), `openrouter`.
 2. **On this computer:** answer **"What language is most of your audio?"** and anyscribe suggests a model in plain words, using what it detects about your computer (memory, disk space). English or European languages get **Parakeet v3** (~670 MB, about 10 minutes per hour of audio on our test desktop); Hindi gets **Whisper Large v3 Turbo**; a mix gets both. You can still pick any card; **More models** lists the rest with why they're tucked away. Click **Download … and set up**. A progress bar shows the download.
-   **With a cloud service:** paste your API key. The **Test key** button performs a provider check where available; for Groq, Sarvam, and OpenRouter it only confirms that a key was entered. Success does not guarantee that transcription will succeed. You can then also enable transcription on this computer, as a free backup (`-p local`).
+   If ffmpeg is missing, this step says **One more thing: ffmpeg** with the command to install it and a **Check again** button; the download button stays off until ffmpeg is found. While the model downloads, the wizard stays open (Escape and Skip are off), and if you reload the page it picks the running download back up.
+   **With a cloud service:** paste your API key. Pressing **Next** (or **Test key**) asks the provider whether it accepts the key, before anything is saved: "accepted", "refused" (check you copied all of it), or "couldn't reach" (you can continue). Sarvam has no way to check a key in advance, so its key step says **Not checked yet** in amber from the start, and **Next** goes straight on. A refused key stays on the step, with **Use this key anyway** if you're sure. An accepted key doesn't prove the account has credit. OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail. See [what each answer means](troubleshooting.md#what-the-key-check-says-setup-wizard-and-settings). You can then also enable transcription on this computer, as a free backup (`-p local`).
 4. **Confirm your workspace** — where your transcripts live, default `~/anyscribe/`.
 
-Click around — no commands to memorize.
+Click around — no commands to memorize. Paste a link on **Transcribe**; when it's done, **Read transcript** opens it formatted for reading (it's also under **History**).
 
 Close the tab when you're finished. In CLI mode, stop the server with Ctrl+C in the terminal or **Shutdown** in the sidebar; in desktop mode leave it running (Quit from the tray icon stops it).
 

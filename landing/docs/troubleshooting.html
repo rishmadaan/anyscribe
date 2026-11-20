@@ -80,6 +80,10 @@ downloaded before a run failed, kept so you don't have to download it again.</p>
 <h2 id="install-and-startup">Install and startup</h2>
 <h3 id="command-not-found-anyscribe-or-anyscribe-is-not-recognized"><code>command not found: anyscribe</code> (or <code>'anyscribe' is not recognized</code>)</h3>
 <p>anyscribe is installed, but the folder pip put it in isn't on your PATH.</p>
+<p><strong>Just ran the one-line installer?</strong> Open a new terminal window first. The
+window you installed from may not know the new folder yet; when that's the
+case, the installer's last box says so and prints the full path that works in
+that window.</p>
 <p><strong>The instant workaround</strong> — this always works, no setup:</p>
 <pre><code class="language-bash">python -m anyscribe onboard              # same as: anyscribe onboard
 python -m anyscribe transcribe &quot;&lt;url&gt;&quot;   # same as: anyscribe transcribe &quot;&lt;url&gt;&quot;
@@ -99,6 +103,66 @@ python -m anyscribe transcribe &quot;&lt;url&gt;&quot;   # same as: anyscribe tr
   # Add that path permanently (replace <path> with the output above):</p>
 <p>```</p>
 <p>Then restart your terminal.</p>
+<h3 id="homebrew-didnt-finish-installing-so-anyscribe-cant-continue">"Homebrew didn't finish installing, so anyscribe can't continue."</h3>
+<p>The full message ends: "Install Homebrew from https://brew.sh (copy its one
+line into Terminal), then run this anyscribe installer again."</p>
+<p>On a Mac, the installer uses Homebrew (the standard tool for installing
+programs from Terminal) to bring in Python and ffmpeg. You said yes to
+installing it, but Homebrew stopped before it finished. The usual reasons: the
+password was mistyped or the prompt was cancelled, your Mac account isn't an
+Administrator, the internet dropped, or you pressed a key other than Return
+when Homebrew asked to continue.</p>
+<p><strong>Fix:</strong></p>
+<ol>
+<li>Open <a href="https://brew.sh">brew.sh</a>, copy the one line under "Install
+   Homebrew", paste it into Terminal and press Return. It asks for your Mac
+   password (nothing shows while you type) and can take 10 to 20 minutes.</li>
+<li>When it finishes it prints <strong>Next steps</strong> with two or three lines to copy:
+   run those too, so Terminal can find Homebrew next time.</li>
+<li>Run the anyscribe install line again.</li>
+</ol>
+<h3 id="anyscribe-is-installed-but-cant-transcribe-yet-installer-or-one-more-thing-ffmpeg-setup-wizard">"anyscribe is installed, but can't transcribe yet" (installer) or "One more thing: ffmpeg" (setup wizard)</h3>
+<p>Both mean the same thing: <strong>ffmpeg</strong>, a free audio tool anyscribe needs to read
+audio and video, isn't installed (or the program can't find it). anyscribe
+itself installed fine. The installer's box ends with the command for your
+computer, and the setup wizard shows it with a copy button:</p>
+<table>
+<thead>
+<tr>
+<th>Your computer</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mac</td>
+<td><code>brew install ffmpeg</code></td>
+</tr>
+<tr>
+<td>Windows (PowerShell)</td>
+<td><code>winget install Gyan.FFmpeg</code></td>
+</tr>
+<tr>
+<td>Linux (Ubuntu, Debian)</td>
+<td><code>sudo apt install ffmpeg</code> (Fedora: <code>sudo dnf install ffmpeg</code>, Arch: <code>sudo pacman -S ffmpeg</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>On a Mac or Linux, run it in a terminal, then click <strong>Check again</strong> in the
+wizard. The wizard keeps the download button off until ffmpeg is found, so the
+local setup can't start without it.</p>
+<ul>
+<li><strong>Windows:</strong> the anyscribe that is already running doesn't see programs
+  installed after it started, so <strong>Check again</strong> can't find a new install.
+  After running the command, quit anyscribe from the tray (the icon near the
+  clock) and open it again from the Start menu. Installed without desktop
+  mode? Open a new PowerShell window and type <code>anyscribe ui</code>: the window you
+  installed from doesn't see ffmpeg.</li>
+<li><strong>Mac, and the command says ffmpeg "is already installed, it's just not
+  linked"?</strong> Run <code>brew link ffmpeg</code>.</li>
+<li><strong>The terminal finds ffmpeg but the app doesn't?</strong> See
+  <a href="#transcribing-from-the-app-says-ffmpeg-or-deno-is-missing-but-the-terminal-works">Transcribing from the app says ffmpeg (or Deno) is missing</a>.</li>
+</ul>
 <h3 id="i-upgraded-and-my-api-keys-are-gone">"I upgraded and my API keys are gone"</h3>
 <p>anyscribe used to keep config and keys in <code>~/.anyscribecli/</code>; it now uses
 <code>~/.anyscribe/</code>. Normally the move happens by itself on your first
@@ -212,6 +276,61 @@ side.</p>
 <pre><code class="language-bash">anyscribe config set openai_api_key YOUR_KEY   # set it directly
 anyscribe onboard --force                       # or re-run the wizard
 </code></pre>
+<h3 id="your-openai-account-has-no-credit-or-groq-openrouter-another-provider">"Your OpenAI account has no credit." (or Groq, OpenRouter, another provider)</h3>
+<p>The full message reads: "Your OpenAI account has no credit. OpenAI is prepaid:
+add credit at https://platform.openai.com/settings/organization/billing and try
+again, or use the free option instead (in the dashboard: Settings, then Run
+setup wizard, then On this computer)." OpenRouter's reads the same with its
+own name and no billing link. Any other provider's reads: "Your Groq account
+has no credit. Add credit or check your plan, then try again, or use the free
+option instead (...)", with that provider's name.</p>
+<p>The provider accepted your key but refused the work because the account has no
+money on it. OpenAI's API is prepaid and separate from a ChatGPT subscription:
+a new key on an account with no credit fails on the first transcript.
+(Technically: OpenAI answers HTTP 429 with <code>insufficient_quota</code>, OpenRouter
+answers HTTP 402.) anyscribe stops at once instead of retrying, since waiting
+never adds credit.</p>
+<p><strong>Fix, either:</strong></p>
+<ul>
+<li>Add credit, or check your plan, on the provider's billing page (OpenAI: the
+  link in the message), then run the same transcription again.</li>
+<li>Or switch to the free option that runs on your computer: in the dashboard,
+  <strong>Settings</strong>, then <strong>Run setup wizard</strong>, then <strong>On this computer</strong>. From the
+  terminal, <code>anyscribe onboard --force</code> and choose <strong>On this computer</strong>.</li>
+</ul>
+<p>An ordinary <code>Rate limited by &lt;provider&gt;</code> message is different: the account is
+fine and busy, and anyscribe waits and retries by itself.</p>
+<h3 id="what-the-key-check-says-setup-wizard-and-settings">What the key check says (setup wizard and Settings)</h3>
+<p>The dashboard asks the provider whether it accepts a key. In the setup wizard
+this happens when you press <strong>Next</strong> (or <strong>Test key</strong>) on the key step, before
+anything is saved; in <strong>Settings → Providers</strong>, <strong>Test</strong> checks the key you
+saved. The answer is one of these:</p>
+<h4 id="openai-accepted-this-key-or-another-providers-name">"OpenAI accepted this key." (or another provider's name)</h4>
+<p>The provider knows the key. It does not prove the account has credit: OpenAI,
+for one, is prepaid, so add credit before your first transcript (see
+<a href="#your-openai-account-has-no-credit-or-groq-openrouter-another-provider">"Your OpenAI account has no credit."</a>).</p>
+<h4 id="openai-refused-this-key-check-that-you-copied-all-of-it-with-no-extra-spaces">"OpenAI refused this key. Check that you copied all of it, with no extra spaces."</h4>
+<p>The provider answered that the key is wrong (HTTP 401 or 403). Usually part of
+the key is missing, or a space came along with it. Copy it again from the
+provider's site and paste it once more. A revoked or deleted key gives the same
+answer: make a new one. If you are sure the key is right, the setup wizard's
+<strong>Use this key anyway</strong> keeps it and moves on; the first transcript will tell
+you for certain.</p>
+<h4 id="openai-answered-with-an-error-500-try-again-in-a-minute">"OpenAI answered with an error (500). Try again in a minute."</h4>
+<p>The provider answered, but with an error that isn't about the key (the number
+in brackets is its status code; 5xx means a problem on their side). Wait a
+minute and test again, or in the setup wizard choose <strong>Use this key
+anyway</strong>.</p>
+<h4 id="couldnt-reach-openai-to-check-the-key-check-your-internet-connection-or-continue-the-key-will-be-checked-on-your-first-transcript">"Couldn't reach OpenAI to check the key. Check your internet connection, or continue: the key will be checked on your first transcript."</h4>
+<p>anyscribe couldn't get any answer from the provider within ten seconds: no
+internet, a firewall or VPN in the way, or the provider is down. You can carry
+on (in the wizard, press <strong>Next</strong> again): the first transcript checks the key.</p>
+<h4 id="not-checked-yet-sarvam-has-no-way-to-check-a-key-in-advance-it-will-be-checked-on-your-first-transcript">"Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your first transcript."</h4>
+<p>Sarvam has no way to check a key without running a paid transcription, so
+anyscribe doesn't pretend: it keeps the key (the wizard saves it when you
+finish) and shows this in amber instead of a green success. The wizard's key
+step shows it from the start, and <strong>Next</strong> goes straight on. If the key is wrong, the first transcript
+fails with <code>Invalid or missing API key for sargam</code>.</p>
 <h3 id="warning-quality-x-wants-y-but-no-y_api_key-is-set"><code>WARNING: quality 'X' wants Y but no Y_API_KEY is set</code></h3>
 <p>Not an error — anyscribe went ahead using your configured provider instead. Your
 quality tier prefers a provider whose key you don't have.</p>
@@ -229,7 +348,9 @@ key is set. It doesn't contact the provider, so it can't tell you whether the ke
 is valid or the account has credit. If the test fails, the key is missing. If it
 passes but transcription fails, the key may be wrong or expired, or the account
 may be out of credit: check your provider's dashboard, and try another provider
-to see whether it's the service or the file.</p>
+to see whether it's the service or the file. The dashboard's <strong>Test</strong> button
+(Settings → Providers) does ask the provider; see
+<a href="#what-the-key-check-says-setup-wizard-and-settings">What the key check says</a>.</p>
 <h3 id="next-run-isnt-the-provider-i-set">"Next run" isn't the provider I set</h3>
 <p><code>quality</code> outranks <code>provider</code>. If <code>quality</code> is a tier
 (<code>accuracy</code>/<code>balanced</code>/<code>cost</code>/<code>free</code>), that tier picks the provider and your
@@ -346,6 +467,23 @@ also works, but downloads the source again (add <code>--force</code> if it partl
 transcript). Or just delete the file if you've moved on — nothing else references it.</p>
 <hr />
 <h2 id="local-offline-transcription">Local (offline) transcription</h2>
+<h3 id="cant-reach-anyscribe-right-now-setup-wizard-during-the-model-download">"Can't reach anyscribe right now." (setup wizard, during the model download)</h3>
+<p>The dashboard page lost contact with anyscribe while it was watching the
+download: anyscribe was quit, crashed, or the computer slept. The download
+itself runs inside anyscribe, so if anyscribe is still running it carries on.</p>
+<ul>
+<li><strong>If you quit anyscribe, open it again</strong> (click the app, or type
+  <code>anyscribe ui</code>). The page keeps asking, and as soon as anyscribe answers the
+  message goes away and the progress comes back.</li>
+<li><strong>To close the wizard meanwhile:</strong> press Escape or click <strong>Skip for now</strong>. It
+  asks "Close setup?" first: <strong>Keep waiting</strong> stays, <strong>Close setup</strong> closes.
+  Your choices on the wizard's screens are saved only when you click Finish,
+  so to finish later go to <strong>Settings</strong>, then <strong>Run setup wizard</strong>; it picks a
+  running download back up.</li>
+</ul>
+<p>While anyscribe answers, the wizard stays open during the download (Escape,
+a click outside, Skip and Back are off); this message is the only time it can
+be closed mid-download.</p>
 <h3 id="faster-whisper-is-not-installed-onnx-asr-is-not-installed"><code>faster-whisper is not installed</code> / <code>onnx-asr is not installed</code></h3>
 <p>The local provider is opt-in and needs a one-time install:</p>
 <pre><code class="language-bash">anyscribe local setup --model parakeet-v3

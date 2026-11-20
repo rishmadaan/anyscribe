@@ -41,7 +41,7 @@ CLI-only.
 | `anyscribe config path` | Print config file location | — (CLI only) |
 | `anyscribe config list-keys` | Every settable key with its current value | Settings → Providers (key status) |
 | `anyscribe providers list` | Show available providers | Settings → Providers |
-| `anyscribe providers test [name]` | Check provider loading and key presence | Settings → Providers → Test |
+| `anyscribe providers test [name]` | Check provider loading and key presence | Settings → Providers → Test (which also asks the provider whether it accepts the key) |
 | `anyscribe local setup --model <id>` | Install the local engines + download a model (e.g. `parakeet-v3`) | Settings → Local provider card |
 | `anyscribe local status` | Report local-transcription readiness | Settings → Local provider card |
 | `anyscribe local teardown --yes` | Uninstall the local engines + delete all cached models | Settings → Local provider card → Remove local transcription |

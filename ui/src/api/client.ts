@@ -125,15 +125,16 @@ export const getHealth = () =>
 
 // ── Local transcription ──────────────────────────────
 
-export const getLocalStatus = () =>
-  fetchJSON<LocalStatusResponse>("/local/status");
+export const getLocalStatus = (signal?: AbortSignal) =>
+  fetchJSON<LocalStatusResponse>("/local/status", { signal });
 
 /** Install, download ``model`` (and helpers), make it the default; then the
  * server downloads each ``also`` model itself. */
-export const setupLocal = (model: string, also: string[] = []) =>
+export const setupLocal = (model: string, also: string[] = [], signal?: AbortSignal) =>
   fetchJSON<{ status: string; model: string; also: string[] }>("/local/setup", {
     method: "POST",
     body: JSON.stringify({ model, also }),
+    signal,
   });
 
 /** Make ``model`` the default once it can run (now, if it already can) and
@@ -181,8 +182,8 @@ export const reinstallLocalModel = (size: string) =>
     bytes_downloaded: number;
   }>(`/models/local/${size}/reinstall`, { method: "POST" });
 
-export const getSetupLog = (since: number) =>
-  fetchJSON<SetupLogResponse>(`/local/setup/log?since=${since}`);
+export const getSetupLog = (since: number, signal?: AbortSignal) =>
+  fetchJSON<SetupLogResponse>(`/local/setup/log?since=${since}`, { signal });
 
 // ── Onboarding ───────────────────────────────────────
 

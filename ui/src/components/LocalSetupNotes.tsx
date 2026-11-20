@@ -7,8 +7,9 @@ import { listLocalModels } from "../api/client";
 import type { LocalModelEntry } from "../api/types";
 import { formatMB } from "../api/models";
 
-/** Setup replaced an engine the running server had already loaded. */
-export function RestartBanner() {
+/** Setup replaced an engine the running server had already loaded.
+ * ``children`` adds a sentence after the banner's own (the wizard's way back). */
+export function RestartBanner({ children }: { children?: React.ReactNode }) {
   return (
     <div
       role="alert"
@@ -20,7 +21,7 @@ export function RestartBanner() {
         anyscribe and start it again: in the terminal where <code>anyscribe ui</code>{" "}
         runs, press Ctrl+C, then run <code>anyscribe ui</code>. Using the app icon?
         Quit anyscribe from its menu-bar or tray icon, then open it again. Until then,
-        local transcription may fail to open audio files.
+        local transcription may fail to open audio files.{children && <> {children}</>}
       </p>
     </div>
   );

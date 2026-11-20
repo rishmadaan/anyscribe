@@ -663,10 +663,17 @@ def onboard(
             change_key = bconfirm("  Change API key?")
 
         if change_key:
+            prepaid = (
+                "OpenAI is prepaid: add credit to your OpenAI account first, "
+                "or transcripts will fail.\n\n"
+                if provider == "openai"
+                else ""
+            )
             console.print(
                 Panel(
                     f"Enter your [bold]{pinfo['label']}[/bold] API key.\n"
                     f"Get one at: [link={pinfo['key_url']}]{pinfo['key_url']}[/link]\n\n"
+                    f"{prepaid}"
                     "[dim]Your key is stored locally and never shared.[/dim]",
                     title="API Key",
                     border_style="blue",

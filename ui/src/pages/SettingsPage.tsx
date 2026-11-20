@@ -656,12 +656,8 @@ export default function SettingsPage() {
                     )}
                   </button>
                   {testResult && (
-                    <span
-                      className={`text-xs ${
-                        testResult.success ? "text-green" : "text-red"
-                      }`}
-                    >
-                      {testResult.success ? (
+                    <span className={`text-xs ${keyCheckColor(testResult)}`}>
+                      {testResult.success && testResult.checked !== false ? (
                         <Check className="w-3.5 h-3.5" />
                       ) : (
                         <AlertCircle className="w-3.5 h-3.5" />
@@ -699,6 +695,11 @@ export default function SettingsPage() {
                     )}
                   </button>
                 </div>
+                {testResult && (
+                  <p className={`px-4 pb-3 -mt-1 text-xs ${keyCheckColor(testResult)}`}>
+                    {testResult.message}
+                  </p>
+                )}
 
                 {isExpanded && (
                   <div className="px-4 pb-3 pt-0 border-t border-border-subtle">
@@ -1671,4 +1672,10 @@ function Toggle({
       />
     </button>
   );
+}
+
+/** Green only for a key the provider accepted; amber when nothing checked it. */
+function keyCheckColor(r: ProviderTestResult): string {
+  if (r.checked === false) return "text-amber";
+  return r.success ? "text-green" : "text-red";
 }

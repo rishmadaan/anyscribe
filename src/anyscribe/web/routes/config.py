@@ -22,6 +22,7 @@ from anyscribe.config.settings import (
     save_env,
 )
 from anyscribe.core.config_set import set_value
+from anyscribe.core.errors import display_name
 from anyscribe.core.local_setup import local_ready
 from anyscribe.core.quality import QUALITY_TIERS
 from anyscribe.providers import (
@@ -322,45 +323,60 @@ async def test_provider(
 
     # Real validation: make a lightweight API call to verify the key works.
     # Use the override key from the request body if present, else the env var.
+    # ``checked`` is False when nothing confirmed or refused the key (Sarvam,
+    # or the provider unreachable): the UI shows that in amber, never green.
     api_key = effective_key  # type: ignore[assignment]
+    label = display_name(name)
+    if name == "sargam":  # no endpoint checks a Sarvam key without spending
+        return {
+            "success": True,
+            "checked": False,
+            "message": (
+                "Not checked yet: Sarvam has no way to check a key in advance. "
+                "It will be checked on your first transcript."
+            ),
+        }
+    checks = {
+        "openai": ("https://api.openai.com/v1/models", {"Authorization": f"Bearer {api_key}"}),
+        "groq": ("https://api.groq.com/openai/v1/models", {"Authorization": f"Bearer {api_key}"}),
+        "deepgram": ("https://api.deepgram.com/v1/projects", {"Authorization": f"Token {api_key}"}),
+        "elevenlabs": ("https://api.elevenlabs.io/v1/user", {"xi-api-key": api_key}),
+        # /key needs the key (/models answers 200 to anyone)
+        "openrouter": ("https://openrouter.ai/api/v1/key", {"Authorization": f"Bearer {api_key}"}),
+    }
+    if name not in checks:
+        return {"success": False, "checked": False, "message": f"{label} keys can't be checked."}
+    url, headers = checks[name]
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            if name == "openai":
-                r = await client.get(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-            elif name == "deepgram":
-                r = await client.get(
-                    "https://api.deepgram.com/v1/projects",
-                    headers={"Authorization": f"Token {api_key}"},
-                )
-            elif name == "elevenlabs":
-                r = await client.get(
-                    "https://api.elevenlabs.io/v1/user",
-                    headers={"xi-api-key": api_key},
-                )
-            elif name == "openrouter":
-                r = await client.get(
-                    "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-            elif name == "sargam":
-                return {"success": True, "message": "API key is set (no validation endpoint)"}
-            else:
-                return {"success": True, "message": f"API key is set for {name}"}
-
-            if r.status_code < 400:
-                return {"success": True, "message": f"API key is valid for {name}"}
-            else:
-                return {
-                    "success": False,
-                    "message": f"API returned {r.status_code} — key may be invalid",
-                }
-    except httpx.TimeoutException:
-        return {"success": False, "message": "Validation request timed out"}
-    except Exception as e:
-        return {"success": False, "message": f"Validation failed: {e}"}
+            status = (await client.get(url, headers=headers)).status_code
+    except (UnicodeEncodeError, httpx.LocalProtocolError):
+        status = 401  # a character no request header can carry: no provider takes it
+    except httpx.RequestError:  # timeout, DNS, connection refused
+        return {
+            "success": False,
+            "checked": False,
+            "message": (
+                f"Couldn't reach {label} to check the key. Check your internet connection, "
+                "or continue: the key will be checked on your first transcript."
+            ),
+        }
+    if status < 400:
+        return {"success": True, "checked": True, "message": f"{label} accepted this key."}
+    if status in (401, 403):
+        return {
+            "success": False,
+            "checked": True,
+            "message": (
+                f"{label} refused this key. "
+                "Check that you copied all of it, with no extra spaces."
+            ),
+        }
+    return {
+        "success": False,
+        "checked": True,
+        "message": f"{label} answered with an error ({status}). Try again in a minute.",
+    }
 
 
 @router.get("/keys/status")

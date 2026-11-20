@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { getTranscript } from "../api/client";
 import type { TranscriptDetail } from "../api/types";
 import { ArrowLeft, Copy, Check, ExternalLink } from "lucide-react";
+import TranscriptBody from "../components/TranscriptBody";
 
 export default function TranscriptView() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +43,8 @@ export default function TranscriptView() {
   }
 
   const fm = transcript.frontmatter;
+  const title = String(fm.title || id);
+  const source = /^https?:\/\//i.test(String(fm.source ?? "")) ? String(fm.source) : null;
 
   return (
     <div className="px-8 py-10 max-w-4xl">
@@ -59,7 +62,7 @@ export default function TranscriptView() {
         className="text-2xl font-bold tracking-tight text-text mb-2"
         style={{ fontFamily: "var(--font-display)" }}
       >
-        {String(fm.title || id)}
+        {title}
       </h1>
 
       {/* Metadata strip */}
@@ -85,9 +88,9 @@ export default function TranscriptView() {
           {copied ? <Check className="w-3 h-3 text-green" /> : <Copy className="w-3 h-3" />}
           {copied ? "Copied" : "Copy text"}
         </button>
-        {fm.source ? (
+        {source ? (
           <a
-            href={String(fm.source)}
+            href={source}
             target="_blank"
             rel="noopener noreferrer"
             className="
@@ -103,10 +106,8 @@ export default function TranscriptView() {
       </div>
 
       {/* Transcript body */}
-      <div className="rounded-lg border border-border-subtle bg-surface p-6">
-        <pre className="whitespace-pre-wrap text-sm text-text-secondary leading-relaxed font-mono">
-          {transcript.body}
-        </pre>
+      <div className="rounded-lg border border-border-subtle bg-surface p-4 sm:p-6">
+        <TranscriptBody body={transcript.body} title={title} />
       </div>
 
       {/* File path */}

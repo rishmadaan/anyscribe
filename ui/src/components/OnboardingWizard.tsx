@@ -30,9 +30,15 @@ import {
   getSetupLog,
   getLocalRegistry,
 } from "../api/client";
-import type { LocalRecommendation, LocalRegistry, LocalStatusResponse } from "../api/types";
+import type {
+  LocalRecommendation,
+  LocalRegistry,
+  LocalStatusResponse,
+  ProviderTestResult,
+} from "../api/types";
 import LocalModelPicker from "./LocalModelPicker";
 import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
+import { FfmpegNotice } from "./FfmpegNotice";
 import { downloadMbFor, formatMB, formatPerHour } from "../api/models";
 import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
@@ -67,6 +73,24 @@ type FormState = {
   restartNeeded: boolean;
 };
 
+/** What the local step knows about a setup: "running" locks the wizard;
+ * "unknown" (anyscribe can't be reached) lets it close after a confirmation. */
+type SetupWatch = "idle" | "running" | "unknown";
+
+// Every status read (and the start request) gives up after this, so a quit or
+// stuck server shows as unreachable instead of a silent wait.
+const REQUEST_LIMIT_MS = 10_000;
+const POLL_MS = 1500;
+
+/** Send a request with a time limit; ``ctl`` lets the caller abort it too. */
+function limited<T>(
+  send: (signal: AbortSignal) => Promise<T>,
+  ctl = new AbortController()
+): Promise<T> {
+  const timer = setTimeout(() => ctl.abort(), REQUEST_LIMIT_MS);
+  return send(ctl.signal).finally(() => clearTimeout(timer));
+}
+
 interface Props {
   onClose: () => void;
 }
@@ -84,6 +108,14 @@ export default function OnboardingWizard({ onClose }: Props) {
     restartNeeded: false,
   });
   const [saving, setSaving] = useState(false);
+  // reported by the local step alone: "running" locks the wizard
+  const [setupWatch, setSetupWatch] = useState<SetupWatch>("idle");
+  const [confirmClose, setConfirmClose] = useState(false);
+  const onSetupWatch = useCallback((w: SetupWatch) => {
+    setSetupWatch(w);
+    if (w !== "unknown") setConfirmClose(false); // the confirmation is only for an unreachable server
+  }, []);
+  const locked = setupWatch === "running";
   const [saveError, setSaveError] = useState<string | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const modelName = useLocalModelNames(); // fetched now, so All set shows names at once
@@ -93,6 +125,20 @@ export default function OnboardingWizard({ onClose }: Props) {
     (s: string) => setForm((f) => (f.localModel ? f : { ...f, localModel: s })),
     []
   );
+  // stable, so the local step's effects don't rerun on every wizard render
+  const setEnableLocal = useCallback(
+    (e: boolean) => setForm((f) => ({ ...f, enableLocal: e })),
+    []
+  );
+  const selectSize = useCallback(
+    (s: string | null) => setForm((f) => ({ ...f, localModel: s })),
+    []
+  );
+  const setupDone = useCallback(
+    (done: Pick<FormState, "alsoModels" | "restartNeeded">) => setForm((f) => ({ ...f, ...done })),
+    []
+  );
+  const goWorkspace = useCallback(() => setStep("workspace"), []);
 
   // Preload the default workspace so StepWorkspace can show it as a hint.
   useEffect(() => {
@@ -109,6 +155,24 @@ export default function OnboardingWizard({ onClose }: Props) {
       });
   }, []);
 
+  // A download already running (the page was reloaded mid-download, or Settings
+  // started one): open on it instead of offering Download again. Only routes;
+  // the local step reads the status itself and owns the lock.
+  useEffect(() => {
+    limited(getLocalStatus)
+      .then((s) => {
+        if (!s.setup_running) return;
+        setForm((f) => ({
+          ...f,
+          provider: "local",
+          enableLocal: true,
+          localModel: s.setup_last_model,
+        }));
+        setStep("offline_opt_in");
+      })
+      .catch(() => undefined);
+  }, []);
+
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the
   // wizard again next page load.
   const dismiss = (persist: boolean) => {
@@ -121,6 +185,9 @@ export default function OnboardingWizard({ onClose }: Props) {
     }
     onClose();
   };
+  // While anyscribe can't be reached, closing asks first (S11)
+  const askOrClose = (persist: boolean) =>
+    setupWatch === "unknown" ? setConfirmClose(true) : dismiss(persist);
 
   const branchFromProvider = (provider: string) => {
     setForm((f) => ({ ...f, provider }));
@@ -166,8 +233,8 @@ export default function OnboardingWizard({ onClose }: Props) {
 
   return (
     <Modal
-      onClose={() => dismiss(false)}
-      disableClose={saving}
+      onClose={() => askOrClose(false)}
+      disableClose={saving || locked}
       ariaLabelledBy="onboarding-title"
       size="xl"
     >
@@ -188,9 +255,14 @@ export default function OnboardingWizard({ onClose }: Props) {
             </p>
           )}
         </div>
-        {step !== "done" && !saving && (
+        {step !== "done" && !saving && locked && (
+          <span className="text-xs font-mono text-text-muted text-right">
+            Skip and Back are off until setup finishes.
+          </span>
+        )}
+        {step !== "done" && !saving && !locked && (
           <button
-            onClick={() => dismiss(true)}
+            onClick={() => askOrClose(true)}
             className="flex items-center gap-1 text-xs font-mono text-text-muted hover:text-text transition-colors cursor-pointer"
             aria-label="Skip onboarding"
           >
@@ -199,6 +271,30 @@ export default function OnboardingWizard({ onClose }: Props) {
           </button>
         )}
       </div>
+
+      {confirmClose && (
+        <div role="alertdialog" aria-label="Close setup?" className="rounded-md border border-amber/40 bg-amber/[0.08] px-3 py-2.5 mb-4">
+          <p className="text-xs text-text">
+            Close setup? If the download is still running it carries on in the background. Your
+            choices on these screens are saved only when you click Finish. To come back: Settings,
+            then Run setup wizard.
+          </p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmClose(false)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text hover:bg-surface-raised transition-colors cursor-pointer"
+            >
+              Keep waiting
+            </button>
+            <button
+              onClick={() => dismiss(false)}
+              className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer"
+            >
+              Close setup
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error banner at wizard level (save failures land here) */}
       {saveError && (
@@ -233,15 +329,16 @@ export default function OnboardingWizard({ onClose }: Props) {
           required={form.provider === "local"}
           selected={form.localModel}
           enabled={form.enableLocal}
-          onSetEnabled={(e) => setForm((f) => ({ ...f, enableLocal: e }))}
-          onSelectSize={(s: string | null) => setForm((f) => ({ ...f, localModel: s }))}
+          onSetEnabled={setEnableLocal}
+          onSelectSize={selectSize}
           onPresetSize={presetSize}
           onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
-          onSetupDone={(done) => setForm((f) => ({ ...f, ...done }))}
+          onSetupDone={setupDone}
+          onRunning={onSetupWatch}
           onBack={() =>
             setStep(form.provider === "local" ? "provider" : "api_key")
           }
-          onNext={() => setStep("workspace")}
+          onNext={goWorkspace}
         />
       )}
       {step === "workspace" && (
@@ -400,27 +497,48 @@ function StepApiKey({
   onNext: () => void;
 }) {
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  // The last check and the text it checked: editing the key makes it stale.
+  const [check, setCheck] = useState<(ProviderTestResult & { key: string }) | null>(null);
+  const testResult = check && check.key === value ? check : null;
   const provider = API_PROVIDERS.find((p) => p.name === providerName);
+  // Accepted, or nothing could check it (Sarvam, provider unreachable): Next goes on.
+  // A refusal or an error answer stays, with "Use this key anyway".
+  const accepted = !!testResult?.success && testResult.checked !== false;
+  const unchecked = testResult?.checked === false;
+  const refused = !!testResult && !testResult.success && !unchecked;
+  // Sarvam has no way to check a key in advance: say so up front, and Next just goes on.
+  const uncheckable = providerName === "sargam";
 
-  const handleTest = async () => {
-    if (!value) return;
+  const runCheck = async (): Promise<ProviderTestResult | null> => {
+    if (!value) return null;
     setTesting(true);
-    setTestResult(null);
+    let result: ProviderTestResult;
     try {
       // Pass the typed-but-unsaved key to the test endpoint so it actually
       // validates what the user just entered (rather than whatever's already
       // in .env, which may be stale or empty during wizard-phase).
-      const result = await testProvider(providerName, value);
-      setTestResult(result);
+      result = await testProvider(providerName, value);
     } catch (e) {
-      setTestResult({
+      result = {
         success: false,
+        checked: false,
         message: e instanceof Error ? e.message : "Test failed",
-      });
+      };
     } finally {
       setTesting(false);
     }
+    setCheck({ ...result, key: value });
+    return result;
+  };
+
+  const handleNext = async () => {
+    if (uncheckable) return onNext();
+    if (testResult) {
+      if (!refused) onNext();
+      return;
+    }
+    const result = await runCheck();
+    if (result?.success && result.checked !== false) onNext();
   };
 
   return (
@@ -430,17 +548,27 @@ function StepApiKey({
         locally in <code className="text-xs font-mono text-text">~/.anyscribe/.env</code> and
         never shared.
       </p>
+      {providerName === "openai" && (
+        <p className="text-xs text-text-secondary border-l-[3px] border-amber bg-amber/[0.07] rounded-md px-3 py-2 mb-4">
+          OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail.
+        </p>
+      )}
+      {uncheckable && (
+        <p className="text-xs text-amber border-l-[3px] border-amber bg-amber/[0.07] rounded-md px-3 py-2 mb-4">
+          Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your
+          first transcript.
+        </p>
+      )}
       <div className="mb-4">
         <input
           type="password"
           value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setTestResult(null);
-          }}
+          onChange={(e) => onChange(e.target.value)}
+          // a check answers for the text it sent: no edits until it does
+          readOnly={testing}
           placeholder="Paste key here"
           autoFocus
-          className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text font-mono outline-none focus:border-amber/40"
+          className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text font-mono outline-none focus:border-amber/40 read-only:opacity-60"
         />
         {provider?.url && (
           <p className="text-[10px] font-mono text-text-muted mt-2">
@@ -459,52 +587,78 @@ function StepApiKey({
 
       {testResult && (
         <div
+          role="status"
           className={`rounded-md px-3 py-2 mb-4 border ${
-            testResult.success
+            accepted
               ? "border-green/30 bg-green/5"
-              : "border-red/30 bg-red/5"
+              : unchecked
+                ? "border-amber/30 bg-amber/5"
+                : "border-red/30 bg-red/5"
           }`}
         >
-          <div className="flex items-center gap-2">
-            {testResult.success ? (
-              <Check className="w-3.5 h-3.5 text-green" />
+          <div className="flex items-start gap-2">
+            {accepted ? (
+              <Check className="w-3.5 h-3.5 text-green mt-0.5 shrink-0" />
             ) : (
-              <AlertCircle className="w-3.5 h-3.5 text-red" />
+              <AlertCircle
+                className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${unchecked ? "text-amber" : "text-red"}`}
+              />
             )}
             <p
-              className={`text-xs font-mono ${
-                testResult.success ? "text-green" : "text-red"
+              className={`text-xs ${
+                accepted ? "text-green" : unchecked ? "text-amber" : "text-red"
               }`}
             >
               {testResult.message}
             </p>
           </div>
+          {refused && (
+            <button
+              onClick={onNext}
+              disabled={testing}
+              className="mt-2 ml-5.5 text-xs text-text-muted underline hover:text-text cursor-pointer"
+            >
+              Use this key anyway
+            </button>
+          )}
         </div>
       )}
 
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer flex items-center gap-1"
+          disabled={testing}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
         >
           <ChevronLeft className="w-3 h-3" />
           Back
         </button>
         <div className="flex items-center gap-2">
+          {!uncheckable && (
+            <button
+              onClick={runCheck}
+              disabled={!value || testing}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Test key
+            </button>
+          )}
           <button
-            onClick={handleTest}
-            disabled={!value || testing}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test key"}
-          </button>
-          <button
-            onClick={onNext}
-            disabled={!value}
+            onClick={handleNext}
+            disabled={!value || testing || refused}
             className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
           >
-            Next
-            <ChevronRight className="w-3 h-3" />
+            {testing ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Checking key…
+              </>
+            ) : (
+              <>
+                Next
+                <ChevronRight className="w-3 h-3" />
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -521,6 +675,7 @@ function StepOfflineOptIn({
   onPresetSize,
   onSetLanguage,
   onSetupDone,
+  onRunning,
   onBack,
   onNext,
 }: {
@@ -532,74 +687,121 @@ function StepOfflineOptIn({
   onPresetSize: (s: string) => void;
   onSetLanguage: (code: string) => void;
   onSetupDone: (done: Pick<FormState, "alsoModels" | "restartNeeded">) => void;
+  onRunning: (watch: SetupWatch) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const [status, setStatus] = useState<LocalStatusResponse | null>(null);
-  const [settingUp, setSettingUp] = useState(false);
+  // watching: a setup is (or may be) running, so the step reads its status
+  const [watching, setWatching] = useState(false);
+  const [starting, setStarting] = useState(false); // the start request hasn't settled
+  const busy = watching || starting;
+  // two status reads in a row failed or timed out
+  const [unreachable, setUnreachable] = useState(false);
+  const failsRef = useRef(0);
   const [setupError, setSetupError] = useState<string | null>(null);
+  // setup ended with no error but still not set up (ffmpeg shows its own notice)
+  const [missing, setMissing] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const logCursorRef = useRef(0);
   const [rec, setRec] = useState<LocalRecommendation | null>(null);
+  const haveStatus = status !== null;
 
+  // The wizard's lock has this one writer, and goes back to idle with the step.
+  const watch: SetupWatch = unreachable ? "unknown" : busy ? "running" : "idle"; // busy: locked from the click, not only once watching
   useEffect(() => {
-    getLocalStatus().then((s) => {
-      setStatus(s);
-      onPresetSize(s.recommended_model);
-    });
-  }, [onPresetSize]);
+    const report = (w: SetupWatch) => onRunning(w);
+    report(watch);
+    return () => report("idle");
+  }, [watch, onRunning]);
 
-  // Poll during setup.
+  // One status read at a time, each with a time limit: until the first status
+  // arrives, then for as long as a setup is watched. Watching ends only on a
+  // good read, sent after the start request settled, that says it stopped.
   useEffect(() => {
-    if (!settingUp) return;
-    const id = setInterval(async () => {
-      try {
-        const [s, log] = await Promise.all([
-          getLocalStatus(),
-          getSetupLog(logCursorRef.current),
-        ]);
+    if (haveStatus && !watching) return;
+    let stop = false;
+    let ctl: AbortController | undefined;
+    let next: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      ctl = new AbortController();
+      const s = await limited(getLocalStatus, ctl).catch(() => null);
+      // the log is read on its own: a failed log read changes only the log panel
+      ctl = new AbortController();
+      const log =
+        s && watching
+          ? await limited((sig) => getSetupLog(logCursorRef.current, sig), ctl).catch(() => null)
+          : null;
+      if (stop) return; // this loop was replaced or the step closed: drop the answer
+      if (log && log.lines.length > 0) {
+        setLogLines((prev) => [...prev, ...log.lines]);
+        logCursorRef.current = log.total;
+      }
+      if (!s) {
+        failsRef.current += 1;
+        if (failsRef.current >= 2) setUnreachable(true);
+      } else {
+        failsRef.current = 0;
+        setUnreachable(false);
         setStatus(s);
-        if (log.lines.length > 0) {
-          setLogLines((prev) => [...prev, ...log.lines]);
-          logCursorRef.current = log.total;
-        }
-        if (!s.setup_running) {
-          clearInterval(id);
-          setSettingUp(false);
+        onPresetSize(s.recommended_model);
+        if (s.setup_running) {
+          // watch the running setup, locked, with its progress and its model
+          if (!watching) onSetEnabled(true);
+          if (s.setup_last_model && s.setup_last_model !== selected) onSelectSize(s.setup_last_model);
+          setWatching(true);
+        } else if (watching) {
+          // the one read that ends watching: its branch runs once
+          stop = true;
+          setWatching(false);
           if (s.setup_error) {
             setSetupError(s.setup_error);
             setLogOpen(true);
-          } else if (s.set_up) {
+          } else if (s.set_up && s.models.find((m) => m.size === selected)?.runnable) {
+            // set_up means some model can run: All set names this one as ready.
             // The server queued the extras (Turbo for a mix) itself; All set
             // shows their progress.
             onSetupDone({ alsoModels: s.setup_also, restartNeeded: s.restart_needed });
             onNext();
+          } else if (s.ffmpeg_ok) {
+            const name = s.models.find((m) => m.size === selected)?.spec.display_name;
+            setMissing(missingPart(s, name, required));
           }
+          return;
         }
-      } catch {
-        // transient
       }
-    }, 1500);
-    return () => clearInterval(id);
-  }, [settingUp, onNext, onSetupDone]);
+      next = setTimeout(tick, POLL_MS);
+    };
+    void tick();
+    return () => {
+      stop = true;
+      ctl?.abort();
+      clearTimeout(next);
+    };
+  }, [haveStatus, watching, selected, required, onPresetSize, onSetEnabled, onSelectSize, onSetupDone, onNext]);
 
   // The only way forward with local on: setup (quick when the model can
   // already run) switches the default and queues the extras server-side.
   const handleStartSetup = async () => {
     if (!selected) return;
-    setSettingUp(true);
+    setStarting(true);
     setSetupError(null);
+    setMissing(null);
     setLogLines([]);
     logCursorRef.current = 0;
+    let refused = false;
     try {
-      await setupLocal(selected, keptRec?.also ?? []);
-      const s = await getLocalStatus();
-      setStatus(s);
+      await limited((sig) => setupLocal(selected, keptRec?.also ?? [], sig));
     } catch (e) {
-      setSetupError(e instanceof Error ? e.message : "Failed to start setup");
-      setSettingUp(false);
+      // Only an answer other than 409 means it didn't start. A 409 (one is
+      // already running) or no answer at all (it may have started): watch.
+      const msg = e instanceof Error ? e.message : "";
+      refused = /^\d{3}:/.test(msg) && !msg.startsWith("409");
     }
+    setStarting(false);
+    if (refused) setMissing(`anyscribe couldn't start the setup. Click Try again; if it fails again, ${otherwise(required)}.`);
+    else setWatching(true);
   };
 
   const models = status?.models || [];
@@ -612,6 +814,16 @@ function StepOfflineOptIn({
   const allRunnable =
     toFetch.length > 0 && toFetch.every((id) => models.find((m) => m.size === id)?.runnable);
   const names = toFetch.map((id) => models.find((m) => m.size === id)?.spec.display_name ?? id);
+  const ffmpegMissing = !!status && !status.ffmpeg_ok;
+  // the model the running setup fetches: may differ from the pick after a reload
+  const runningName =
+    models.find((m) => m.size === status?.setup_last_model)?.spec.display_name ??
+    pick?.display_name;
+  const checkFfmpeg = async () => {
+    const s = await limited(getLocalStatus);
+    setStatus(s);
+    return s.ffmpeg_ok;
+  };
 
   return (
     <>
@@ -627,7 +839,8 @@ function StepOfflineOptIn({
               id="enable-local"
               checked={enabled}
               onChange={(e) => onSetEnabled(e.target.checked)}
-              className="cursor-pointer"
+              disabled={busy}
+              className="cursor-pointer disabled:cursor-not-allowed"
             />
             <label
               htmlFor="enable-local"
@@ -646,28 +859,24 @@ function StepOfflineOptIn({
         </p>
       )}
 
-      {(enabled || required) &&
-        (status ? (
-          <LocalModelPicker
-            models={models}
-            featured={status.featured}
-            languageAnswers={status.language_answers}
-            caption={status.benchmark_caption}
-            selected={selected}
-            onSelect={onSelectSize}
-            disabled={settingUp}
-            guideOpen={required}
-            onRecommendation={(r) => {
-              setRec(r);
-              onSelectSize(r.primary); // "nothing fits" clears it: no download offered
-            }}
-            onSetLanguage={onSetLanguage}
-          />
-        ) : (
-          <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
-        ))}
+      {unreachable && (
+        <div role="status" className="rounded-md border border-amber/40 bg-amber/[0.08] px-3 py-2.5 mb-4 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber mt-0.5 shrink-0" />
+          <p className="text-xs text-text">
+            Can't reach anyscribe right now. If you quit it, open it again; this page picks the
+            download back up.
+          </p>
+        </div>
+      )}
 
-      {status?.restart_needed && <RestartBanner />}
+      {(enabled || required) && ffmpegMissing && <FfmpegNotice onCheckAgain={checkFfmpeg} />}
+
+      {status?.restart_needed && (
+        <RestartBanner>
+          Restart anyscribe, then open the setup wizard again (Settings, then Run setup wizard);
+          the download is kept.
+        </RestartBanner>
+      )}
 
       {setupError && (
         <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
@@ -680,15 +889,24 @@ function StepOfflineOptIn({
         </div>
       )}
 
-      {(settingUp || logLines.length > 0) && (enabled || required) && (
+      {missing && (
+        <div role="alert" className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
+            <p className="text-xs text-red">{missing}</p>
+          </div>
+        </div>
+      )}
+
+      {(busy || logLines.length > 0) && (enabled || required) && (
         <div className="my-4">
           <div className="rounded-md border border-border-subtle bg-surface-raised px-3 py-2">
             <div className="flex items-center gap-2">
-              {settingUp && <Loader2 className="w-4 h-4 animate-spin text-amber" />}
+              {busy && <Loader2 className="w-4 h-4 animate-spin text-amber" />}
               <p className="text-xs text-text font-mono">
-                {settingUp
-                  ? status?.setup_progress?.percent != null
-                    ? `Downloading ${pick?.display_name ?? "the model"}… ${status.setup_progress.percent}%`
+                {busy
+                  ? !unreachable && status?.setup_progress?.percent != null
+                    ? `Downloading ${runningName ?? "the model"}… ${status.setup_progress.percent}%`
                     : "Installing the local engines and downloading the model…"
                   : "Install log"}
               </p>
@@ -708,10 +926,31 @@ function StepOfflineOptIn({
         </div>
       )}
 
+      {(enabled || required) &&
+        (status ? (
+          <LocalModelPicker
+            models={models}
+            featured={status.featured}
+            languageAnswers={status.language_answers}
+            caption={status.benchmark_caption}
+            selected={selected}
+            onSelect={onSelectSize}
+            disabled={busy}
+            guideOpen={required}
+            onRecommendation={(r) => {
+              setRec(r);
+              onSelectSize(r.primary); // "nothing fits" clears it: no download offered
+            }}
+            onSetLanguage={onSetLanguage}
+          />
+        ) : (
+          <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
+        ))}
+
       <div className="flex items-center justify-between mt-5">
         <button
           onClick={onBack}
-          disabled={settingUp}
+          disabled={busy}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
         >
           <ChevronLeft className="w-3 h-3" />
@@ -721,14 +960,16 @@ function StepOfflineOptIn({
           {(enabled || required) && (
             <button
               onClick={handleStartSetup}
-              disabled={!selected || settingUp}
+              disabled={!selected || busy || ffmpegMissing}
               className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
             >
-              {settingUp ? (
+              {busy ? (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Setting up…
                 </>
+              ) : missing ? (
+                "Try again"
               ) : !pick ? (
                 "Install now"
               ) : downloadMb > 0 ? (
@@ -754,8 +995,28 @@ function StepOfflineOptIn({
           )}
         </div>
       </div>
+      {(enabled || required) && ffmpegMissing && (
+        <p className="mt-2 text-right text-[11px] text-text-muted">
+          Install ffmpeg first (see above).
+        </p>
+      )}
     </>
   );
+}
+
+/** The way on when local setup keeps failing. */
+function otherwise(required: boolean): string {
+  return required ? "choose a cloud service instead" : "untick local transcription and go on";
+}
+
+/** Setup ended without an error but the picked model can't run: say why,
+ * plainly. Null when a restart is due: the RestartBanner says it alone. */
+function missingPart(s: LocalStatusResponse, name: string | undefined, required: boolean): string | null {
+  if (!s.faster_whisper_installed && s.restart_needed) return null;
+  if (!s.faster_whisper_installed) {
+    return `A part anyscribe needs to transcribe on this computer didn't install. Click Try again; if it fails again, ${otherwise(required)}.`;
+  }
+  return `Setup finished, but ${name ?? "the model"} can't run yet. Click Try again; if it fails again, ${otherwise(required)}.`;
 }
 
 function StepWorkspace({

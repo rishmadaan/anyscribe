@@ -666,7 +666,7 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 - [x] W3. ffmpeg missing: both installers re-check after installing and end with "anyscribe is installed, but can't transcribe yet" instead of "ready" (`brew install` exits 0 for an unlinked formula); the setup wizard's local step shows "One more thing: ffmpeg" before download and after a setup that ends without an error but not set up.
 - [x] W4. `classify_api_error`: 402, and 429 with `insufficient_quota`, become a non-retryable `NoCreditError` with the plain "no credit" message; OpenAI key steps say OpenAI is prepaid.
 - [x] W5. Real key checks: Groq (`/openai/v1/models`) and OpenRouter (`/api/v1/key`) call the provider; Sarvam returns `checked: false` ("Not checked yet", amber); plain messages for accepted, refused, error status and unreachable; wizard Next runs the check, "Use this key anyway".
-- [x] W6. Wizard locked during the local download (Escape, outside click, Skip); `setup_running` and a 409 resume watching.
+- [x] W6. Wizard locked during the local download (Escape, outside click, Skip); `setup_running` and a 409 resume watching. The local step alone owns the lock and reads one status at a time (10 s limit); two failed reads show "Can't reach anyscribe right now", and only then can the wizard close, after one confirmation.
 - [x] W7. Installer last box: click the app after desktop mode, open a new terminal window when the installing shell can't find `anyscribe` (pipx); `install.ps1` no longer `exit`s under `irm | iex` (it closed the window).
 - [x] W8. Done screen "Read transcript" as the main action; formatted transcript view (no `dangerouslySetInnerHTML`, http/https links only); slug helper handles Windows paths.
 
@@ -683,6 +683,9 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 - [ ] "Open folder".
 - [ ] Decide what "Copy text" copies.
 - [ ] Settings' Set up local transcription window ends silently when ffmpeg is missing (LocalSetupModal.tsx); give it the wizard's ffmpeg notice.
+- [ ] A way out of a slow download: confirm-to-close or continue in the background, the owner's call.
+- [ ] LocalSetupModal has the same lock shape: `disableClose={running}`, `Promise.all`, swallowed errors.
+- [ ] `beforeunload` guard on reload.
 
 ### Wave 3
 

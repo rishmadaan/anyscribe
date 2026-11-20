@@ -56,7 +56,9 @@ the next release.
   onboard`) says to add credit first.
 - **The wizard stays open during the model download:** Escape, a click outside
   and Skip no longer close it mid-download, and reloading the page picks the
-  running download back up instead of showing an error.
+  running download back up instead of showing an error. If the page can't
+  reach anyscribe (you quit it, say), the wizard says "Can't reach anyscribe
+  right now" and can be closed after one question; the download carries on.
 
 **Transcribing and reading**
 - **"Your OpenAI account has no credit."** An account with no credit now gets

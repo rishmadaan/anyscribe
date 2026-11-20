@@ -563,6 +563,25 @@ transcript). Or just delete the file if you've moved on — nothing else referen
 
 ## Local (offline) transcription
 
+### "Can't reach anyscribe right now." (setup wizard, during the model download)
+
+The dashboard page lost contact with anyscribe while it was watching the
+download: anyscribe was quit, crashed, or the computer slept. The download
+itself runs inside anyscribe, so if anyscribe is still running it carries on.
+
+- **If you quit anyscribe, open it again** (click the app, or type
+  `anyscribe ui`). The page keeps asking, and as soon as anyscribe answers the
+  message goes away and the progress comes back.
+- **To close the wizard meanwhile:** press Escape or click **Skip for now**. It
+  asks "Close setup?" first: **Keep waiting** stays, **Close setup** closes.
+  Your choices on the wizard's screens are saved only when you click Finish,
+  so to finish later go to **Settings**, then **Run setup wizard**; it picks a
+  running download back up.
+
+While anyscribe answers, the wizard stays open during the download (Escape,
+a click outside, Skip and Back are off); this message is the only time it can
+be closed mid-download.
+
 ### `faster-whisper is not installed` / `onnx-asr is not installed`
 
 The local provider is opt-in and needs a one-time install:

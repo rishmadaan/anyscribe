@@ -68,6 +68,23 @@ wait and retry" and retried. They are now a non-retryable `NoCreditError`
 with the billing link (OpenAI) and the free local option. Ordinary 429s still
 retry.
 
+**The download lock (W6) took three rounds.** "Is a setup running" had two
+copies (the wizard's and the local step's) and about nine writers, and the
+page learns the answer from status reads that can fail, hang or land late.
+Each writer handled only the outcomes its author walked, so round 1 unlocked
+on a failed read and round 2 stayed locked forever on one. The shape that
+holds: the local step alone owns it (one effect reports idle, running or
+unknown to the wizard); status is read one request at a time, each with a
+10 s limit (`AbortController`, not `AbortSignal.timeout`), separately from
+the log; watching ends only on a good read, sent after the start request
+settled, that says the setup stopped; a start that got a 409 or no answer at
+all is watched, not reported as failed. When two reads in a row fail, the
+step says "Can't reach anyscribe right now" and the wizard can close after
+one confirmation: a hard lock with no exit while the server is unreachable
+traps the customer. The server keeps setup state in memory, so after a
+restart it says "not running, no error"; the step's runnable check turns
+that into "can't run yet, Try again", never "ready".
+
 **Key checks (W5).** Groq's check returned "API key is set" without a call,
 Sarvam's the same, and OpenRouter called `/api/v1/models`, which answers 200
 with no key at all, so any text was "valid". Groq now calls
@@ -90,6 +107,12 @@ way to check a key without spending, so it says "Not checked yet" in amber.
   round 1 review found a non-technical Mac user would not find that folder.
 - The Linux ffmpeg command in the box follows the detected package manager
   (`apt`, `dnf`, `pacman`).
+- W6 keeps the owner's hard lock while the page can confirm the download runs;
+  the round 2 diagnosis recommended confirm-to-close instead, left to the
+  owner as a wave 2 question (BACKLOG).
+- On Windows the ffmpeg notice and the installer's box say to quit anyscribe
+  from the tray and open it again: the running tray keeps the PATH it started
+  with, so Check again can't see a fresh winget install.
 
 ## Known limits
 

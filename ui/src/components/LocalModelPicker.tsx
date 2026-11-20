@@ -82,7 +82,7 @@ function DefaultStatus({ m }: { m: LocalModelEntry }) {
     );
   return (
     <span className="text-[11px] font-mono text-text-muted whitespace-nowrap">
-      {m.cached ? "downloaded; setup finishes it" : m.partial ? "incomplete: the download resumes" : "not downloaded"}
+      {m.cached ? "downloaded; setup finishes it" : m.partial ? "incomplete: setup downloads it again" : "not downloaded"}
     </span>
   );
 }

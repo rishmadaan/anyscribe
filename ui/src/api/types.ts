@@ -87,7 +87,7 @@ export interface LocalModelEntry {
   size: string;
   /** the model's own files are complete (sizes and disk maths only) */
   cached: boolean;
-  /** some bytes on disk but not complete (interrupted download); pull resumes it */
+  /** some bytes on disk but not complete (interrupted download); pull downloads it again */
   partial?: boolean;
   /** can transcribe now: engine installed, files complete, Parakeet's helpers too */
   runnable: boolean;
@@ -117,6 +117,8 @@ export interface LocalStatusResponse {
   setup_error: string | null;
   setup_last_model: string | null;
   setup_progress: DownloadProgress | null;
+  /** the last setup's ending (set_up | superseded | failed); null while running or after a restart */
+  setup_outcome: string | null;
   recommended_model: string;
   choices: string[];
   featured: string[];

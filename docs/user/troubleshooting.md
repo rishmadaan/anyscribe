@@ -563,24 +563,50 @@ transcript). Or just delete the file if you've moved on — nothing else referen
 
 ## Local (offline) transcription
 
+### "Close setup? The download keeps going in the background while anyscribe stays open." (setup wizard)
+
+You pressed Escape, clicked outside the wizard or clicked **Skip for now**
+while it was setting up local transcription. The wizard asks first because
+closing it does not stop the download, but does drop your choices:
+
+- **Keep setting up** goes back to the wizard.
+- **Close setup** closes it. The download keeps going inside anyscribe as long
+  as anyscribe stays open. Your choices on the wizard's screens are saved only
+  when you click Finish, so to finish later go to **Settings**, then **Run
+  setup wizard**: it opens on the download if it is still running.
+
+Back stays off until the setup finishes.
+
 ### "Can't reach anyscribe right now." (setup wizard, during the model download)
 
 The dashboard page lost contact with anyscribe while it was watching the
 download: anyscribe was quit, crashed, or the computer slept. The download
-itself runs inside anyscribe, so if anyscribe is still running it carries on.
+runs inside anyscribe, so it carries on only while anyscribe keeps running;
+quitting anyscribe stops it.
 
-- **If you quit anyscribe, open it again** (click the app, or type
-  `anyscribe ui`). The page keeps asking, and as soon as anyscribe answers the
-  message goes away and the progress comes back.
-- **To close the wizard meanwhile:** press Escape or click **Skip for now**. It
-  asks "Close setup?" first: **Keep waiting** stays, **Close setup** closes.
-  Your choices on the wizard's screens are saved only when you click Finish,
-  so to finish later go to **Settings**, then **Run setup wizard**; it picks a
-  running download back up.
+- **If you closed anyscribe, the download stopped too.** Open anyscribe again
+  (click the app, or type `anyscribe ui`). The page keeps asking. When
+  anyscribe answers, the message goes away and the page shows "Setup didn't
+  finish" with a **Try again** button (below) to start it again.
+- **If anyscribe is still open** (the computer slept, say), the message goes
+  away by itself once the page reaches it, and the page shows the download or
+  how it ended.
+- **To close the wizard meanwhile:** press Escape or click **Skip for now**,
+  then **Close setup** (above).
 
-While anyscribe answers, the wizard stays open during the download (Escape,
-a click outside, Skip and Back are off); this message is the only time it can
-be closed mid-download.
+### "Setup didn't finish." (setup wizard)
+
+anyscribe isn't reporting a running setup or its result. This can happen after
+anyscribe was closed or restarted, or if the start request never reached it.
+Click **Try again** to start it again. Nothing you chose on the wizard's
+screens is lost while the wizard stays open.
+
+### "anyscribe couldn't finish setting up local transcription." (setup wizard)
+
+The setup ran but stopped with an error. Click **Try again**. If it fails again,
+untick local transcription and go on, or choose a cloud service instead. To see
+why it failed, click **show install log** above the model cards: the last line
+starting with `[error]` names the reason, and you can look it up on this page.
 
 ### `faster-whisper is not installed` / `onnx-asr is not installed`
 
@@ -624,8 +650,8 @@ again.
 
 Its download was interrupted, so some files are missing and anyscribe won't
 use it (it never counts as downloaded, and the language check won't switch to
-it). Click **Incomplete: resume download** in Settings → Local, or run
-`anyscribe model pull <id>`; the download picks up where it stopped.
+it). Click **Incomplete: download again** in Settings → Local, or run
+`anyscribe model pull <id>`; the download starts again.
 
 ### "Detected Hindi … no Whisper model to use instead is downloaded"
 

@@ -357,7 +357,7 @@ the default as it was. In the Web UI, picking a model that isn't downloaded
 starts its download and makes it the default once it's ready (a later pick
 replaces that; a failed download leaves the default as it was). A download that
 was interrupted shows as **incomplete** (`partial` in `--json`); picking it or
-`anyscribe model pull <id>` resumes it. A one-off override is available via
+`anyscribe model pull <id>` downloads it again. A one-off override is available via
 `ASCLI_LOCAL_MODEL=medium anyscribe "<url>"` (`ASCLI_` is the legacy env prefix,
 still honored). Nothing changes for an existing setup unless you pick a new model.
 

@@ -412,6 +412,6 @@ def model_info(
         if on_disk:
             console.print(f"  Disk:      {on_disk // (1024 * 1024)} MB")
         if payload["partial"]:
-            console.print(f"  [yellow]Resume the download: anyscribe model pull {size}[/yellow]")
+            console.print(f"  [yellow]Download it again: anyscribe model pull {size}[/yellow]")
         if payload["default"]:
             console.print("  [green]This is the default model.[/green]")

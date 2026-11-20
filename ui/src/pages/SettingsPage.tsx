@@ -1159,7 +1159,7 @@ function LocalProviderCard({
                       className="rounded-[7px] border border-dashed border-border px-2.5 py-1 text-xs text-text-secondary hover:text-text hover:bg-surface transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1"
                     >
                       <Download className="w-3 h-3" />
-                      {m.partial || m.cached ? "Incomplete: resume download" : "Download"}
+                      {m.partial || m.cached ? "Incomplete: download again" : "Download"}
                     </button>
                   </span>
                 );

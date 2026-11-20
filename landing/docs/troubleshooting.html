@@ -467,23 +467,44 @@ also works, but downloads the source again (add <code>--force</code> if it partl
 transcript). Or just delete the file if you've moved on — nothing else references it.</p>
 <hr />
 <h2 id="local-offline-transcription">Local (offline) transcription</h2>
+<h3 id="close-setup-the-download-keeps-going-in-the-background-while-anyscribe-stays-open-setup-wizard">"Close setup? The download keeps going in the background while anyscribe stays open." (setup wizard)</h3>
+<p>You pressed Escape, clicked outside the wizard or clicked <strong>Skip for now</strong>
+while it was setting up local transcription. The wizard asks first because
+closing it does not stop the download, but does drop your choices:</p>
+<ul>
+<li><strong>Keep setting up</strong> goes back to the wizard.</li>
+<li><strong>Close setup</strong> closes it. The download keeps going inside anyscribe as long
+  as anyscribe stays open. Your choices on the wizard's screens are saved only
+  when you click Finish, so to finish later go to <strong>Settings</strong>, then <strong>Run
+  setup wizard</strong>: it opens on the download if it is still running.</li>
+</ul>
+<p>Back stays off until the setup finishes.</p>
 <h3 id="cant-reach-anyscribe-right-now-setup-wizard-during-the-model-download">"Can't reach anyscribe right now." (setup wizard, during the model download)</h3>
 <p>The dashboard page lost contact with anyscribe while it was watching the
 download: anyscribe was quit, crashed, or the computer slept. The download
-itself runs inside anyscribe, so if anyscribe is still running it carries on.</p>
+runs inside anyscribe, so it carries on only while anyscribe keeps running;
+quitting anyscribe stops it.</p>
 <ul>
-<li><strong>If you quit anyscribe, open it again</strong> (click the app, or type
-  <code>anyscribe ui</code>). The page keeps asking, and as soon as anyscribe answers the
-  message goes away and the progress comes back.</li>
-<li><strong>To close the wizard meanwhile:</strong> press Escape or click <strong>Skip for now</strong>. It
-  asks "Close setup?" first: <strong>Keep waiting</strong> stays, <strong>Close setup</strong> closes.
-  Your choices on the wizard's screens are saved only when you click Finish,
-  so to finish later go to <strong>Settings</strong>, then <strong>Run setup wizard</strong>; it picks a
-  running download back up.</li>
+<li><strong>If you closed anyscribe, the download stopped too.</strong> Open anyscribe again
+  (click the app, or type <code>anyscribe ui</code>). The page keeps asking. When
+  anyscribe answers, the message goes away and the page shows "Setup didn't
+  finish" with a <strong>Try again</strong> button (below) to start it again.</li>
+<li><strong>If anyscribe is still open</strong> (the computer slept, say), the message goes
+  away by itself once the page reaches it, and the page shows the download or
+  how it ended.</li>
+<li><strong>To close the wizard meanwhile:</strong> press Escape or click <strong>Skip for now</strong>,
+  then <strong>Close setup</strong> (above).</li>
 </ul>
-<p>While anyscribe answers, the wizard stays open during the download (Escape,
-a click outside, Skip and Back are off); this message is the only time it can
-be closed mid-download.</p>
+<h3 id="setup-didnt-finish-setup-wizard">"Setup didn't finish." (setup wizard)</h3>
+<p>anyscribe isn't reporting a running setup or its result. This can happen after
+anyscribe was closed or restarted, or if the start request never reached it.
+Click <strong>Try again</strong> to start it again. Nothing you chose on the wizard's
+screens is lost while the wizard stays open.</p>
+<h3 id="anyscribe-couldnt-finish-setting-up-local-transcription-setup-wizard">"anyscribe couldn't finish setting up local transcription." (setup wizard)</h3>
+<p>The setup ran but stopped with an error. Click <strong>Try again</strong>. If it fails again,
+untick local transcription and go on, or choose a cloud service instead. To see
+why it failed, click <strong>show install log</strong> above the model cards: the last line
+starting with <code>[error]</code> names the reason, and you can look it up on this page.</p>
 <h3 id="faster-whisper-is-not-installed-onnx-asr-is-not-installed"><code>faster-whisper is not installed</code> / <code>onnx-asr is not installed</code></h3>
 <p>The local provider is opt-in and needs a one-time install:</p>
 <pre><code class="language-bash">anyscribe local setup --model parakeet-v3
@@ -517,8 +538,8 @@ again.</p>
 <h3 id="a-model-shows-as-incomplete">A model shows as "incomplete"</h3>
 <p>Its download was interrupted, so some files are missing and anyscribe won't
 use it (it never counts as downloaded, and the language check won't switch to
-it). Click <strong>Incomplete: resume download</strong> in Settings → Local, or run
-<code>anyscribe model pull &lt;id&gt;</code>; the download picks up where it stopped.</p>
+it). Click <strong>Incomplete: download again</strong> in Settings → Local, or run
+<code>anyscribe model pull &lt;id&gt;</code>; the download starts again.</p>
 <h3 id="detected-hindi-no-whisper-model-to-use-instead-is-downloaded">"Detected Hindi … no Whisper model to use instead is downloaded"</h3>
 <p>Your default is Parakeet, the audio is in a language Parakeet doesn't cover,
 and there's no Whisper model to hand it to. Nothing was written. Download one:</p>

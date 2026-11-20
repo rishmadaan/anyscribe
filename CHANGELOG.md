@@ -54,11 +54,17 @@ the next release.
   check; a refused key stays on the step, with **Use this key anyway**.
 - **OpenAI is prepaid:** the OpenAI key step (dashboard and `anyscribe
   onboard`) says to add credit first.
-- **The wizard stays open during the model download:** Escape, a click outside
-  and Skip no longer close it mid-download, and reloading the page picks the
-  running download back up instead of showing an error. If the page can't
-  reach anyscribe (you quit it, say), the wizard says "Can't reach anyscribe
-  right now" and can be closed after one question; the download carries on.
+- **Closing the wizard during the model download asks first:** Escape, a click
+  outside and **Skip for now** show "Close setup? The download keeps going in
+  the background while anyscribe stays open. …" with **Keep setting up** and
+  **Close setup**; the wizard is never locked; Back and the model choices are
+  off until the setup finishes. Reloading the page picks the running download back up
+  instead of showing an error. If the page can't reach anyscribe, the wizard
+  says "Can't reach anyscribe right now"; if anyscribe then reports no setup
+  and no result (after a restart, for example), it says "Setup didn't
+  finish", with **Try again**. A setup that fails says "anyscribe couldn't
+  finish setting up local transcription. Click Try again."; the technical
+  details stay in the install log, which opens only when you click it.
 
 **Transcribing and reading**
 - **"Your OpenAI account has no credit."** An account with no credit now gets

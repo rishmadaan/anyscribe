@@ -81,7 +81,7 @@ const POLL_MS = 1500;
 // Whether Try again resumes a half-downloaded model was checked with a real
 // download (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12).
 const S12 =
-  "Can't reach anyscribe right now. If you closed it, open it again: this page then shows the download if it is still running, or a Try again button to start it again.";
+  "Can't reach anyscribe right now. If you closed it, the download stopped too: open anyscribe again and this page shows a Try again button to start it again.";
 // no cause named: the server answers the same after a restart and when the start never reached it
 const S14 = "Setup didn't finish. Click Try again to start it again.";
 // the server's own error text (installer stderr, HTTP details) stays in the install log

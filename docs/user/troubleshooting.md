@@ -584,10 +584,13 @@ download: anyscribe was quit, crashed, or the computer slept. The download
 runs inside anyscribe, so it carries on only while anyscribe keeps running;
 quitting anyscribe stops it.
 
-- **If you closed anyscribe, open it again** (click the app, or type
-  `anyscribe ui`). The page keeps asking. When anyscribe answers, the message
-  goes away and the page shows the download if it is still running, or "Setup
-  didn't finish" with a **Try again** button (below).
+- **If you closed anyscribe, the download stopped too.** Open anyscribe again
+  (click the app, or type `anyscribe ui`). The page keeps asking. When
+  anyscribe answers, the message goes away and the page shows "Setup didn't
+  finish" with a **Try again** button (below) to start it again.
+- **If anyscribe is still open** (the computer slept, say), the message goes
+  away by itself once the page reaches it, and the page shows the download or
+  how it ended.
 - **To close the wizard meanwhile:** press Escape or click **Skip for now**,
   then **Close setup** (above).
 

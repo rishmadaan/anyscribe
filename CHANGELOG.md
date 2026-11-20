@@ -57,8 +57,8 @@ the next release.
 - **Closing the wizard during the model download asks first:** Escape, a click
   outside and **Skip for now** show "Close setup? The download keeps going in
   the background while anyscribe stays open. …" with **Keep setting up** and
-  **Close setup**; the wizard is never locked, and only Back is off until the
-  setup finishes. Reloading the page picks the running download back up
+  **Close setup**; the wizard is never locked; Back and the model choices are
+  off until the setup finishes. Reloading the page picks the running download back up
   instead of showing an error. If the page can't reach anyscribe, the wizard
   says "Can't reach anyscribe right now"; if anyscribe then reports no setup
   and no result (after a restart, for example), it says "Setup didn't

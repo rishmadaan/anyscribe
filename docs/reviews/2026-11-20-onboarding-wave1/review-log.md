@@ -27,4 +27,5 @@ Round 1 fit seat ran at the Agent tool's default effort (the tool's effort is se
 | F8 | 1 | opus fit | nit | UPHELD | install.ps1 non-desktop route with ffmpeg missing tells them to type in the same window | |
 | F9 | 1 | opus fit | nit | UPHELD | Sarvam: first Next only shows the amber note | |
 | F10 | 1 | opus fit | nit | UPHELD | missingPart() says "the local engine (faster-whisper)" and "install log" | |
+
 CI on 8d63221: all 9 checks pass (gh pr checks 26, 2026-11-20).

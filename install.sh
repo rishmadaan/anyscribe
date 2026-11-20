@@ -32,6 +32,7 @@ VERBOSE=false
 DRY_RUN=false
 USED_PIPX=false
 POST_INSTALL_SKIPPED=false
+FFMPEG_MISSING=false       # true when ffmpeg is still not on PATH after installing it
 PY="python3"
 
 # ── Colors ────────────────────────────────────────────────────
@@ -291,9 +292,28 @@ check_ffmpeg() {
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
         install_package "ffmpeg" "ffmpeg" "ffmpeg" ""
+        # A package manager can succeed without putting ffmpeg on PATH (brew
+        # exits 0 for an installed but unlinked formula), so look again.
+        if [[ "$DRY_RUN" != true ]] && ! { command_exists ffmpeg && command_exists ffprobe; }; then
+            warn "ffmpeg is still not available after installing it."
+            FFMPEG_MISSING=true
+        fi
     else
         die "ffmpeg is required for audio processing."
     fi
+}
+
+# The command that installs ffmpeg here, for the person to run themselves.
+ffmpeg_install_cmd() {
+    if [[ "$OS" == "macos" ]]; then
+        echo "brew install ffmpeg"
+        return
+    fi
+    case "$LINUX_PKG" in
+        dnf)    echo "sudo dnf install ffmpeg" ;;
+        pacman) echo "sudo pacman -S ffmpeg" ;;
+        *)      echo "sudo apt install ffmpeg" ;;
+    esac
 }
 
 # ── Install anyscribe via pipx (installs pipx first if absent) ──
@@ -603,6 +623,23 @@ desktop_where() {
     fi
 }
 
+# A box in the given colour: a title, then each further argument as its own
+# paragraph, wrapped to fit (fold -s breaks at spaces).
+box() {
+    local color="$1" title="$2" para line
+    local bar="────────────────────────────────────────────────────────"
+    shift 2
+    echo -e "${color}${BOLD}  ┌${bar}┐${NC}"
+    printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "$title" "$NC"
+    for para in "$@"; do
+        printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "" "$NC"
+        while IFS= read -r line; do
+            printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "$line" "$NC"
+        done < <(fold -s -w 52 <<<"$para")
+    done
+    echo -e "${color}${BOLD}  └${bar}┘${NC}"
+}
+
 # ── Main ──────────────────────────────────────────────────────
 main() {
     if [[ "$OS" == "macos" ]]; then
@@ -625,7 +662,10 @@ main() {
         ok "$(desktop_where)"
         echo ""
     fi
-    if [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
+    if [[ "$FFMPEG_MISSING" == true ]]; then
+        box "$YELLOW" "anyscribe is installed, but can't transcribe yet" \
+            "ffmpeg, a free audio tool, is missing. Install it with: $(ffmpeg_install_cmd), then open anyscribe again."
+    elif [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
         echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
         echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
         echo -e "${GREEN}${BOLD}  │                                     │${NC}"
@@ -642,13 +682,13 @@ main() {
         echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
         echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
         echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
-        if [[ "$DESKTOP_STATE" == failed ]]; then
-            echo ""
-            warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
-        elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
-            echo ""
-            warn "anyscribe was installed, but the launch you asked for did not run (see above)."
-        fi
+    fi
+    if [[ "$DESKTOP_STATE" == failed ]]; then
+        echo ""
+        warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
+    elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
+        echo ""
+        warn "anyscribe was installed, but the launch you asked for did not run (see above)."
     fi
     if [[ "$USED_PIPX" == true ]]; then
         echo ""

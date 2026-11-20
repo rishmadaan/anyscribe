@@ -489,9 +489,11 @@ function StepApiKey({
           type="password"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          // a check answers for the text it sent: no edits until it does
+          readOnly={testing}
           placeholder="Paste key here"
           autoFocus
-          className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text font-mono outline-none focus:border-amber/40"
+          className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text font-mono outline-none focus:border-amber/40 read-only:opacity-60"
         />
         {provider?.url && (
           <p className="text-[10px] font-mono text-text-muted mt-2">
@@ -538,6 +540,7 @@ function StepApiKey({
           {refused && (
             <button
               onClick={onNext}
+              disabled={testing}
               className="mt-2 ml-5.5 text-xs text-text-muted underline hover:text-text cursor-pointer"
             >
               Use this key anyway
@@ -549,7 +552,8 @@ function StepApiKey({
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer flex items-center gap-1"
+          disabled={testing}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
         >
           <ChevronLeft className="w-3 h-3" />
           Back

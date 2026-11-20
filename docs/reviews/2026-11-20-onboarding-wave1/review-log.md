@@ -54,3 +54,17 @@ Round 2 raised code defects in the C1 lock (R2C1 to R2C3) at size L: per the rev
 CI on c07a65c: all 9 checks pass (gh pr checks 26, 2026-11-20).
 Cap reached (round 3 of 3 at L). Code leftovers hold the merge and go to the owner once (review skill step 7): R3C1 (should-fix), R3C3/F3-1 (should-fix; it changes a factual claim, so it is not wording-only), plus nits R3C2, F3-2, F3-3, F3-4. No further review round without his yes.
 Unexplained: one pytest run on c07a65c showed 1 failed, 930 passed; three reruns passed 931/931 and CI passed on three Python versions; the failing test's name was not captured (machine load about 41, disk at 99 to 100%).
+
+Owner decision, 2026-11-20 (AskUserQuestion in the lead session): merge now with the round 3 leftovers; the lead finishes the download lock in a follow-up PR, with its own review, before any PyPI release. Lock design for the follow-up: closing during a download is allowed after a warning (the diagnosis's design B), replacing the hard lock.
+Leftovers carried to the follow-up: R3C1, R3C3/F3-1 (should-fix); R3C2 (nit, inconclusive), F3-2, F3-3, F3-4 (nits).
+
+## Cost (phlinux, 2026-11-20 16:59)
+
+| Round | Codex runs | Codex tokens used | Codex minutes | Claude agents | Claude fresh+out tokens | Claude minutes |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0.0 | 4 | 1,320,927 | 75.7 |
+| 1 | 1 | 211,596 | 7.2 | 2 | 811,886 | 66.0 |
+| 2 | 1 | 181,778 | 4.8 | 2 | 866,081 | 37.7 |
+| 3 | 1 | 204,486 | 6.7 | 1 | 155,780 | 2.7 |
+
+A round run on the other machine is added by running this there. Claude usage counted once per message id; Codex tokens are the last figure Codex prints. A duration shown as ? could not be measured (no rollout file or no timestamps): unknown, not zero. Codex children in T3 and anything on the other machine are not counted here. The lead's own tokens are not separable and are not counted.

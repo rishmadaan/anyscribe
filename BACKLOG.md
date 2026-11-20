@@ -672,6 +672,7 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 
 ### Wave 2
 
+- [ ] **Before the next PyPI release:** finish W6 in a follow-up to PR #26. Owner's choice (2026-11-20): closing the setup wizard during a download is allowed after a warning, replacing the hard lock. Also fix the review's leftovers R3C1, R3C2, R3C3/F3-1 (the "can't reach anyscribe" notice must not promise the download carries on after quitting) and nits F3-2 to F3-4 (`docs/reviews/2026-11-20-onboarding-wave1/review-log.md`).
 - [ ] Hinglish answer in the language question, and no pre-selected model.
 - [ ] Honest Sarvam label.
 - [ ] Prices and get-a-key steps on the paid provider cards.

@@ -652,6 +652,48 @@ Journal: `docs/building/journal/2026-11-09-hf-hub-progress-bar-crash.md`.
 
 ---
 
+## Onboarding audit (2026-11-20)
+
+The audit of install and first-run for a non-technical customer (Mac or
+Windows laptop, never opened a terminal, no API keys, often Hindi or Hinglish
+audio) found 41 problems and grouped the fixes into three waves. Journal:
+`docs/building/journal/2026-11-20-onboarding-wave1.md`.
+
+### Wave 1: let people in (this PR)
+
+- [x] W1. `install.sh`: Homebrew's installer reads from `/dev/tty` (under `curl | bash` it went non-interactive, refused `sudo`, and `set -e` ended the installer silently); a non-zero exit, or no `brew` afterwards, stops with one plain sentence.
+- [x] W2. Website hero: Mac and Windows install lines, each full with its own copy button and a how-to-open-the-terminal line; getting-started drops Command Prompt.
+- [x] W3. ffmpeg missing: both installers re-check after installing and end with "anyscribe is installed, but can't transcribe yet" instead of "ready" (`brew install` exits 0 for an unlinked formula); the setup wizard's local step shows "One more thing: ffmpeg" before download and after a setup that ends without an error but not set up.
+- [x] W4. `classify_api_error`: 402, and 429 with `insufficient_quota`, become a non-retryable `NoCreditError` with the plain "no credit" message; OpenAI key steps say OpenAI is prepaid.
+- [x] W5. Real key checks: Groq (`/openai/v1/models`) and OpenRouter (`/api/v1/key`) call the provider; Sarvam returns `checked: false` ("Saved, not checked", amber); plain messages for accepted, refused, error status and unreachable; wizard Next runs the check, "Use this key anyway".
+- [x] W6. Wizard locked during the local download (Escape, outside click, Skip); `setup_running` and a 409 resume watching.
+- [x] W7. Installer last box: click the app after desktop mode, open a new terminal window when the installing shell can't find `anyscribe` (pipx); `install.ps1` no longer `exit`s under `irm | iex` (it closed the window).
+- [x] W8. Done screen "Read transcript" as the main action; formatted transcript view (no `dangerouslySetInnerHTML`, http/https links only); slug helper handles Windows paths.
+
+### Wave 2
+
+- [ ] Hinglish answer in the language question, and no pre-selected model.
+- [ ] Honest Sarvam label.
+- [ ] Prices and get-a-key steps on the paid provider cards.
+- [ ] Plain error messages with a button for every common error.
+- [ ] Skip leads to the free option, and a banner that offers it.
+- [ ] Drop the workspace step.
+- [ ] Download progress in MB, time left, and a stall warning.
+- [ ] Instagram and YouTube login help.
+- [ ] "Open folder".
+- [ ] Decide what "Copy text" copies.
+
+### Wave 3
+
+- [ ] Website first screen and default-engine wording.
+- [ ] Getting-started as one straight line.
+- [ ] Claude skill first-run steps.
+- [ ] One-command Claude Desktop setup.
+- [ ] Terminal fixes: zsh quoting, the onboard summary after a failed local setup, `doctor`.
+- [ ] The 17 polish items in the audit.
+
+---
+
 ## v1.0.0 — Stable Release
 
 - [x] PyPI published (`pip install anyscribe`) — live since v0.3.1

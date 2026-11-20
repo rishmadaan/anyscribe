@@ -44,6 +44,11 @@ downloaded before a run failed, kept so you don't have to download it again.
 
 anyscribe is installed, but the folder pip put it in isn't on your PATH.
 
+**Just ran the one-line installer?** Open a new terminal window first. The
+window you installed from may not know the new folder yet; when that's the
+case, the installer's last box says so and prints the full path that works in
+that window.
+
 **The instant workaround** — this always works, no setup:
 
 ```bash
@@ -71,6 +76,52 @@ Then add your Python scripts directory to PATH:
   ```
 
   Then restart your terminal.
+
+### "Homebrew didn't finish installing, so anyscribe can't continue."
+
+The full message ends: "Install Homebrew from https://brew.sh (copy its one
+line into Terminal), then run this anyscribe installer again."
+
+On a Mac, the installer uses Homebrew (the standard tool for installing
+programs from Terminal) to bring in Python and ffmpeg. You said yes to
+installing it, but Homebrew stopped before it finished. The usual reasons: the
+password was mistyped or the prompt was cancelled, your Mac account isn't an
+Administrator, the internet dropped, or you pressed a key other than Return
+when Homebrew asked to continue.
+
+**Fix:**
+
+1. Open [brew.sh](https://brew.sh), copy the one line under "Install
+   Homebrew", paste it into Terminal and press Return. It asks for your Mac
+   password (nothing shows while you type) and can take 10 to 20 minutes.
+2. When it finishes it prints **Next steps** with two or three lines to copy:
+   run those too, so Terminal can find Homebrew next time.
+3. Run the anyscribe install line again.
+
+### "anyscribe is installed, but can't transcribe yet" (installer) or "One more thing: ffmpeg" (setup wizard)
+
+Both mean the same thing: **ffmpeg**, a free audio tool anyscribe needs to read
+audio and video, isn't installed (or the program can't find it). anyscribe
+itself installed fine. The installer's box ends with the command for your
+computer, and the setup wizard shows it with a copy button:
+
+| Your computer | Command |
+|---|---|
+| Mac | `brew install ffmpeg` |
+| Windows (PowerShell) | `winget install Gyan.FFmpeg` |
+| Linux (Ubuntu, Debian) | `sudo apt install ffmpeg` (Fedora: `sudo dnf install ffmpeg`, Arch: `sudo pacman -S ffmpeg`) |
+
+Run it in a terminal, then click **Check again** in the wizard (or open
+anyscribe again). The wizard keeps the download button off until ffmpeg is
+found, so the local setup can't start without it.
+
+- **Mac, and the command says ffmpeg "is already installed, it's just not
+  linked"?** Run `brew link ffmpeg`.
+- **Windows, still not found after installing?** The anyscribe that is already
+  running doesn't see programs installed after it started. Quit anyscribe from
+  the tray (the icon near the clock), then open it again from the Start menu.
+- **The terminal finds ffmpeg but the app doesn't?** See
+  [Transcribing from the app says ffmpeg (or Deno) is missing](#transcribing-from-the-app-says-ffmpeg-or-deno-is-missing-but-the-terminal-works).
 
 ### "I upgraded and my API keys are gone"
 
@@ -242,6 +293,75 @@ anyscribe config set openai_api_key YOUR_KEY   # set it directly
 anyscribe onboard --force                       # or re-run the wizard
 ```
 
+### "Your OpenAI account has no credit." (or Groq, OpenRouter, another provider)
+
+The full message reads: "Your OpenAI account has no credit. OpenAI is prepaid:
+add credit at https://platform.openai.com/settings/organization/billing and try
+again, or use the free option instead (in the dashboard: Settings, then Run
+setup wizard, then On this computer)." For other providers it names that
+provider and leaves out the billing link.
+
+The provider accepted your key but refused the work because the account has no
+money on it. OpenAI's API is prepaid and separate from a ChatGPT subscription:
+a new key on an account with no credit fails on the first transcript.
+(Technically: OpenAI answers HTTP 429 with `insufficient_quota`, OpenRouter
+answers HTTP 402.) anyscribe stops at once instead of retrying, since waiting
+never adds credit.
+
+**Fix, either:**
+
+- Add credit on the provider's billing page (OpenAI: the link in the message),
+  then run the same transcription again.
+- Or switch to the free option that runs on your computer: in the dashboard,
+  **Settings**, then **Run setup wizard**, then **On this computer**. From the
+  terminal, `anyscribe onboard --force` and choose **On this computer**.
+
+An ordinary `Rate limited by <provider>` message is different: the account is
+fine and busy, and anyscribe waits and retries by itself.
+
+### What the key check says (setup wizard and Settings)
+
+The dashboard asks the provider whether it accepts a key. In the setup wizard
+this happens when you press **Next** (or **Test key**) on the key step, before
+anything is saved; in **Settings → Providers**, **Test** checks the key you
+saved. The answer is one of these:
+
+#### "OpenAI accepted this key." (or another provider's name)
+
+The provider knows the key. It does not prove the account has credit: OpenAI,
+for one, is prepaid, so add credit before your first transcript (see
+["Your OpenAI account has no credit."](#your-openai-account-has-no-credit-or-groq-openrouter-another-provider)).
+
+#### "OpenAI refused this key. Check that you copied all of it, with no extra spaces."
+
+The provider answered that the key is wrong (HTTP 401 or 403). Usually part of
+the key is missing, or a space came along with it. Copy it again from the
+provider's site and paste it once more. A revoked or deleted key gives the same
+answer: make a new one. If you are sure the key is right, the setup wizard's
+**Use this key anyway** keeps it and moves on; the first transcript will tell
+you for certain.
+
+#### "OpenAI answered with an error (500). Try again in a minute."
+
+The provider answered, but with an error that isn't about the key (the number
+in brackets is its status code; 5xx means a problem on their side). Wait a
+minute and test again, or in the setup wizard choose **Use this key
+anyway**.
+
+#### "Couldn't reach OpenAI to check the key. Check your internet connection, or continue: the key will be checked on your first transcript."
+
+anyscribe couldn't get any answer from the provider within ten seconds: no
+internet, a firewall or VPN in the way, or the provider is down. You can carry
+on (in the wizard, press **Next** again): the first transcript checks the key.
+
+#### "Saved, not checked: Sarvam has no way to check a key in advance. It will be checked on your first transcript."
+
+Sarvam has no way to check a key without running a paid transcription, so
+anyscribe doesn't pretend: it keeps the key (the wizard saves it when you
+finish) and shows this in amber instead of a green success. In the wizard,
+press **Next** again to carry on. If the key is wrong, the first transcript
+fails with `Invalid or missing API key for sargam`.
+
 ### `WARNING: quality 'X' wants Y but no Y_API_KEY is set`
 
 Not an error — anyscribe went ahead using your configured provider instead. Your
@@ -268,7 +388,9 @@ key is set. It doesn't contact the provider, so it can't tell you whether the ke
 is valid or the account has credit. If the test fails, the key is missing. If it
 passes but transcription fails, the key may be wrong or expired, or the account
 may be out of credit: check your provider's dashboard, and try another provider
-to see whether it's the service or the file.
+to see whether it's the service or the file. The dashboard's **Test** button
+(Settings → Providers) does ask the provider; see
+[What the key check says](#what-the-key-check-says-setup-wizard-and-settings).
 
 ### "Next run" isn't the provider I set
 

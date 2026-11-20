@@ -11,6 +11,64 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
+## Unreleased
+
+Getting in: fixes for the places a first-time user got stuck during install
+and setup, from the 2026-11-20 onboarding audit. The installer and website
+changes reach you as soon as they are merged (the install line always fetches
+the latest installer); the dashboard and transcription changes arrive with
+the next release.
+
+**Installing**
+- **Mac without Homebrew:** the one-line installer now lets Homebrew ask for
+  your password. Before, under `curl … | bash` Homebrew refused to ask and the
+  installer stopped without a word. If Homebrew still doesn't finish, the
+  installer says so and what to do: "Homebrew didn't finish installing, so
+  anyscribe can't continue. …"
+- **Windows on the website:** the first screen shows the full Windows install
+  line with its own copy button, next to the Mac one, and each says how to open
+  Terminal or PowerShell and paste. The getting-started guide no longer
+  suggests Command Prompt, which can't run the Windows line.
+- **ffmpeg missing at the end of an install:** both installers now check that
+  ffmpeg really is there. If it isn't, the last box says "anyscribe is
+  installed, but can't transcribe yet" with the command to install it, instead
+  of "anyscribe is ready!".
+- **The last box says how to open anyscribe:** click the app when desktop mode
+  was set up; otherwise, when the terminal you installed from can't find the
+  `anyscribe` command yet, open a new terminal window first (the full path for
+  that window is printed under the box).
+- **Windows: the window stays open when the installer fails,** so you can read
+  the error and the manual steps. Before, it closed the whole PowerShell
+  window.
+
+**Setting up**
+- **ffmpeg in the setup wizard:** "On this computer" now says "One more thing:
+  ffmpeg" with the install command and a **Check again** button when ffmpeg is
+  missing, instead of looping silently after the download.
+- **Real key checks:** Groq and OpenRouter keys are now checked with the
+  provider (before, any text passed). Every check answers in plain words:
+  accepted, refused (check you copied all of it), an error from the provider,
+  or couldn't reach it. Sarvam, which can't check a key in advance, says
+  "Saved, not checked" in amber. Pressing **Next** on the key step runs the
+  check; a refused key stays on the step, with **Use this key anyway**.
+- **OpenAI is prepaid:** the OpenAI key step (dashboard and `anyscribe
+  onboard`) says to add credit first.
+- **The wizard stays open during the model download:** Escape, a click outside
+  and Skip no longer close it mid-download, and reloading the page picks the
+  running download back up instead of showing an error.
+
+**Transcribing and reading**
+- **"Your OpenAI account has no credit."** An account with no credit now gets
+  that message, with the billing link and the free option, and anyscribe stops
+  at once. Before, it said "Rate limited, wait and retry" and retried. The same
+  goes for OpenRouter's out-of-credit answer.
+- **Read transcript:** the Done screen's main button opens the transcript, and
+  the transcript page shows it formatted (headings, quotes, bold, links)
+  instead of raw markdown. The "already transcribed" link now also works with
+  Windows file paths.
+
+---
+
 ## 0.19.0 — 2026-11-20
 
 **Added**

@@ -274,7 +274,10 @@ PUT  /api/config              ← { ...partial settings } → { ...full updated 
 GET  /api/providers           → [{ name, description, has_key, set_up,
                                    key_in_env_file, key_url }]
                                    key_in_env_file = key saved in .env (removable)
-POST /api/providers/test      ← { name } → { success, message }
+POST /api/providers/{name}/test ← { api_key? } → { success, checked, message }
+                                   calls the provider with the key (typed, else saved);
+                                   checked=false: nothing confirmed or refused it (Sarvam,
+                                   or the provider unreachable), shown amber, never green
 
 PUT  /api/keys                ← { provider_name, api_key } → { success }
 DELETE /api/keys/{provider}   → { success }   (removes the key from .env + live env)

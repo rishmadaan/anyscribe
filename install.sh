@@ -32,7 +32,9 @@ VERBOSE=false
 DRY_RUN=false
 USED_PIPX=false
 POST_INSTALL_SKIPPED=false
+FFMPEG_MISSING=false       # true when ffmpeg is still not on PATH after installing it
 PY="python3"
+ORIG_PATH="$PATH"          # the person's own terminal; we may add Homebrew to ours
 
 # ── Colors ────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -142,13 +144,18 @@ install_brew_if_needed() {
             if [[ "$DRY_RUN" == true ]]; then
                 echo "    [dry-run] Would install Homebrew"
             else
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                # </dev/tty: under curl | bash our stdin is the script itself, so
+                # Homebrew would go non-interactive and refuse to ask for the password.
+                local brew_failed="Homebrew didn't finish installing, so anyscribe can't continue. Install Homebrew from https://brew.sh (copy its one line into Terminal), then run this anyscribe installer again."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty || die "$brew_failed"
                 # Fresh installs are not on PATH in this shell yet — activate now.
                 if [[ -x /opt/homebrew/bin/brew ]]; then
                     eval "$(/opt/homebrew/bin/brew shellenv)"
                 elif [[ -x /usr/local/bin/brew ]]; then
                     eval "$(/usr/local/bin/brew shellenv)"
                 fi
+                # A failed download runs an empty script, which "succeeds".
+                command_exists brew || die "$brew_failed"
             fi
         else
             die "Cannot continue without a package manager. Install Homebrew from https://brew.sh and try again."
@@ -286,9 +293,28 @@ check_ffmpeg() {
     answer="${answer:-Y}"
     if [[ "$answer" =~ ^[Yy] ]]; then
         install_package "ffmpeg" "ffmpeg" "ffmpeg" ""
+        # A package manager can succeed without putting ffmpeg on PATH (brew
+        # exits 0 for an installed but unlinked formula), so look again.
+        if [[ "$DRY_RUN" != true ]] && ! { command_exists ffmpeg && command_exists ffprobe; }; then
+            warn "ffmpeg is still not available after installing it."
+            FFMPEG_MISSING=true
+        fi
     else
         die "ffmpeg is required for audio processing."
     fi
+}
+
+# The command that installs ffmpeg here, for the person to run themselves.
+ffmpeg_install_cmd() {
+    if [[ "$OS" == "macos" ]]; then
+        echo "brew install ffmpeg"
+        return
+    fi
+    case "$LINUX_PKG" in
+        dnf)    echo "sudo dnf install ffmpeg" ;;
+        pacman) echo "sudo pacman -S ffmpeg" ;;
+        *)      echo "sudo apt install ffmpeg" ;;
+    esac
 }
 
 # ── Install anyscribe via pipx (installs pipx first if absent) ──
@@ -598,6 +624,32 @@ desktop_where() {
     fi
 }
 
+# Where desktop mode put the app, in this OS's words, for the last box.
+app_place() {
+    if [[ "$OS" == "macos" ]]; then
+        echo "in the Applications folder inside your home folder"
+    else
+        echo "in your app menu"
+    fi
+}
+
+# A box in the given colour: a title, then each further argument as its own
+# paragraph, wrapped to fit (fold -s breaks at spaces).
+box() {
+    local color="$1" title="$2" para line
+    local bar="────────────────────────────────────────────────────────"
+    shift 2
+    echo -e "${color}${BOLD}  ┌${bar}┐${NC}"
+    printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "$title" "$NC"
+    for para in "$@"; do
+        printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "" "$NC"
+        while IFS= read -r line; do
+            printf '%b  │  %-52s  │%b\n' "${color}${BOLD}" "$line" "$NC"
+        done < <(fold -s -w 52 <<<"$para")
+    done
+    echo -e "${color}${BOLD}  └${bar}┘${NC}"
+}
+
 # ── Main ──────────────────────────────────────────────────────
 main() {
     if [[ "$OS" == "macos" ]]; then
@@ -620,35 +672,37 @@ main() {
         ok "$(desktop_where)"
         echo ""
     fi
-    if [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
-        echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe ui       web dashboard   │${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe \"<url>\"  transcribe now  │${NC}"
-        echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
+    # How to open anyscribe from here. The person's terminal still has the PATH
+    # it had when they ran us, so a pipx install isn't found there until a new window.
+    local on_path=false open_line after_box=""
+    ( PATH="$ORIG_PATH"; hash -r; command_exists anyscribe ) && on_path=true
+    if [[ "$DESKTOP_STATE" == "done" ]]; then
+        open_line="Open anyscribe: click the anyscribe app ($(app_place)). Your dashboard should already be open in your browser."
+        [[ "$USED_PIPX" != true ]] || after_box="If 'anyscribe' is not found when you type it, open a new terminal window first; if it still isn't, run: pipx ensurepath"
+    elif [[ "$on_path" == true ]]; then
+        open_line="Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"
+    elif [[ "$USED_PIPX" == true ]]; then
+        open_line="Open a new terminal window, then type: anyscribe ui"
+        after_box="Or, in this window: $(pipx_bin_dir)/anyscribe ui"
     else
-        echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe is installed!            │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  Next step:                         │${NC}"
-        echo -e "${GREEN}${BOLD}  │    anyscribe ui                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
-        echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
-        echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
-        if [[ "$DESKTOP_STATE" == failed ]]; then
-            echo ""
-            warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
-        elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
-            echo ""
-            warn "anyscribe was installed, but the launch you asked for did not run (see above)."
-        fi
+        open_line="Next step: open the dashboard to set up and start transcribing. Type: $PY -m anyscribe ui"
     fi
-    if [[ "$USED_PIPX" == true ]]; then
+    if [[ "$FFMPEG_MISSING" == true ]]; then
+        box "$YELLOW" "anyscribe is installed, but can't transcribe yet" \
+            "ffmpeg, a free audio tool, is missing. Install it with: $(ffmpeg_install_cmd), then open anyscribe again." \
+            "$open_line"
+    elif [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
+        box "$GREEN" "anyscribe is ready!" "$open_line"
+    else
+        box "$GREEN" "anyscribe is installed!" "$open_line"
+    fi
+    [[ -z "$after_box" ]] || echo "    $after_box"
+    if [[ "$DESKTOP_STATE" == failed ]]; then
         echo ""
-        warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
-        echo "    or run: pipx ensurepath"
+        warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
+    elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
+        echo ""
+        warn "anyscribe was installed, but the launch you asked for did not run (see above)."
     fi
     echo ""
 }

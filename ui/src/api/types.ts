@@ -87,7 +87,7 @@ export interface LocalModelEntry {
   size: string;
   /** the model's own files are complete (sizes and disk maths only) */
   cached: boolean;
-  /** some bytes on disk but not complete (interrupted download); pull resumes it */
+  /** some bytes on disk but not complete (interrupted download); pull downloads it again */
   partial?: boolean;
   /** can transcribe now: engine installed, files complete, Parakeet's helpers too */
   runnable: boolean;

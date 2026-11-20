@@ -688,7 +688,7 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 - [ ] LocalSetupModal has the same lock shape: `disableClose={running}`, `Promise.all`, swallowed errors.
 - [ ] `beforeunload` guard on reload.
 - [ ] tests/conftest.py leaves a /tmp/ascli-test-home-* folder per pytest run (about 300 so far, harmless)
-- [ ] The model card's "incomplete: the download resumes" (LocalModelPicker.tsx) and troubleshooting's "picks up where it stopped" are not true across a restart with huggingface_hub 2.4 and hf_xet: a Whisper Base download stopped at 35.6% left 0 bytes of the weights and started again from 0% (`docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`, rule 12).
+- [ ] `anyscribe model info` still says "Resume the download: anyscribe model pull <id>" for an incomplete model (`cli/models_cmd.py`), and code comments in `providers/local_models.py` and `web/routes/models.py` say a pull resumes; with huggingface_hub 2.4 a stopped download starts again from 0% (`docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`, rule 12). The dashboard and docs wording was fixed in the W6 follow-up.
 
 ### Wave 3
 

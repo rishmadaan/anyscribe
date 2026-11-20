@@ -163,4 +163,8 @@ is allowed after a warning.
   writes them at the end), and Try again started again from 0%. So the new
   sentences say "start it again", not "carries on". The model card's
   "incomplete: the download resumes" and troubleshooting's "picks up where it
-  stopped" predate this and are now a wave 2 item.
+  stopped" predated this; the review's round 1 changed them to "incomplete:
+  setup downloads it again" and "the download starts again" (with Settings'
+  button, now "Incomplete: download again", and the same claim in the
+  configuration page and the skill's command reference). `anyscribe model
+  info`'s "Resume the download" line is server-side code and a wave 2 item.

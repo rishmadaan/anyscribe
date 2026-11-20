@@ -639,8 +639,8 @@ again.
 
 Its download was interrupted, so some files are missing and anyscribe won't
 use it (it never counts as downloaded, and the language check won't switch to
-it). Click **Incomplete: resume download** in Settings → Local, or run
-`anyscribe model pull <id>`; the download picks up where it stopped.
+it). Click **Incomplete: download again** in Settings → Local, or run
+`anyscribe model pull <id>`; the download starts again.
 
 ### "Detected Hindi … no Whisper model to use instead is downloaded"
 

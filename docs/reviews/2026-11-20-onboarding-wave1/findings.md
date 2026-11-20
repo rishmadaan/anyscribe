@@ -166,3 +166,168 @@ Skipped: did not open the raw logs under install-logs/ and logs/. I relied on th
 Risk: F1 is what the owner feels first. Merging without a release decision puts website docs live that describe a dashboard his new customers will not have.
 
 ~~~~
+
+## Round 2: report-gpt-6-astra-r2.md
+
+~~~~
+**NOT YET.** Most fixes are sound, but C1 remains incomplete: a failed status request can unlock an active download, while other failure paths leave the wizard locked indefinitely. The new polling handoff also introduces a stale-lock race.
+
+Reviewed `feat/onboarding-wave1` at `248ee2bd80dfafd8aca34f3fa87c7aefea19aaad`, against `8d63221`. CONFIRMED means confirmed by source trace; runtime execution was prohibited. The scope still matches the owner’s approved wave 1.
+
+All source locations below are within `~/labs/projects/anyscribe-wt/wave1/`.
+
+| Finding | Result | Evidence |
+|---|---|---|
+| C1 | **PARTLY** | `OnboardingWizard.tsx:783` disables the backup checkbox, and normal completion clears the lock. Status failures still defeat the guarantee; see R2C1 and R2C3. |
+| C2 | **FIXED** | Lines 668 and 738 adopt `setup_last_model`; line 700 requires the selected model’s `runnable` flag before advancing. Reload and 409 evidence supports both changes. |
+| C3 | **FIXED** | Lines 526, 576 and 588 prevent key edits, bypass and Back during checking. The supplied mutation walk demonstrates the original race and restored protection. |
+| C4 | **FIXED** | `install.ps1:407` rechecks both binaries after `Install-Anyscribe` changes PATH, before desktop launch and the banner. The recorded mutant prints “ready”; restored code prints “can’t transcribe yet.” |
+| C5 | **FIXED** | `TranscriptBody.tsx:18` supports the binding plan’s one level of balanced parentheses. Deeper nesting remains literal text, as documented. |
+| F1 | **NOT FIXED, owner decision pending** | Intentionally no code change. The packet still separates merge-time installer/website publication from the later dashboard release. |
+| F2 | **DECLINED-OK** | REFUTED and settled in `docs/reviews/declined.md`; not reopened. |
+| F3 | **FIXED** | Opened both replacement ffmpeg screenshots and the Sarvam screenshot. The notice is visible; the original blank-panel evidence gap is closed. |
+| F4 | **FIXED** | `BACKLOG.md:668` now says “Not checked yet”; line 685 records the Settings-modal follow-up. |
+| F5 | **FIXED** | `core/errors.py:111` restricts “is prepaid” to OpenAI/OpenRouter. Other providers receive the agreed wording; docs and mutation evidence match. |
+| F6 | **FIXED** | `install.sh:678` describes typing commands later, after the click-the-app instruction. |
+| F7 | **FIXED** | `install.sh:674` uses the approved plain “Cmd and Space” wording; recorded box and width checks support it. Native Spotlight discovery remains untested. |
+| F8 | **FIXED** | `install.ps1:373` tells non-desktop users to open a new PowerShell window; the fallback instruction remains explained. |
+| F9 | **FIXED** | `OnboardingWizard.tsx:514` shows the amber note immediately; line 493 advances Sarvam directly. The recorded walk shows no key-check request. |
+| F10 | **FIXED** | `OnboardingWizard.tsx:940` uses plain recovery messages and the matching “Try again” button. Engine/restart branches were inspected, not visually exercised. |
+
+The newly found defects follow. R2C2 is introduced by this delta; R2C1 and R2C3 are remaining failure paths in the lock being repaired.
+
+1. **R2C1 | blocker | CONFIRMED: a successful setup followed by one failed status read unlocks an active download.**
+
+   Where: [OnboardingWizard.tsx:728](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:728), particularly lines 729 and 742–744.
+
+   Concrete sequence: choose a cloud provider, enable local backup, and start downloading. `POST /api/local/setup` succeeds and the server starts its background worker. The immediately following `getLocalStatus()` fails before the first polling tick.
+
+   Both operations share one `try`. Its catch sets `settingUp` and `localRunning` false, treating the status-read failure as proof that setup never started. The polling effect is then removed, and the parent poll also stays off. The checkbox becomes enabled; the customer can untick it, select “Skip, next”, and close the wizard while the server continues downloading. A 409 followed by a failed status read reaches the same unsafe unlock.
+
+   Fix: separate setup-request failure from status-read failure. After an acknowledged start, or a 409, retain an explicit running/unknown state and reconcile with the server. An unsuccessful read must not establish that the download stopped.
+
+2. **R2C2 | should-fix | CONFIRMED: the new handoff can leave the close lock active after setup has finished.**
+
+   Where: [OnboardingWizard.tsx:135](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:135), [line 150](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:150), and [line 663](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:663).
+
+   Concrete sequence: reload near the end of a download. The wizard’s opening request reports `setup_running: true`, sets the close lock, and mounts the local step. The download finishes before that step’s separate status request returns `setup_running: false`.
+
+   The step only handles the true case. Its `settingUp` remains false, so it starts no poll and never clears the parent lock. Meanwhile, the parent explicitly refuses to poll on this step. “Skip is off until the download finishes” therefore remains after completion, with Escape and backdrop disabled.
+
+   Back or another setup cycle can recover, so this is not an unavoidable permanent trap. It is a new stale lock with no automatic reconciliation.
+
+   Fix: process both running and stopped results during the handoff, preferably through one owner of setup status. Verify the ordered response sequence `true`, then `false`, without requiring another click.
+
+3. **R2C3 | should-fix | CONFIRMED: persistent polling failures leave a silent, locked wizard.**
+
+   Where: [OnboardingWizard.tsx:684](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:684) and [line 711](~/labs/projects/anyscribe-wt/wave1/ui/src/components/OnboardingWizard.tsx:711); request handling in [client.ts:23](~/labs/projects/anyscribe-wt/wave1/ui/src/api/client.ts:23).
+
+   Concrete sequence: setup starts and the initial status read succeeds. The server then dies, or subsequent status requests consistently fail. Every polling exception is discarded as “transient”. Back, the checkbox, setup, Skip, Escape and backdrop remain unavailable, with no connection-loss message or recovery action.
+
+   Additionally, status and log retrieval use `Promise.all`. A failing log request discards a successful status response saying setup stopped, unnecessarily preserving the lock. There is no application-level fetch timeout.
+
+   Fix: handle status independently of optional log output, bound requests, and display a connection-lost state with retry/restart guidance. Do not resolve this by blindly unlocking an operation whose state is unknown. Test server loss and log-only failure separately.
+
+The supplied lock tests cover steady running and successful completion. They do not cover these request failures or the `true`-then-`false` mount handoff, so they cannot substantiate the broader claim that the lock always follows server state.
+
+Other requested checks passed by inspection:
+
+- All six cloud providers reach `classify_api_error`; Groq inherits OpenAI’s implementation. HTTP 402 and 429 containing `insufficient_quota` produce non-retried `NoCreditError`. Ordinary 429 remains retryable.
+- The renderer still constructs React elements and restricts live links to HTTP(S). The parentheses change introduces no identified script or non-HTTP link path.
+- Key checks use fixed provider HTTPS endpoints and do not persist the typed key before Finish.
+- Interval effects clear their timers on unmount. Outstanding requests are not cancelled; this is not proof of complete asynchronous cleanup.
+- Tailnet code, Host/security middleware, version files, release script and `.github/` are unchanged in this delta.
+
+**Pending owner checks:** F1 remains the release decision: whether to publish the dashboard release alongside merge-time installer and website changes. Native-platform verification and the defects above are engineering work, not tasks for the owner.
+
+**Verification limits:** I read the complete named packet, declined list, source delta, relevant callers, provider error paths, transcript writer, all six `fix1` screenshots, supplied `fix1` logs and their instruments. Generated assets were assessed through their sources and recorded build evidence, not independently rebuilt. The three named lead commits contain review records only.
+
+These permitted checks passed:
+
+```text
+git -C ~/labs/projects/anyscribe-wt/wave1 diff --check 8d63221..248ee2b
+bash -n ~/labs/projects/anyscribe-wt/wave1/install.sh
+```
+
+The final HEAD still matched the target, with no tracked working-tree differences.
+
+The brief prohibited independently running these checks:
+
+```text
+cd ~/labs/projects/anyscribe-wt/wave1 && .venv/bin/python -m pytest -q
+cd ~/labs/projects/anyscribe-wt/wave1 && .venv/bin/ruff check src tests scripts
+cd ~/labs/projects/anyscribe-wt/wave1/ui && npm run lint && npm run build
+cd ~/labs/projects/anyscribe-wt/wave1 && python3 scripts/build-docs.py && python3 scripts/check-docs.py
+gh pr checks 26 --repo rishmadaan/anyscribe
+```
+
+Exact-SHA CI, native macOS installation, Windows PowerShell 5.1/registry behavior, real desktop installation, and runtime reproduction of R2C1–R2C3 remain unverified here. The recorded Windows proof uses PowerShell 7 on Linux with a substituted registry PATH; it does not establish native Windows behavior.
+~~~~
+
+## Round 2: report-opus-fit-r2.md
+
+~~~~
+FIT REVIEW, onboarding wave 1, round 2. Target: feat/onboarding-wave1 at 248ee2b (diff 7ab1539..248ee2b). I confirmed the checkout is on that branch and commit with a clean tree. `bash -n install.sh`: ok.
+
+1. VERDICT: CONDITIONAL on two things. (a) The owner decides when the PyPI release happens. This is round 1's F1, still open by design: merging puts the website's docs live, but customers keep getting the v0.19.0 dashboard until a release. (b) CI is green on 248ee2b. I could not check it; the command is in section 5.
+No blocker and no should-fix is left from fit. The four new findings below are nits. The lead can fix them now in one small round or send them to wave 2.
+
+This is still the job he asked for. Wave 1's eight items match W1 to W8 one for one. The fix round added nothing from wave 2 or 3: the one BACKLOG line it added was asked for, and hiding Test key for Sarvam is part of F9. Read as a first-time customer would read it, every new sentence in the fix round is plain and short and has no em dash. The fix1 screenshots show what proof.md claims.
+
+2. FINDINGS (new in round 2)
+
+F1. nit. CONFIRMED (traced in code, not run on Windows).
+Where: ui/src/components/FfmpegNotice.tsx:80 (the Windows sentence, spec string S4) and install.ps1:368 (the desktop-route yellow box).
+What goes wrong: a Windows customer reads "Install it with the command below, then click Check again." They run `winget install Gyan.FFmpeg` and click Check again, and get "Still not found." This happens every time, not only now and then. The running anyscribe looks up ffmpeg with `shutil.which` on its own PATH (core/deps.py:289, core/preflight.py:38) and never re-reads the registry. install.ps1:367 says so in its own comment: "The running tray keeps the PATH it started with." The same goes for the installer box's "then open anyscribe again": clicking the Start menu app while the tray runs can't help either. Only the fallback sentence ("If it still isn't found... quit anyscribe from the tray") works. So on Windows the first instruction is a dead click, and the step that works is worded as if it were rare. On Mac and Linux, Check again does work: the tray's PATH includes /opt/homebrew/bin, and apt installs to /usr/bin.
+The spec's S4 is slightly wrong here, so this is a spec fix, not a builder miss.
+Fix: on Windows only, say the working step directly. Wizard: "After installing, quit anyscribe from the tray (the icon near the clock) and open it again from the Start menu; Check again can't see ffmpeg before that." Box: "...winget install Gyan.FFmpeg, then quit anyscribe from the tray (the icon near the clock) and open it again."
+
+F2. nit. CONFIRMED (screenshots).
+Where: OnboardingWizard.tsx:859, the progress line ("Downloading Whisper Base… 8.9%"). It sits below the picker, which starts at line 810.
+What goes wrong: while a download runs, and above all after a reload, the dialog opens on the language question and the model cards. The progress line is below the fold at 1440 px, and further down at 390. The running model's card says "incomplete: the download resumes" (an existing string), which reads as paused. Only the small grey header line "Skip is off until the download finishes" says anything is happening. Someone who reloaded will think it started over. W6 asks the wizard to "show the running download's progress". It does, but it is out of sight. Seen in fix1-c2-after-reload-1440.png, fix1-c1-locked-during-download-1440.png and app-download-after-reload-1440.png.
+Fix: while `settingUp`, render the progress block above the picker, or scroll it into view when a running setup is adopted.
+
+F3. nit. CONFIRMED.
+Where: OnboardingWizard.tsx:242, :792 and :933.
+What goes wrong: during a download, one screen says "until the download finishes" three times: in the header ("Skip is off..."), in the checkbox label ("stays on...") and under the buttons ("Back is off..."). It reads as nervous rather than clear. It also says "download" while the first phase is "Installing the local engines".
+Fix (simpler): keep one line, for example in the header: "Skip, Back and this checkbox are off until setup finishes". Drop the other two.
+
+F4. nit. PLAUSIBLE (traced; proof.md says this sentence was never seen on screen).
+Where: OnboardingWizard.tsx:943 (the restart case of missingPart), together with :829 (RestartBanner) and the button label "Try again" (:900).
+What goes wrong: when setup ends needing a restart, the customer sees two restart messages, a red one and an amber one. The red one ends "then continue", but the only button says "Try again". After a restart the wizard starts again from Welcome, so "continue" names nothing they can find.
+Fix: in the restart case, show only the RestartBanner (no red alert), or end the sentence "then open the setup wizard again; the download is kept."
+To settle it: walk a setup whose engines need a restart (restart_needed true, faster_whisper_installed false).
+
+3. ROUND 1 FIT FINDINGS: STATUS
+- F1 (website docs live before the dashboard release): DECLINED-OK as code. It went to the owner as a release decision. The docs still describe the unreleased dashboard, so it stays a pending owner check.
+- F2 (Homebrew PATH): DECLINED-OK. REFUTED and settled in docs/reviews/declined.md. Not reopened.
+- F3 (blank screenshot): FIXED. I opened fix1-f3-ffmpeg-after-setup-1440.png. It shows "One more thing: ffmpeg", the S4 body, `sudo apt install ffmpeg` and Check again. The bottom shot shows the continue button dimmed.
+- F4 (BACKLOG wording): FIXED. BACKLOG.md:668 says "Not checked yet". `git grep -i "saved, not checked"` outside docs/reviews finds nothing.
+- F5 ("is prepaid" for every provider): FIXED. core/errors.py:105-122 keeps "is prepaid" for openai and openrouter only; the others get "Add credit or check your plan". The docs and the skill reference match.
+- F6 (pipx line after the click-the-app box): FIXED. install.sh:677 has the agreed sentence.
+- F7 (Mac "Applications folder inside your home folder"): FIXED. install.sh:673 says "press Cmd and Space, type anyscribe, press Return". Not yet seen on a real Mac.
+- F8 (Windows without desktop mode, ffmpeg missing): FIXED. install.ps1:370-372 says to "open a new PowerShell window and type: anyscribe ui", with a matching fallback header at :381.
+- F9 (Sarvam needs two presses of Next): FIXED. OnboardingWizard.tsx:468 and :493 show the amber note from the start and go on at the first press; Test key is hidden. Screenshot fix1-f9-sarvam-key-1440.png.
+- F10 (jargon in missingPart): FIXED for the words: no package names, no "install log". One leftover in the restart case, now F4 above. The engine and restart sentences were never seen on screen.
+
+4. ANSWERS AND ADVICE
+- Right job, right instrument: yes. The consent scope holds (the two installers, the website, the wizard and Done screen, the error and key-check code, no new dependencies). The round 1 fixes stayed inside the items.
+- One thing the owner may object to later (advice, not a finding): W6's lock has no exit. No cancel endpoint exists (web/routes/local.py), and Back, Skip and Escape are all off. A customer on a slow or stalled connection is held in the wizard until the download ends or fails. Someone who picked a cloud service and ticked "also local" as a backup can wait about 27 minutes for Turbo's 1.6 GB at 1 MB/s. The spec chose the lock, so it is not a defect. Make sure wave 2's "download MB count, time and stall warning" item includes a way out (cancel, or "keep downloading in the background").
+- Reload mid-download switches the wizard to "On this computer". Someone who picked Groq plus a local backup and then reloaded finds All set saying "On this computer". This is honest, since the typed key could not be kept before Finish. Worth one line in wave 2's notes.
+- The S5 box tells a Windows user without winget to run `winget install Gyan.FFmpeg`. This is rare, and it is the spec's own string. Leave it.
+
+5. PENDING OWNER CHECKS
+- Release timing (round 1 F1): does he approve a PyPI release right after merge, and who merges? Merging publishes both installers and the website at once.
+- A real Mac run: Homebrew asks for the password, the Spotlight wording works, and Check again finds a fresh `brew install ffmpeg`.
+- A real Windows (PowerShell 5.1) run: the window stays open on failure, winget's PATH refresh works, and F1 above. Nobody has run either.
+
+6. COULD NOT CHECK, AND WHAT I INSPECTED
+- CI on 248ee2b. The brief's allow-list doesn't cover `gh`, so I did not run it. Command: `gh pr checks 26 --repo rishmadaan/anyscribe`
+- Nothing was run beyond `bash -n install.sh`. No tests, builds, servers or installers.
+- Inspected: the whole packet (ask.md, spec.md, target.md, lens.md, proof.md including the round 1 fix section, review-log.md, fix-plan-r1.md, report-opus-fit-r1.md, declined.md); `git log 7ab1539..248ee2b`; the full fix-round diff 37f066c..248ee2b for install.sh, install.ps1, core/errors.py, OnboardingWizard.tsx, TranscriptBody.tsx, BACKLOG.md, CHANGELOG.md, docs/user/getting-started.md, docs/user/troubleshooting.md, the skill's troubleshooting reference and the journal; the current OnboardingWizard.tsx (wizard mount, header, StepApiKey, StepOfflineOptIn, missingPart); FfmpegNotice.tsx; web/routes/local.py (status, background setup, no cancel); web/routes/config.py (Sarvam and the unreachable results); install.ps1's Write-Result and its ffmpeg step; core/deps.py and core/preflight.py (ffmpeg lookup); LocalModelPicker.tsx:85.
+- Screenshots viewed: fix1-c1-locked-during-download, fix1-c2-after-reload, fix1-c2-all-set, fix1-f3-ffmpeg-after-setup (top and bottom), fix1-f9-sarvam-key, app-download-after-reload, install-hero-1440 (all at 1440 px).
+- Not re-read this round: the Done screen, TranscriptView and ResultCard (no change since round 1, which reviewed them); the raw logs; code correctness, which is the other reviewer's role.
+
+What I skipped: the raw run logs and the round 0 screenshots I had already covered in round 1. The risk the owner must know: round 1's F1, the release timing, is still the first thing customers will feel after merge.
+
+~~~~

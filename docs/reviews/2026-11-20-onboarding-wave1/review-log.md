@@ -7,6 +7,8 @@ Packet: v1
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | correctness | gpt-6.1-sol, high | Codex CLI read-only | 8d63221 | NOT YET | 5 | 5 | 7 | Claude Opus fixer, Agent tool |
 | 1 | fit | Opus 5.5, default effort | Agent tool (Claude lane, read-only by instruction; snapshot unchanged) | 8d63221 | CONDITIONAL | 10 | 9 | 7 | Claude Opus fixer, Agent tool |
+| 2 | correctness re-check | gpt-6-astra, high | Codex CLI read-only | 248ee2b | NOT YET | 3 | 3 | 5 | pending (diagnosis first) |
+| 2 | fit (rejoined: fixes changed screens) | Opus 5.5, high | Agent tool (read-only by instruction; snapshot unchanged) | 248ee2b | CONDITIONAL | 4 | 4 | 4 | pending (diagnosis first) |
 
 Round 1 fit seat ran at the Agent tool's default effort (the tool's effort is set only on explicit instruction); the roster names high.
 
@@ -27,5 +29,15 @@ Round 1 fit seat ran at the Agent tool's default effort (the tool's effort is se
 | F8 | 1 | opus fit | nit | UPHELD | install.ps1 non-desktop route with ffmpeg missing tells them to type in the same window | |
 | F9 | 1 | opus fit | nit | UPHELD | Sarvam: first Next only shows the amber note | |
 | F10 | 1 | opus fit | nit | UPHELD | missingPart() says "the local engine (faster-whisper)" and "install log" | |
+| R2C1 | 2 | gpt-6-astra | should-fix (lead downgrade from blocker: needs the local server to fail a status read right after accepting the start; the result is the round-0 behaviour, and reopening adopts the running setup since C2) | UPHELD | Traced: handleStartSetup wraps setupLocal and getLocalStatus in one try; the catch sets settingUp false and onRunning(false); the 409 branch with a failed read also shows the raw 409 | |
+| R2C2 | 2 | gpt-6-astra | should-fix | UPHELD | Traced: the step's mount effect acts only on setup_running true; the wizard's poll is off while step is offline_opt_in; a true-then-false sequence leaves localRunning true with no poll | |
+| R2C3 | 2 | gpt-6-astra | should-fix | UPHELD | Traced: the step's poll swallows every error as transient; Promise.all couples the optional log read to the status read; no connection-lost state | |
+| R2F1 | 2 | opus fit | nit | UPHELD | Traced: core/deps.py looks up ffmpeg on the running process's PATH; on Windows the running tray never sees a winget install, so S4's Check again cannot succeed there (spec string wrong for Windows) | |
+| R2F2 | 2 | opus fit | nit | UPHELD | Screenshots fix1-c2-after-reload-1440 and fix1-c1-locked-during-download-1440: the progress line is below the fold | |
+| R2F3 | 2 | opus fit | nit | UPHELD | Three "until the download finishes" lines on one screen | |
+| R2F4 | 2 | opus fit | nit | UPHELD | Traced: restart case shows a red missingPart sentence ending "then continue" plus the RestartBanner; only button is Try again | |
 
 CI on 8d63221: all 9 checks pass (gh pr checks 26, 2026-11-20).
+
+CI on 248ee2b: all 9 checks pass (gh pr checks 26, 2026-11-20).
+Round 2 raised code defects in the C1 lock (R2C1 to R2C3) at size L: per the review skill step 7, a diagnosis reader runs before the round 3 fix.

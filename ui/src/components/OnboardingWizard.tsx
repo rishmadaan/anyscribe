@@ -90,6 +90,8 @@ export default function OnboardingWizard({ onClose }: Props) {
     restartNeeded: false,
   });
   const [saving, setSaving] = useState(false);
+  // a local download is running: the wizard can't be closed or skipped
+  const [localRunning, setLocalRunning] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const modelName = useLocalModelNames(); // fetched now, so All set shows names at once
@@ -113,6 +115,23 @@ export default function OnboardingWizard({ onClose }: Props) {
       .catch(() => {
         // non-critical
       });
+  }, []);
+
+  // A download already running (the page was reloaded mid-download, or Settings
+  // started one): open on it instead of offering Download again.
+  useEffect(() => {
+    getLocalStatus()
+      .then((s) => {
+        if (!s.setup_running) return;
+        setForm((f) => ({
+          ...f,
+          provider: "local",
+          enableLocal: true,
+          localModel: s.setup_last_model,
+        }));
+        setStep("offline_opt_in");
+      })
+      .catch(() => undefined);
   }, []);
 
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the
@@ -173,7 +192,7 @@ export default function OnboardingWizard({ onClose }: Props) {
   return (
     <Modal
       onClose={() => dismiss(false)}
-      disableClose={saving}
+      disableClose={saving || localRunning}
       ariaLabelledBy="onboarding-title"
       size="xl"
     >
@@ -194,7 +213,12 @@ export default function OnboardingWizard({ onClose }: Props) {
             </p>
           )}
         </div>
-        {step !== "done" && !saving && (
+        {step !== "done" && !saving && localRunning && (
+          <span className="text-xs font-mono text-text-muted text-right">
+            Skip is off until the download finishes
+          </span>
+        )}
+        {step !== "done" && !saving && !localRunning && (
           <button
             onClick={() => dismiss(true)}
             className="flex items-center gap-1 text-xs font-mono text-text-muted hover:text-text transition-colors cursor-pointer"
@@ -244,6 +268,7 @@ export default function OnboardingWizard({ onClose }: Props) {
           onPresetSize={presetSize}
           onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
           onSetupDone={(done) => setForm((f) => ({ ...f, ...done }))}
+          onRunning={setLocalRunning}
           onBack={() =>
             setStep(form.provider === "local" ? "provider" : "api_key")
           }
@@ -569,6 +594,7 @@ function StepOfflineOptIn({
   onPresetSize,
   onSetLanguage,
   onSetupDone,
+  onRunning,
   onBack,
   onNext,
 }: {
@@ -580,6 +606,7 @@ function StepOfflineOptIn({
   onPresetSize: (s: string) => void;
   onSetLanguage: (code: string) => void;
   onSetupDone: (done: Pick<FormState, "alsoModels" | "restartNeeded">) => void;
+  onRunning: (running: boolean) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -597,8 +624,14 @@ function StepOfflineOptIn({
     getLocalStatus().then((s) => {
       setStatus(s);
       onPresetSize(s.recommended_model);
+      if (s.setup_running) setSettingUp(true); // watch the running download
     });
   }, [onPresetSize]);
+
+  useEffect(() => {
+    onRunning(settingUp);
+    return () => onRunning(false);
+  }, [settingUp, onRunning]);
 
   // Poll during setup.
   useEffect(() => {
@@ -650,7 +683,16 @@ function StepOfflineOptIn({
       const s = await getLocalStatus();
       setStatus(s);
     } catch (e) {
-      setSetupError(e instanceof Error ? e.message : "Failed to start setup");
+      const msg = e instanceof Error ? e.message : "Failed to start setup";
+      if (msg.startsWith("409")) {
+        // one is already running (another tab, or Settings): watch it instead
+        const s = await getLocalStatus().catch(() => null);
+        if (s?.setup_running) {
+          setStatus(s);
+          return;
+        }
+      }
+      setSetupError(msg);
       setSettingUp(false);
     }
   };
@@ -666,6 +708,10 @@ function StepOfflineOptIn({
     toFetch.length > 0 && toFetch.every((id) => models.find((m) => m.size === id)?.runnable);
   const names = toFetch.map((id) => models.find((m) => m.size === id)?.spec.display_name ?? id);
   const ffmpegMissing = !!status && !status.ffmpeg_ok;
+  // the model the running setup fetches: may differ from the pick after a reload
+  const runningName =
+    models.find((m) => m.size === status?.setup_last_model)?.spec.display_name ??
+    pick?.display_name;
   const checkFfmpeg = async () => {
     const s = await getLocalStatus();
     setStatus(s);
@@ -758,7 +804,7 @@ function StepOfflineOptIn({
               <p className="text-xs text-text font-mono">
                 {settingUp
                   ? status?.setup_progress?.percent != null
-                    ? `Downloading ${pick?.display_name ?? "the model"}… ${status.setup_progress.percent}%`
+                    ? `Downloading ${runningName ?? "the model"}… ${status.setup_progress.percent}%`
                     : "Installing the local engines and downloading the model…"
                   : "Install log"}
               </p>

@@ -101,9 +101,13 @@ export default function OnboardingWizard({ onClose }: Props) {
     (s: string) => setForm((f) => (f.localModel ? f : { ...f, localModel: s })),
     []
   );
-  // stable, so the local step's mount effect runs once
+  // stable, so the local step's effects don't rerun on every wizard render
   const setEnableLocal = useCallback(
     (e: boolean) => setForm((f) => ({ ...f, enableLocal: e })),
+    []
+  );
+  const selectSize = useCallback(
+    (s: string | null) => setForm((f) => ({ ...f, localModel: s })),
     []
   );
 
@@ -284,7 +288,7 @@ export default function OnboardingWizard({ onClose }: Props) {
           selected={form.localModel}
           enabled={form.enableLocal}
           onSetEnabled={setEnableLocal}
-          onSelectSize={(s: string | null) => setForm((f) => ({ ...f, localModel: s }))}
+          onSelectSize={selectSize}
           onPresetSize={presetSize}
           onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
           onSetupDone={(done) => setForm((f) => ({ ...f, ...done }))}
@@ -660,11 +664,13 @@ function StepOfflineOptIn({
       setStatus(s);
       onPresetSize(s.recommended_model);
       if (s.setup_running) {
-        onSetEnabled(true); // watch the running download, locked, with its progress
+        // watch the running download, locked, with its progress and its model
+        onSetEnabled(true);
+        if (s.setup_last_model) onSelectSize(s.setup_last_model);
         setSettingUp(true);
       }
     });
-  }, [onPresetSize, onSetEnabled]);
+  }, [onPresetSize, onSetEnabled, onSelectSize]);
 
   useEffect(() => {
     if (settingUp) onRunning(true); // off only when the server says the setup stopped
@@ -691,7 +697,8 @@ function StepOfflineOptIn({
           if (s.setup_error) {
             setSetupError(s.setup_error);
             setLogOpen(true);
-          } else if (s.set_up) {
+          } else if (s.set_up && s.models.find((m) => m.size === selected)?.runnable) {
+            // set_up means some model can run: All set names this one as ready.
             // The server queued the extras (Turbo for a mix) itself; All set
             // shows their progress.
             onSetupDone({ alsoModels: s.setup_also, restartNeeded: s.restart_needed });
@@ -705,7 +712,7 @@ function StepOfflineOptIn({
       }
     }, 1500);
     return () => clearInterval(id);
-  }, [settingUp, onNext, onSetupDone, onRunning]);
+  }, [settingUp, selected, onNext, onSetupDone, onRunning]);
 
   // The only way forward with local on: setup (quick when the model can
   // already run) switches the default and queues the extras server-side.
@@ -727,6 +734,7 @@ function StepOfflineOptIn({
         const s = await getLocalStatus().catch(() => null);
         if (s?.setup_running) {
           setStatus(s);
+          if (s.setup_last_model) onSelectSize(s.setup_last_model); // its model, not our pick
           return;
         }
       }

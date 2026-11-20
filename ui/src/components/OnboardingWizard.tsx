@@ -874,27 +874,6 @@ function StepOfflineOptIn({
 
       {(enabled || required) && ffmpegMissing && <FfmpegNotice onCheckAgain={checkFfmpeg} />}
 
-      {(enabled || required) &&
-        (status ? (
-          <LocalModelPicker
-            models={models}
-            featured={status.featured}
-            languageAnswers={status.language_answers}
-            caption={status.benchmark_caption}
-            selected={selected}
-            onSelect={onSelectSize}
-            disabled={busy}
-            guideOpen={required}
-            onRecommendation={(r) => {
-              setRec(r);
-              onSelectSize(r.primary); // "nothing fits" clears it: no download offered
-            }}
-            onSetLanguage={onSetLanguage}
-          />
-        ) : (
-          <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
-        ))}
-
       {status?.restart_needed && <RestartBanner />}
 
       {setupError && (
@@ -944,6 +923,27 @@ function StepOfflineOptIn({
           )}
         </div>
       )}
+
+      {(enabled || required) &&
+        (status ? (
+          <LocalModelPicker
+            models={models}
+            featured={status.featured}
+            languageAnswers={status.language_answers}
+            caption={status.benchmark_caption}
+            selected={selected}
+            onSelect={onSelectSize}
+            disabled={busy}
+            guideOpen={required}
+            onRecommendation={(r) => {
+              setRec(r);
+              onSelectSize(r.primary); // "nothing fits" clears it: no download offered
+            }}
+            onSetLanguage={onSetLanguage}
+          />
+        ) : (
+          <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
+        ))}
 
       <div className="flex items-center justify-between mt-5">
         <button

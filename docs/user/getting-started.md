@@ -38,7 +38,12 @@ By the end of this guide you will have:
 
 > **Later, if you want cheaper or more accurate:** each provider offers a few models you can switch between — see [providers.md](providers.md). You don't need to think about this to get started; the defaults are good.
 
-> **New to the command line?** You'll be typing commands in your Terminal app (macOS), terminal emulator (Linux), or Command Prompt / PowerShell (Windows). Every command in this guide starts with `anyscribe` — just copy-paste and press Enter.
+> **New to the command line?** You'll be typing commands in your Terminal app (macOS), terminal emulator (Linux), or PowerShell / Terminal (Windows; Command Prompt can't run the Windows install line).
+>
+> - **Mac:** Open Terminal: press ⌘ Space, type Terminal, press Return. Paste the line and press Return. It may ask for your Mac password; nothing shows while you type.
+> - **Windows:** Open PowerShell: right-click the Start button and choose Terminal (or Windows PowerShell). Paste the line and press Enter.
+>
+> Every command in this guide starts with `anyscribe`: just copy-paste and press Enter.
 
 ## Step 1 — Install
 

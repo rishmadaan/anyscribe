@@ -322,6 +322,15 @@
     border-color: var(--signal-2);
   }
   .install-cmd .copy:active { transform: translateY(-50%) translateY(1px); }
+  /* wrap instead of a scrollbar once the long Mac line no longer fits */
+  @media (max-width: 1100px) {
+    .install-cmd { white-space: normal; overflow-wrap: anywhere; }
+  }
+  .install-how {
+    margin: 12px 0 28px;
+    font-size: 15px; line-height: 1.55;
+    color: var(--ink-2);
+  }
 
   /* --- hero secondary actions ----------------------------------- */
   .hero-actions {
@@ -1454,19 +1463,26 @@
 
     <div class="install-card">
       <div class="install-head">
-        <span>install &nbsp;·&nbsp; macos &amp; linux</span>
+        <span>install on a mac &nbsp;·&nbsp; or linux</span>
         <span class="platform">● one line</span>
       </div>
       <div class="install-cmd">
         <span class="p">$</span><span id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.sh | bash</span>
         <button class="copy" data-copy="hero-cmd">copy</button>
       </div>
+      <p class="install-how">Open Terminal: press ⌘ Space, type Terminal, press Return. Paste the line and press Return. It may ask for your Mac password; nothing shows while you type.</p>
+      <div class="install-head">
+        <span>install on windows</span>
+        <span class="platform">● one line</span>
+      </div>
+      <div class="install-cmd">
+        <span class="p">&gt;</span><span id="hero-win-cmd">irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | iex</span>
+        <button class="copy" data-copy="hero-win-cmd">copy</button>
+      </div>
+      <p class="install-how">Open PowerShell: right-click the Start button and choose Terminal (or Windows PowerShell). Paste the line and press Enter.</p>
       <div class="install-alt">
         <span>or</span>
         <kbd>pip install "anyscribe[tray]"</kbd>
-        <span>·</span>
-        <span>windows:</span>
-        <kbd>irm https://…/install.ps1 | iex</kbd>
       </div>
       <div class="hero-actions">
         <a class="btn-ghost" href="#install">Full setup guide ↓</a>

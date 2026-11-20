@@ -997,7 +997,7 @@ function StepOfflineOptIn({
       </div>
       {(enabled || required) && ffmpegMissing && (
         <p className="mt-2 text-right text-[11px] text-text-muted">
-          Install ffmpeg first (see above), then click Check again.
+          Install ffmpeg first (see above).
         </p>
       )}
     </>

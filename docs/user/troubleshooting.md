@@ -111,17 +111,18 @@ computer, and the setup wizard shows it with a copy button:
 | Windows (PowerShell) | `winget install Gyan.FFmpeg` |
 | Linux (Ubuntu, Debian) | `sudo apt install ffmpeg` (Fedora: `sudo dnf install ffmpeg`, Arch: `sudo pacman -S ffmpeg`) |
 
-Run it in a terminal, then click **Check again** in the wizard (or open
-anyscribe again). The wizard keeps the download button off until ffmpeg is
-found, so the local setup can't start without it.
+On a Mac or Linux, run it in a terminal, then click **Check again** in the
+wizard. The wizard keeps the download button off until ffmpeg is found, so the
+local setup can't start without it.
 
+- **Windows:** the anyscribe that is already running doesn't see programs
+  installed after it started, so **Check again** can't find a new install.
+  After running the command, quit anyscribe from the tray (the icon near the
+  clock) and open it again from the Start menu. Installed without desktop
+  mode? Open a new PowerShell window and type `anyscribe ui`: the window you
+  installed from doesn't see ffmpeg.
 - **Mac, and the command says ffmpeg "is already installed, it's just not
   linked"?** Run `brew link ffmpeg`.
-- **Windows, still not found after installing?** The anyscribe that is already
-  running doesn't see programs installed after it started. Quit anyscribe from
-  the tray (the icon near the clock), then open it again from the Start menu.
-  Installed without desktop mode? Open a new PowerShell window and type
-  `anyscribe ui`: the window you installed from doesn't see ffmpeg.
 - **The terminal finds ffmpeg but the app doesn't?** See
   [Transcribing from the app says ffmpeg (or Deno) is missing](#transcribing-from-the-app-says-ffmpeg-or-deno-is-missing-but-the-terminal-works).
 

@@ -148,17 +148,18 @@ computer, and the setup wizard shows it with a copy button:</p>
 </tr>
 </tbody>
 </table>
-<p>Run it in a terminal, then click <strong>Check again</strong> in the wizard (or open
-anyscribe again). The wizard keeps the download button off until ffmpeg is
-found, so the local setup can't start without it.</p>
+<p>On a Mac or Linux, run it in a terminal, then click <strong>Check again</strong> in the
+wizard. The wizard keeps the download button off until ffmpeg is found, so the
+local setup can't start without it.</p>
 <ul>
+<li><strong>Windows:</strong> the anyscribe that is already running doesn't see programs
+  installed after it started, so <strong>Check again</strong> can't find a new install.
+  After running the command, quit anyscribe from the tray (the icon near the
+  clock) and open it again from the Start menu. Installed without desktop
+  mode? Open a new PowerShell window and type <code>anyscribe ui</code>: the window you
+  installed from doesn't see ffmpeg.</li>
 <li><strong>Mac, and the command says ffmpeg "is already installed, it's just not
   linked"?</strong> Run <code>brew link ffmpeg</code>.</li>
-<li><strong>Windows, still not found after installing?</strong> The anyscribe that is already
-  running doesn't see programs installed after it started. Quit anyscribe from
-  the tray (the icon near the clock), then open it again from the Start menu.
-  Installed without desktop mode? Open a new PowerShell window and type
-  <code>anyscribe ui</code>: the window you installed from doesn't see ffmpeg.</li>
 <li><strong>The terminal finds ffmpeg but the app doesn't?</strong> See
   <a href="#transcribing-from-the-app-says-ffmpeg-or-deno-is-missing-but-the-terminal-works">Transcribing from the app says ffmpeg (or Deno) is missing</a>.</li>
 </ul>

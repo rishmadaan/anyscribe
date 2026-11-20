@@ -71,15 +71,13 @@ export function FfmpegNotice({ onCheckAgain }: { onCheckAgain: () => Promise<boo
         One more thing: ffmpeg
       </p>
       <p className="text-xs text-text-secondary mt-1.5">
-        anyscribe needs ffmpeg, a free audio tool, to read audio and video. Install it with the
-        command below, then click Check again.
+        anyscribe needs ffmpeg, a free audio tool, to read audio and video.{" "}
+        {detectPlatform() === "windows"
+          ? // the running tray keeps the PATH it started with, so it can't see winget's install
+            "Install it with the command below. Then quit anyscribe from the tray (the icon near the clock) and open it again from the Start menu: Check again can't see a new install before that."
+          : "Install it with the command below, then click Check again."}
       </p>
       <FfmpegCommand />
-      {detectPlatform() === "windows" && (
-        <p className="text-xs text-text-secondary mt-2">
-          If it still isn't found after installing, quit anyscribe from the tray and open it again.
-        </p>
-      )}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           onClick={check}

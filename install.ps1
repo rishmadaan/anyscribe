@@ -364,8 +364,8 @@ function Write-Result($desktopState) {
     if (-not $script:FfmpegOk) {
         $fix = "ffmpeg, a free audio tool, is missing. Install it with: winget install Gyan.FFmpeg, then "
         if ($desktopState -eq 'done') {
-            # The running tray keeps the PATH it started with.
-            $fix += "open anyscribe again. If it still isn't found after installing, quit anyscribe from the tray and open it again."
+            # The running tray keeps the PATH it started with: only a restart sees ffmpeg.
+            $fix += "quit anyscribe from the tray (the icon near the clock) and open it again."
             Write-Box Yellow "anyscribe is installed, but can't transcribe yet" $fix $open
         } else {
             # This window keeps the PATH it had before winget ran: only a new one finds ffmpeg.

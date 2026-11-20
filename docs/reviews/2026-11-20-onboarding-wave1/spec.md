@@ -65,6 +65,7 @@ APP:
 - While local setup runs: Escape and outside clicks do not close the wizard, and "Skip for now" is hidden or disabled with a reason.
 - On opening, if `/api/local/status` says `setup_running`, show the running download's progress instead of offering Download. A 409 from the setup endpoint is treated the same way (resume watching), never shown raw.
 - Proof: walk it (Escape mid-download; reload mid-download).
+- **Amended after the round 2 diagnosis (lead choice, 2026-11-20; see diagnosis-r2.md and fix-plan-r2.md):** the hard lock holds only while the page can confirm the download is running. "Is a setup running" has ONE owner (the local step), fed by one bounded, sequential status read. When the page cannot reach the server (two failed or timed-out reads in a row), a plain notice shows and closing is possible again, through one confirmation. The owner approved "lock the wizard during download"; this keeps that lock and adds only the exit the lock lacked when the server is unreachable. Dropping the lock for a confirm-to-close design (the diagnosis's recommendation) is left to the owner as a wave 2 question.
 
 ### W7. "Ready!" box and the Windows window closing (INSTALL)
 

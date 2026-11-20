@@ -1,7 +1,7 @@
 ---
 type: troubleshooting
 tags: [onboarding, installer, install.sh, install.ps1, landing, web-ui, errors, providers]
-tldr: "Wave 1 of the 2026-11-20 onboarding audit: the places a non-technical customer stopped cold. Homebrew under curl | bash went non-interactive and the installer died silently (now /dev/tty plus a plain stop message); Windows got a full copyable install line; installers and wizard never say ready without ffmpeg (brew install exits 0 for an unlinked formula); no-credit 402/429 insufficient_quota stops with a plain message instead of retrying; Groq/OpenRouter keys checked for real, Sarvam 'not checked'; wizard locked during the download; the installer's last box says how to open anyscribe; install.ps1 no longer exits (closing the window) under irm | iex; Read transcript and a formatted view."
+tldr: "Wave 1 of the 2026-11-20 onboarding audit: the places a non-technical customer stopped cold. Homebrew under curl | bash went non-interactive and the installer died silently (now /dev/tty plus a plain stop message); Windows got a full copyable install line; installers and wizard never say ready without ffmpeg (brew install exits 0 for an unlinked formula); no-credit 402/429 insufficient_quota stops with a plain message instead of retrying; Groq/OpenRouter keys checked for real, Sarvam 'not checked'; closing the wizard during the download asks first (a hard lock in PR #26, replaced in the follow-up); the installer's last box says how to open anyscribe; install.ps1 no longer exits (closing the window) under irm | iex; Read transcript and a formatted view."
 ---
 
 # Onboarding wave 1: let people in
@@ -107,9 +107,9 @@ way to check a key without spending, so it says "Not checked yet" in amber.
   round 1 review found a non-technical Mac user would not find that folder.
 - The Linux ffmpeg command in the box follows the detected package manager
   (`apt`, `dnf`, `pacman`).
-- W6 keeps the owner's hard lock while the page can confirm the download runs;
-  the round 2 diagnosis recommended confirm-to-close instead, left to the
-  owner as a wave 2 question (BACKLOG).
+- W6 shipped the owner's hard lock while the page can confirm the download
+  runs; the round 2 diagnosis recommended confirm-to-close instead, and the
+  owner chose it after the review cap (see the follow-up below).
 - On Windows the ffmpeg notice and the installer's box say to quit anyscribe
   from the tray and open it again: the running tray keeps the PATH it started
   with, so Check again can't see a fresh winget install.
@@ -122,3 +122,45 @@ way to check a key without spending, so it says "Not checked yet" in amber.
 - The macOS branches were exercised on Linux (Homebrew's Linux installer has
   the same non-interactive check; the end box via `--dry-run` with `uname`
   answering Darwin), not on a real Mac.
+
+## Follow-up (2026-11-20): closing asks first
+
+PR #26 shipped W6 as a hard lock: during the download, Escape, a click
+outside and Skip did nothing while anyscribe answered. The round 2 diagnosis
+(`docs/reviews/2026-11-20-onboarding-wave1/diagnosis-r2.md`, section 4)
+showed why the lock kept failing review: it can only be released by "the
+server says the setup stopped", the page learns that through reads that can
+fail, hang or land late, and the server has no cancel, so every round moved
+the defect between "unlocks during a live download" and "holds the customer
+with no way out". The owner chose its design B after the review cap: closing
+is allowed after a warning.
+
+- **Never locked.** `disableClose` is `saving` only and Skip for now shows on
+  every step. While the local step watches a setup (or its start request is
+  in flight), Escape, a click outside and Skip open "Close setup? The download
+  keeps going in the background while anyscribe stays open. …" with **Keep
+  setting up** (focused, which also scrolls it into view) and **Close setup**
+  (closes without the dismissed flag, so the wizard returns). A wrong belief
+  about "is a setup running" now costs one extra or one missing question,
+  never a trap.
+- **Adoption (R3C1).** The wizard's opening read saw `setup_running: true` but
+  the step started idle until its own first read, so the first moment (or a
+  hung read) let Escape close at once. The wizard now hands that knowledge to
+  the step it routes to, which watches from its first render; it is cleared
+  when that step is left, so it is used once.
+- **Start lifetime (R3C2).** A status read sent before the start request
+  settled could start watching and then complete the step before the start
+  answered. A counter that moves when the start is sent and again when it
+  settles now makes such a read say nothing about that setup.
+- **Quitting stops the download.** Setup runs inside the anyscribe process and
+  its state is in memory (`web/routes/local.py`), so the unreachable notice no
+  longer promises the download carries on after quitting. A restarted server
+  answers "not running, no outcome, no error"; the step now says "The setup
+  stopped before it finished, because anyscribe was closed. Click Try again to
+  start it again." instead of a missing-part sentence.
+- **No resume across a restart.** A real Whisper Base download stopped at
+  35.6% left 0 bytes of the weights on disk (huggingface_hub 2.4 with hf_xet
+  writes them at the end), and Try again started again from 0%. So the new
+  sentences say "start it again", not "carries on". The model card's
+  "incomplete: the download resumes" and troubleshooting's "picks up where it
+  stopped" predate this and are now a wave 2 item.

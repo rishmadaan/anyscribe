@@ -142,13 +142,18 @@ install_brew_if_needed() {
             if [[ "$DRY_RUN" == true ]]; then
                 echo "    [dry-run] Would install Homebrew"
             else
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                # </dev/tty: under curl | bash our stdin is the script itself, so
+                # Homebrew would go non-interactive and refuse to ask for the password.
+                local brew_failed="Homebrew didn't finish installing, so anyscribe can't continue. Install Homebrew from https://brew.sh (copy its one line into Terminal), then run this anyscribe installer again."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty || die "$brew_failed"
                 # Fresh installs are not on PATH in this shell yet — activate now.
                 if [[ -x /opt/homebrew/bin/brew ]]; then
                     eval "$(/opt/homebrew/bin/brew shellenv)"
                 elif [[ -x /usr/local/bin/brew ]]; then
                     eval "$(/usr/local/bin/brew shellenv)"
                 fi
+                # A failed download runs an empty script, which "succeeds".
+                command_exists brew || die "$brew_failed"
             fi
         else
             die "Cannot continue without a package manager. Install Homebrew from https://brew.sh and try again."

@@ -243,7 +243,8 @@ export default function OnboardingWizard({ onClose }: Props) {
 
   return (
     <Modal
-      onClose={() => askOrClose(false)}
+      // with the confirmation open, Escape (and a click outside) means Keep setting up
+      onClose={() => (confirmClose ? setConfirmClose(false) : askOrClose(false))}
       disableClose={saving}
       ariaLabelledBy="onboarding-title"
       size="xl"

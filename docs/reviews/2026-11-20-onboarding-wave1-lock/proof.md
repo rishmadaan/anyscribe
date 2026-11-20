@@ -57,7 +57,7 @@ T4_hang (round 3) is replaced by the lead's T4v2, as in the previous review: its
 **Rule 2, asks first while watched. BUILT.** `askOrClose = (persist) => (watched ? setConfirmClose(true) : dismiss(persist))` is what Escape, the backdrop (both through `Modal.onClose`) and Skip for now call. `watched` is the step's `busy` (watching, or the start request in flight). Not watched: T4_notRunning, T5, T5_late close at once on Escape with the flag unset.
 - Mutant M2 (`false && watched`): **T1, TG, R3C1, T13 fail**, each with `{"dialogOpen":false,"flag":null}` right after Escape while watched (`results/M2.json`). Restored: all four pass (`restored.json`, `final-all.json`).
 
-**Rule 3, the confirmation. BUILT.** S11 verbatim with "Keep setting up" (`autoFocus`) and "Close setup" (`dismiss(false)`). S11 hides by itself when the step stops being watched. Escape while S11 is open leaves it open.
+**Rule 3, the confirmation. BUILT.** S11 verbatim with "Keep setting up" (`autoFocus`) and "Close setup" (`dismiss(false)`). S11 hides by itself when the step stops being watched. Escape while S11 is open leaves it open (round 0; changed in round 1, LF3: Escape, and a click outside, now hide it, as Keep setting up does).
 - F3-4, settled at 390 px: dialog scrolled to the bottom (`scrollTop` 842), real Escape key: `scrollTop` 0, focus on "Keep setting up", its box inside the dialog's visible area (`screens/s11-s13-escape-after-scroll-390.png`).
 - Real Escape key and real Enter on the focused "Keep setting up" in the real walk (rule 12): S11 opened, then hid.
 

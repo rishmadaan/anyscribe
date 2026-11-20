@@ -83,8 +83,11 @@ way to check a key without spending, so it says "Not checked yet" in amber.
   `fold -s` (available on macOS and Linux), so the fixed sentences fit without
   hand-made line breaks.
 - macOS wording for "click the app": desktop mode puts it in `~/Applications`,
-  so the box says "the Applications folder inside your home folder", not "your
-  Applications folder" (that is `/Applications`).
+  which Finder's sidebar "Applications" (`/Applications`) is not, so the box
+  says "press Cmd and Space, type anyscribe, press Return" (Spotlight indexes
+  `~/Applications`). Plain "Cmd", not the symbol, keeps the box aligned. The
+  first draft said "the Applications folder inside your home folder"; the
+  round 1 review found a non-technical Mac user would not find that folder.
 - The Linux ffmpeg command in the box follows the detected package manager
   (`apt`, `dnf`, `pacman`).
 

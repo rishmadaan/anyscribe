@@ -1,6 +1,7 @@
 """Static guards for install.sh — the bugs these catch shipped once already."""
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -340,3 +341,14 @@ def test_pipx_hint_shows_after_default_desktop_run(tmp_path):
     assert "[dry-run]" in out and "desktop install --yes" in out
     assert "anyscribe is ready!" in out
     assert "pipx ensurepath" in out
+
+
+def test_mac_box_says_spotlight_and_stays_aligned(tmp_path):
+    # ~/Applications is not Finder's sidebar "Applications": point at Spotlight.
+    out = run_installer_dry(tmp_path, setup="OS=macos")
+    assert "desktop install --yes" in out
+    text = re.sub(r"\x1b\[[0-9;]*m", "", out)
+    box = text[text.rindex("  ┌") :].split("┘")[0] + "┘"  # the last box
+    assert "press Cmd and Space, type" in box
+    widths = {len(ln) for ln in box.splitlines()}
+    assert len(widths) == 1  # a wide glyph like ⌘ would push its line's border out

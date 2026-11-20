@@ -33,8 +33,9 @@ the next release.
   ffmpeg really is there. If it isn't, the last box says "anyscribe is
   installed, but can't transcribe yet" with the command to install it, instead
   of "anyscribe is ready!".
-- **The last box says how to open anyscribe:** click the app when desktop mode
-  was set up; otherwise, when the terminal you installed from can't find the
+- **The last box says how to open anyscribe:** when desktop mode was set up,
+  click the app (on a Mac: press Cmd and Space, type anyscribe, press Return);
+  otherwise, when the terminal you installed from can't find the
   `anyscribe` command yet, open a new terminal window first (the full path for
   that window is printed under the box).
 - **Windows: the window stays open when the installer fails,** so you can read

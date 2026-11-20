@@ -59,7 +59,7 @@ irm https://raw.githubusercontent.com/rishmadaan/anyscribe/main/install.ps1 | ie
 
 The installer checks for Python 3.11+, ffmpeg, yt-dlp, and a JavaScript runtime for YouTube (Deno, or Node 22+ if you already have it), installs whatever's missing, then installs anyscribe with the tray included. On Windows it also fixes your PATH so `anyscribe` works from any terminal (on Windows, ffmpeg needs winget or Chocolatey — the installer tells you if neither is present). If ffmpeg still isn't there at the end, the installer's last box says **anyscribe is installed, but can't transcribe yet** and gives the command to install it, instead of saying it's ready.
 
-The last box also says how to open anyscribe from there: click the app when desktop mode was set up, or, when the window you installed from can't find the `anyscribe` command yet, open a new terminal window first.
+The last box also says how to open anyscribe from there: click the app when desktop mode was set up (on a Mac it says to press Cmd and Space, type anyscribe and press Return, since the app is in the Applications folder inside your home folder, not the one in Finder's sidebar), or, when the window you installed from can't find the `anyscribe` command yet, open a new terminal window first.
 
 **Then it sets up desktop mode:** an **anyscribe** app icon, anyscribe started now and at every login, and the dashboard opened in your browser. See [Two ways to install](#two-ways-to-install) for what that means and how to undo it. Want the command-line tool only? Add `--no-desktop`:
 

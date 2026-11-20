@@ -624,15 +624,6 @@ desktop_where() {
     fi
 }
 
-# Where desktop mode put the app, in this OS's words, for the last box.
-app_place() {
-    if [[ "$OS" == "macos" ]]; then
-        echo "in the Applications folder inside your home folder"
-    else
-        echo "in your app menu"
-    fi
-}
-
 # A box in the given colour: a title, then each further argument as its own
 # paragraph, wrapped to fit (fold -s breaks at spaces).
 box() {
@@ -677,7 +668,12 @@ main() {
     local on_path=false open_line after_box=""
     ( PATH="$ORIG_PATH"; hash -r; command_exists anyscribe ) && on_path=true
     if [[ "$DESKTOP_STATE" == "done" ]]; then
-        open_line="Open anyscribe: click the anyscribe app ($(app_place)). Your dashboard should already be open in your browser."
+        # Mac: Spotlight finds ~/Applications, which Finder's sidebar doesn't show
+        if [[ "$OS" == "macos" ]]; then
+            open_line="Open anyscribe: press Cmd and Space, type anyscribe, press Return. Your dashboard should already be open in your browser."
+        else
+            open_line="Open anyscribe: click the anyscribe app (in your app menu). Your dashboard should already be open in your browser."
+        fi
         [[ "$USED_PIPX" != true ]] || after_box="If 'anyscribe' is not found when you type it, open a new terminal window first; if it still isn't, run: pipx ensurepath"
     elif [[ "$on_path" == true ]]; then
         open_line="Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"

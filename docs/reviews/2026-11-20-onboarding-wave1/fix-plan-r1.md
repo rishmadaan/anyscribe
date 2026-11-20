@@ -1,0 +1,18 @@
+# Fix plan, round 1 (lead's choices; binding where it decides)
+
+Fix every UPHELD finding below. F1 is the owner's release decision (no code change). F2 is REFUTED (see review-log.md and docs/reviews/declined.md): do not build it.
+
+- **C1**: while a local setup runs, nothing on the local step can unmount it or unlock the wizard: the `enable-local` checkbox is disabled, "Skip, next" and Back are disabled or hidden with a reason, and the lock (`onRunning`) follows the server's `setup_running`, not only the step's mount. Walk the exact path: cloud provider, enable local backup, start download, try to uncheck, skip, Escape, backdrop, Skip for now, and closing from Workspace.
+- **C2**: when the step adopts a running setup (on mount after a reload, or after a 409), set the selected model and the wizard's `localModel` to `setup_last_model` and show its name. Before advancing or printing "· ready" on All set, confirm that the model being summarised is runnable (from the status `models` list), not just `set_up`. Walk: start a Whisper Base download, reload mid-download, let it finish, and confirm All set names Whisper Base and Finish starts no other download.
+- **C3**: a key check's result applies only if the provider, the key text and the step are unchanged since the request; otherwise it is dropped. Simplest acceptable form: disable the key input, Back and Next while a check is running.
+- **C4**: install.ps1 re-checks ffmpeg and ffprobe after the last PATH change (just before desktop mode and the final box) and uses that result.
+- **C5**: link destinations allow one level of balanced parentheses (as in `https://example.com/audio_(final).mp3`); keep http(s)-only and React-only rendering; update the shortcut comment.
+- **F3**: retake the "setup ended, ffmpeg missing" screenshot showing the notice (and retake the Sarvam key-step screenshot with the new wording); if a retake truly cannot be done, say so in the proof.
+- **F4**: BACKLOG.md line about Sarvam says "Not checked yet".
+- **F5**: S1 becomes: OpenAI and OpenRouter keep "{Provider} is prepaid: add credit[ at <OpenAI billing URL>] and try again, or use the free option instead (...)"; every other provider gets "Your {Provider} account has no credit. Add credit or check your plan, then try again, or use the free option instead (in the dashboard: Settings, then Run setup wizard, then On this computer)." Update tests, docs/user/troubleshooting.md, the skill's troubleshooting reference, and regenerate landing/docs.
+- **F6**: the line under the click-the-app box reads "If you type anyscribe in a terminal later and it isn't found, open a new window; if it still isn't, run: pipx ensurepath" (keeps `tests/test_install_sh.py`'s required substring).
+- **F7**: the Mac click-the-app line reads "Open anyscribe: press Cmd and Space, type anyscribe, press Return. Your dashboard should already be open in your browser." (plain "Cmd", not the symbol, so the box stays aligned). Linux keeps "in your app menu"; Windows keeps "in your Start menu". Update docs that quote it.
+- **F8**: install.ps1, non-desktop route with ffmpeg missing: "...then open a new PowerShell window and type: anyscribe ui".
+- **F9**: when Sarvam is the provider, the key step shows the amber "Not checked yet" note before Next, and the first press of Next goes on.
+- **F10**: missingPart() in plain words, for example "A part anyscribe needs to transcribe on this computer didn't install. Click Try again; if it fails again, choose a cloud service instead." No package names, no "install log".
+- **Backlog (fit advice)**: add a wave 2 line: "Settings' Set up local transcription window ends silently when ffmpeg is missing (LocalSetupModal.tsx); give it the wizard's ffmpeg notice."

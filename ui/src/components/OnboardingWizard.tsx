@@ -73,14 +73,17 @@ type FormState = {
   restartNeeded: boolean;
 };
 
-/** What the local step knows about a setup: "running" locks the wizard;
- * "unknown" (anyscribe can't be reached) lets it close after a confirmation. */
-type SetupWatch = "idle" | "running" | "unknown";
-
 // Every status read (and the start request) gives up after this, so a quit or
 // stuck server shows as unreachable instead of a silent wait.
 const REQUEST_LIMIT_MS = 10_000;
 const POLL_MS = 1500;
+
+// Whether Try again resumes a half-downloaded model was checked with a real
+// download (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12).
+const S12 =
+  "Can't reach anyscribe right now. If you closed it, open it again: this page then shows the download if it is still running, or a Try again button to start it again.";
+const S14 =
+  "The setup stopped before it finished, because anyscribe was closed. Click Try again to start it again.";
 
 /** Send a request with a time limit; ``ctl`` lets the caller abort it too. */
 function limited<T>(
@@ -108,14 +111,16 @@ export default function OnboardingWizard({ onClose }: Props) {
     restartNeeded: false,
   });
   const [saving, setSaving] = useState(false);
-  // reported by the local step alone: "running" locks the wizard
-  const [setupWatch, setSetupWatch] = useState<SetupWatch>("idle");
+  // reported by the local step alone: a setup is watched, so closing asks first (S11)
+  const [watched, setWatched] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const onSetupWatch = useCallback((w: SetupWatch) => {
-    setSetupWatch(w);
-    if (w !== "unknown") setConfirmClose(false); // the confirmation is only for an unreachable server
+  const onWatched = useCallback((w: boolean) => {
+    setWatched(w);
+    if (!w) setConfirmClose(false); // nothing left to warn about
   }, []);
-  const locked = setupWatch === "running";
+  // The opening read saw a setup running: the local step it routes to starts
+  // watching at once. Cleared when that step is left, so it is used once.
+  const [adopt, setAdopt] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const modelName = useLocalModelNames(); // fetched now, so All set shows names at once
@@ -138,7 +143,10 @@ export default function OnboardingWizard({ onClose }: Props) {
     (done: Pick<FormState, "alsoModels" | "restartNeeded">) => setForm((f) => ({ ...f, ...done })),
     []
   );
-  const goWorkspace = useCallback(() => setStep("workspace"), []);
+  const goWorkspace = useCallback(() => {
+    setAdopt(false);
+    setStep("workspace");
+  }, []);
 
   // Preload the default workspace so StepWorkspace can show it as a hint.
   useEffect(() => {
@@ -156,8 +164,8 @@ export default function OnboardingWizard({ onClose }: Props) {
   }, []);
 
   // A download already running (the page was reloaded mid-download, or Settings
-  // started one): open on it instead of offering Download again. Only routes;
-  // the local step reads the status itself and owns the lock.
+  // started one): open on it instead of offering Download again. Routes and
+  // hands the step what it read; the step reports whether a setup is watched.
   useEffect(() => {
     limited(getLocalStatus)
       .then((s) => {
@@ -168,6 +176,7 @@ export default function OnboardingWizard({ onClose }: Props) {
           enableLocal: true,
           localModel: s.setup_last_model,
         }));
+        setAdopt(true);
         setStep("offline_opt_in");
       })
       .catch(() => undefined);
@@ -185,9 +194,8 @@ export default function OnboardingWizard({ onClose }: Props) {
     }
     onClose();
   };
-  // While anyscribe can't be reached, closing asks first (S11)
-  const askOrClose = (persist: boolean) =>
-    setupWatch === "unknown" ? setConfirmClose(true) : dismiss(persist);
+  // While a setup is watched, closing asks first (S11)
+  const askOrClose = (persist: boolean) => (watched ? setConfirmClose(true) : dismiss(persist));
 
   const branchFromProvider = (provider: string) => {
     setForm((f) => ({ ...f, provider }));
@@ -234,7 +242,7 @@ export default function OnboardingWizard({ onClose }: Props) {
   return (
     <Modal
       onClose={() => askOrClose(false)}
-      disableClose={saving || locked}
+      disableClose={saving}
       ariaLabelledBy="onboarding-title"
       size="xl"
     >
@@ -255,12 +263,7 @@ export default function OnboardingWizard({ onClose }: Props) {
             </p>
           )}
         </div>
-        {step !== "done" && !saving && locked && (
-          <span className="text-xs font-mono text-text-muted text-right">
-            Skip and Back are off until setup finishes.
-          </span>
-        )}
-        {step !== "done" && !saving && !locked && (
+        {step !== "done" && !saving && (
           <button
             onClick={() => askOrClose(true)}
             className="flex items-center gap-1 text-xs font-mono text-text-muted hover:text-text transition-colors cursor-pointer"
@@ -271,20 +274,27 @@ export default function OnboardingWizard({ onClose }: Props) {
           </button>
         )}
       </div>
+      {watched && (
+        <p className="-mt-2 mb-4 text-xs font-mono text-text-muted">
+          Back is off until setup finishes. Skip for now asks first.
+        </p>
+      )}
 
       {confirmClose && (
         <div role="alertdialog" aria-label="Close setup?" className="rounded-md border border-amber/40 bg-amber/[0.08] px-3 py-2.5 mb-4">
           <p className="text-xs text-text">
-            Close setup? If the download is still running it carries on in the background. Your
-            choices on these screens are saved only when you click Finish. To come back: Settings,
-            then Run setup wizard.
+            Close setup? The download keeps going in the background while anyscribe stays open.
+            Your choices on these screens are saved only when you click Finish. To come back:
+            Settings, then Run setup wizard.
           </p>
           <div className="mt-2 flex justify-end gap-2">
             <button
+              // focus scrolls it into view in the dialog and takes keyboard users to the choice
+              autoFocus
               onClick={() => setConfirmClose(false)}
               className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text hover:bg-surface-raised transition-colors cursor-pointer"
             >
-              Keep waiting
+              Keep setting up
             </button>
             <button
               onClick={() => dismiss(false)}
@@ -334,10 +344,12 @@ export default function OnboardingWizard({ onClose }: Props) {
           onPresetSize={presetSize}
           onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
           onSetupDone={setupDone}
-          onRunning={onSetupWatch}
-          onBack={() =>
-            setStep(form.provider === "local" ? "provider" : "api_key")
-          }
+          adopt={adopt}
+          onRunning={onWatched}
+          onBack={() => {
+            setAdopt(false);
+            setStep(form.provider === "local" ? "provider" : "api_key");
+          }}
           onNext={goWorkspace}
         />
       )}
@@ -675,6 +687,7 @@ function StepOfflineOptIn({
   onPresetSize,
   onSetLanguage,
   onSetupDone,
+  adopt,
   onRunning,
   onBack,
   onNext,
@@ -687,14 +700,21 @@ function StepOfflineOptIn({
   onPresetSize: (s: string) => void;
   onSetLanguage: (code: string) => void;
   onSetupDone: (done: Pick<FormState, "alsoModels" | "restartNeeded">) => void;
-  onRunning: (watch: SetupWatch) => void;
+  /** the wizard's opening read saw a setup running: watch it from the start */
+  adopt: boolean;
+  onRunning: (watched: boolean) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const [status, setStatus] = useState<LocalStatusResponse | null>(null);
   // watching: a setup is (or may be) running, so the step reads its status
-  const [watching, setWatching] = useState(false);
+  const [watching, setWatching] = useState(adopt);
   const [starting, setStarting] = useState(false); // the start request hasn't settled
+  // +1 when a start request is sent and again when it settles (odd: in flight).
+  // A status read speaks for the setup only if this was even and unchanged
+  // from sending to answer: one sent before the start settled can neither
+  // start nor end watching.
+  const startGenRef = useRef(0);
   const busy = watching || starting;
   // two status reads in a row failed or timed out
   const [unreachable, setUnreachable] = useState(false);
@@ -708,13 +728,13 @@ function StepOfflineOptIn({
   const [rec, setRec] = useState<LocalRecommendation | null>(null);
   const haveStatus = status !== null;
 
-  // The wizard's lock has this one writer, and goes back to idle with the step.
-  const watch: SetupWatch = unreachable ? "unknown" : busy ? "running" : "idle"; // busy: locked from the click, not only once watching
+  // The wizard's "closing asks first" has this one writer (busy: from the
+  // click, not only once watching), and goes back to false with the step.
   useEffect(() => {
-    const report = (w: SetupWatch) => onRunning(w);
-    report(watch);
-    return () => report("idle");
-  }, [watch, onRunning]);
+    const report = (w: boolean) => onRunning(w);
+    report(busy);
+    return () => report(false);
+  }, [busy, onRunning]);
 
   // One status read at a time, each with a time limit: until the first status
   // arrives, then for as long as a setup is watched. Watching ends only on a
@@ -725,6 +745,7 @@ function StepOfflineOptIn({
     let ctl: AbortController | undefined;
     let next: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
+      const gen = startGenRef.current;
       ctl = new AbortController();
       const s = await limited(getLocalStatus, ctl).catch(() => null);
       // the log is read on its own: a failed log read changes only the log panel
@@ -741,13 +762,14 @@ function StepOfflineOptIn({
       if (!s) {
         failsRef.current += 1;
         if (failsRef.current >= 2) setUnreachable(true);
-      } else {
+      } else if (gen === startGenRef.current && gen % 2 === 0) {
+        // (otherwise it was sent before the start request settled: ignored)
         failsRef.current = 0;
         setUnreachable(false);
         setStatus(s);
         onPresetSize(s.recommended_model);
         if (s.setup_running) {
-          // watch the running setup, locked, with its progress and its model
+          // watch the running setup, with its progress and its model
           if (!watching) onSetEnabled(true);
           if (s.setup_last_model && s.setup_last_model !== selected) onSelectSize(s.setup_last_model);
           setWatching(true);
@@ -766,7 +788,8 @@ function StepOfflineOptIn({
             onNext();
           } else if (s.ffmpeg_ok) {
             const name = s.models.find((m) => m.size === selected)?.spec.display_name;
-            setMissing(missingPart(s, name, required));
+            // no outcome and no error: anyscribe restarted mid-setup (its setup state is in memory)
+            setMissing(s.setup_outcome == null ? S14 : missingPart(s, name, required));
           }
           return;
         }
@@ -785,6 +808,7 @@ function StepOfflineOptIn({
   // already run) switches the default and queues the extras server-side.
   const handleStartSetup = async () => {
     if (!selected) return;
+    startGenRef.current += 1;
     setStarting(true);
     setSetupError(null);
     setMissing(null);
@@ -799,6 +823,7 @@ function StepOfflineOptIn({
       const msg = e instanceof Error ? e.message : "";
       refused = /^\d{3}:/.test(msg) && !msg.startsWith("409");
     }
+    startGenRef.current += 1;
     setStarting(false);
     if (refused) setMissing(`anyscribe couldn't start the setup. Click Try again; if it fails again, ${otherwise(required)}.`);
     else setWatching(true);
@@ -862,10 +887,7 @@ function StepOfflineOptIn({
       {unreachable && (
         <div role="status" className="rounded-md border border-amber/40 bg-amber/[0.08] px-3 py-2.5 mb-4 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-amber mt-0.5 shrink-0" />
-          <p className="text-xs text-text">
-            Can't reach anyscribe right now. If you quit it, open it again; this page picks the
-            download back up.
-          </p>
+          <p className="text-xs text-text">{S12}</p>
         </div>
       )}
 
@@ -873,29 +895,8 @@ function StepOfflineOptIn({
 
       {status?.restart_needed && (
         <RestartBanner>
-          Restart anyscribe, then open the setup wizard again (Settings, then Run setup wizard);
-          the download is kept.
+          Then open the setup wizard again (Settings, then Run setup wizard); the download is kept.
         </RestartBanner>
-      )}
-
-      {setupError && (
-        <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
-            <p className="text-xs text-red font-mono break-words">
-              {setupError.length > 500 ? setupError.slice(0, 500) + "…" : setupError}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {missing && (
-        <div role="alert" className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
-            <p className="text-xs text-red">{missing}</p>
-          </div>
-        </div>
       )}
 
       {(busy || logLines.length > 0) && (enabled || required) && (
@@ -946,6 +947,27 @@ function StepOfflineOptIn({
         ) : (
           <div className="text-xs text-text-muted font-mono py-4">Loading models…</div>
         ))}
+
+      {/* just above the buttons, so the Try again it names is in view */}
+      {setupError && (
+        <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mt-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
+            <p className="text-xs text-red font-mono break-words">
+              {setupError.length > 500 ? setupError.slice(0, 500) + "…" : setupError}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {missing && (
+        <div role="alert" className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mt-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
+            <p className="text-xs text-red">{missing}</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mt-5">
         <button

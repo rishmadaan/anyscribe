@@ -117,6 +117,8 @@ export interface LocalStatusResponse {
   setup_error: string | null;
   setup_last_model: string | null;
   setup_progress: DownloadProgress | null;
+  /** the last setup's ending (set_up | superseded | failed); null while running or after a restart */
+  setup_outcome: string | null;
   recommended_model: string;
   choices: string[];
   featured: string[];

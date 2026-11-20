@@ -34,6 +34,7 @@ USED_PIPX=false
 POST_INSTALL_SKIPPED=false
 FFMPEG_MISSING=false       # true when ffmpeg is still not on PATH after installing it
 PY="python3"
+ORIG_PATH="$PATH"          # the person's own terminal; we may add Homebrew to ours
 
 # ── Colors ────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -623,6 +624,15 @@ desktop_where() {
     fi
 }
 
+# Where desktop mode put the app (S7a), in this OS's words.
+app_place() {
+    if [[ "$OS" == "macos" ]]; then
+        echo "in the Applications folder inside your home folder"
+    else
+        echo "in your app menu"
+    fi
+}
+
 # A box in the given colour: a title, then each further argument as its own
 # paragraph, wrapped to fit (fold -s breaks at spaces).
 box() {
@@ -662,38 +672,37 @@ main() {
         ok "$(desktop_where)"
         echo ""
     fi
+    # How to open anyscribe from here. The person's terminal still has the PATH
+    # it had when they ran us, so a pipx install isn't found there until a new window.
+    local on_path=false open_line after_box=""
+    ( PATH="$ORIG_PATH"; hash -r; command_exists anyscribe ) && on_path=true
+    if [[ "$DESKTOP_STATE" == "done" ]]; then
+        open_line="Open anyscribe: click the anyscribe app ($(app_place)). Your dashboard should already be open in your browser."
+        [[ "$on_path" == true || "$USED_PIPX" != true ]] || after_box="To type anyscribe commands, open a new terminal window first."
+    elif [[ "$on_path" == true ]]; then
+        open_line="To set up and start transcribing, open the dashboard. Type: anyscribe ui"
+    elif [[ "$USED_PIPX" == true ]]; then
+        open_line="Open a new terminal window, then type: anyscribe ui"
+        after_box="Or, in this window: $(pipx_bin_dir)/anyscribe ui"
+    else
+        open_line="To set up and start transcribing, open the dashboard. Type: $PY -m anyscribe ui"
+    fi
     if [[ "$FFMPEG_MISSING" == true ]]; then
         box "$YELLOW" "anyscribe is installed, but can't transcribe yet" \
-            "ffmpeg, a free audio tool, is missing. Install it with: $(ffmpeg_install_cmd), then open anyscribe again."
+            "ffmpeg, a free audio tool, is missing. Install it with: $(ffmpeg_install_cmd), then open anyscribe again." \
+            "$open_line"
     elif [[ "$DESKTOP_STATE" == done ]] || { [[ -z "$DESKTOP_STATE" && "$POST_INSTALL_SKIPPED" != true ]] && { [[ "$RUN_ONBOARD" == true ]] || [[ "$RUN_UI" == true ]]; }; }; then
-        echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe is ready!                │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe ui       web dashboard   │${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe \"<url>\"  transcribe now  │${NC}"
-        echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
+        box "$GREEN" "anyscribe is ready!" "$open_line"
     else
-        echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────┐${NC}"
-        echo -e "${GREEN}${BOLD}  │  anyscribe is installed!            │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  Next step:                         │${NC}"
-        echo -e "${GREEN}${BOLD}  │    anyscribe ui                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │                                     │${NC}"
-        echo -e "${GREEN}${BOLD}  │  Opens a dashboard in your browser  │${NC}"
-        echo -e "${GREEN}${BOLD}  │  to set up and start transcribing.  │${NC}"
-        echo -e "${GREEN}${BOLD}  └─────────────────────────────────────┘${NC}"
+        box "$GREEN" "anyscribe is installed!" "$open_line"
     fi
+    [[ -z "$after_box" ]] || echo "    $after_box"
     if [[ "$DESKTOP_STATE" == failed ]]; then
         echo ""
         warn "Desktop mode was not set up (see above). You can retry later with: anyscribe desktop install"
     elif [[ "$POST_INSTALL_SKIPPED" == true ]]; then
         echo ""
         warn "anyscribe was installed, but the launch you asked for did not run (see above)."
-    fi
-    if [[ "$USED_PIPX" == true ]]; then
-        echo ""
-        warn "Installed via pipx — if 'anyscribe' is not found, restart your terminal"
-        echo "    or run: pipx ensurepath"
     fi
     echo ""
 }

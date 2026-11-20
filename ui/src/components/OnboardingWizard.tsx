@@ -78,8 +78,8 @@ type FormState = {
 const REQUEST_LIMIT_MS = 10_000;
 const POLL_MS = 1500;
 
-// Whether Try again resumes a half-downloaded model was checked with a real
-// download (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12).
+// Try again does not resume a half-downloaded model: a real download stopped at
+// 35.6% restarted from 0% (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12).
 const S12 =
   "Can't reach anyscribe right now. If you closed it, the download stopped too: open anyscribe again and this page shows a Try again button to start it again.";
 // no cause named: the server answers the same after a restart and when the start never reached it

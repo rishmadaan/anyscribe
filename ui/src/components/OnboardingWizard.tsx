@@ -847,9 +847,6 @@ function StepOfflineOptIn({
               className="text-sm text-text cursor-pointer"
             >
               Also enable offline / local transcription
-              {busy && (
-                <span className="text-text-muted"> (stays on until the download finishes)</span>
-              )}
             </label>
           </div>
         </div>
@@ -997,9 +994,6 @@ function StepOfflineOptIn({
         <p className="mt-2 text-right text-[11px] text-text-muted">
           Install ffmpeg first (see above), then click Check again.
         </p>
-      )}
-      {busy && (
-        <p className="mt-2 text-[11px] text-text-muted">Back is off until the download finishes.</p>
       )}
     </>
   );

@@ -62,7 +62,9 @@ the next release.
   instead of showing an error. If the page can't reach anyscribe, the wizard
   says "Can't reach anyscribe right now"; if anyscribe then reports no setup
   and no result (after a restart, for example), it says "Setup didn't
-  finish", with **Try again**.
+  finish", with **Try again**. A setup that fails says "anyscribe couldn't
+  finish setting up local transcription. Click Try again."; the technical
+  details stay in the install log, which opens only when you click it.
 
 **Transcribing and reading**
 - **"Your OpenAI account has no credit."** An account with no credit now gets

@@ -396,6 +396,9 @@ try {
     Test-YtDlp
     Write-Host ""
     Install-Anyscribe
+    # Install-Anyscribe reloads PATH from the registry, which can drop an
+    # ffmpeg found earlier in this window only: the box must say what is true now.
+    $null = Test-FfmpegFound
 
     # Desktop mode opens the dashboard itself. Its failure is not an install
     # failure: anyscribe works, so warn and fall back to the plain banner.

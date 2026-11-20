@@ -38,6 +38,7 @@ import type {
 } from "../api/types";
 import LocalModelPicker from "./LocalModelPicker";
 import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
+import { FfmpegNotice } from "./FfmpegNotice";
 import { downloadMbFor, formatMB, formatPerHour } from "../api/models";
 import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
@@ -585,6 +586,8 @@ function StepOfflineOptIn({
   const [status, setStatus] = useState<LocalStatusResponse | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  // setup ended with no error but still not set up (ffmpeg shows its own notice)
+  const [missing, setMissing] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const logCursorRef = useRef(0);
@@ -622,6 +625,8 @@ function StepOfflineOptIn({
             // shows their progress.
             onSetupDone({ alsoModels: s.setup_also, restartNeeded: s.restart_needed });
             onNext();
+          } else if (s.ffmpeg_ok) {
+            setMissing(missingPart(s));
           }
         }
       } catch {
@@ -637,6 +642,7 @@ function StepOfflineOptIn({
     if (!selected) return;
     setSettingUp(true);
     setSetupError(null);
+    setMissing(null);
     setLogLines([]);
     logCursorRef.current = 0;
     try {
@@ -659,6 +665,12 @@ function StepOfflineOptIn({
   const allRunnable =
     toFetch.length > 0 && toFetch.every((id) => models.find((m) => m.size === id)?.runnable);
   const names = toFetch.map((id) => models.find((m) => m.size === id)?.spec.display_name ?? id);
+  const ffmpegMissing = !!status && !status.ffmpeg_ok;
+  const checkFfmpeg = async () => {
+    const s = await getLocalStatus();
+    setStatus(s);
+    return s.ffmpeg_ok;
+  };
 
   return (
     <>
@@ -693,6 +705,8 @@ function StepOfflineOptIn({
         </p>
       )}
 
+      {(enabled || required) && ffmpegMissing && <FfmpegNotice onCheckAgain={checkFfmpeg} />}
+
       {(enabled || required) &&
         (status ? (
           <LocalModelPicker
@@ -723,6 +737,15 @@ function StepOfflineOptIn({
             <p className="text-xs text-red font-mono break-words">
               {setupError.length > 500 ? setupError.slice(0, 500) + "…" : setupError}
             </p>
+          </div>
+        </div>
+      )}
+
+      {missing && (
+        <div role="alert" className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red mt-0.5 shrink-0" />
+            <p className="text-xs text-red">{missing}</p>
           </div>
         </div>
       )}
@@ -768,7 +791,7 @@ function StepOfflineOptIn({
           {(enabled || required) && (
             <button
               onClick={handleStartSetup}
-              disabled={!selected || settingUp}
+              disabled={!selected || settingUp || ffmpegMissing}
               className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
             >
               {settingUp ? (
@@ -801,8 +824,23 @@ function StepOfflineOptIn({
           )}
         </div>
       </div>
+      {(enabled || required) && ffmpegMissing && (
+        <p className="mt-2 text-right text-[11px] text-text-muted">
+          Install ffmpeg first (see above), then click Check again.
+        </p>
+      )}
     </>
   );
+}
+
+/** Setup ended without an error but local still can't run: say which part. */
+function missingPart(s: LocalStatusResponse): string {
+  if (!s.faster_whisper_installed) {
+    return s.restart_needed
+      ? "Setup finished, but the local engine can't load until anyscribe restarts. Quit anyscribe and open it again, then continue."
+      : "Setup finished, but the local engine (faster-whisper) isn't installed. Open the install log below for details, then try again.";
+  }
+  return "Setup finished, but no model can run yet. Click the button below to try the download again.";
 }
 
 function StepWorkspace({

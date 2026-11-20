@@ -674,7 +674,7 @@ main() {
         else
             open_line="Open anyscribe: click the anyscribe app (in your app menu). Your dashboard should already be open in your browser."
         fi
-        [[ "$USED_PIPX" != true ]] || after_box="If 'anyscribe' is not found when you type it, open a new terminal window first; if it still isn't, run: pipx ensurepath"
+        [[ "$USED_PIPX" != true ]] || after_box="If you type anyscribe in a terminal later and it isn't found, open a new window; if it still isn't, run: pipx ensurepath"
     elif [[ "$on_path" == true ]]; then
         open_line="Next step: open the dashboard to set up and start transcribing. Type: anyscribe ui"
     elif [[ "$USED_PIPX" == true ]]; then

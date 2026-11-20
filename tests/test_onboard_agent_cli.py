@@ -256,3 +256,40 @@ def test_yes_human_output_says_restart_when_setup_replaced_a_loaded_engine(tmp_p
     with patch("anyscribe.core.onboard_headless.run_headless_onboard", return_value=result(False)):
         out = runner.invoke(_make_app(), args)
     assert out.exit_code == 0 and RESTART_MESSAGE not in out.stdout
+
+
+def _run_interactive_to_key_prompt(monkeypatch, tmp_path, provider: str) -> str:
+    """Drive the interactive wizard to the API-key prompt for ``provider`` and
+    stop there; returns what was printed."""
+    monkeypatch.setattr("anyscribe.cli.onboard.CONFIG_FILE", tmp_path / "config.yaml")
+    monkeypatch.setattr("anyscribe.cli.onboard.ensure_app_dirs", lambda: None)
+
+    def fake_select(options, **_):
+        if any("On this computer" in o for o in options):
+            return options[1]  # "With a cloud service"
+        match = [o for o in options if f"{provider}" in o.lower()]
+        return match[0] if match else options[0]  # provider list, else its model list
+
+    def stop(*_a, **_k):
+        raise RuntimeError("stopped at the key prompt")
+
+    monkeypatch.setattr("anyscribe.cli.onboard.bselect", fake_select)
+    monkeypatch.setattr("anyscribe.cli.onboard.typer.prompt", stop)
+    result = runner.invoke(_make_app(), ["--skip-deps"])
+    assert str(result.exception) == "stopped at the key prompt"
+    return " ".join(result.stdout.replace("│", " ").split())  # undo the panel's wrapping
+
+
+def test_openai_key_prompt_says_openai_is_prepaid(monkeypatch, tmp_path):
+    out = _run_interactive_to_key_prompt(monkeypatch, tmp_path, "openai")
+    assert "Enter your OpenAI Whisper API key." in out
+    assert (
+        "OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail."
+        in out
+    )
+
+
+def test_groq_key_prompt_has_no_openai_prepaid_note(monkeypatch, tmp_path):
+    out = _run_interactive_to_key_prompt(monkeypatch, tmp_path, "groq")
+    assert "Enter your Groq API key." in out
+    assert "prepaid" not in out

@@ -430,6 +430,11 @@ function StepApiKey({
         locally in <code className="text-xs font-mono text-text">~/.anyscribe/.env</code> and
         never shared.
       </p>
+      {providerName === "openai" && (
+        <p className="text-xs text-text-secondary border-l-[3px] border-amber bg-amber/[0.07] rounded-md px-3 py-2 mb-4">
+          OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail.
+        </p>
+      )}
       <div className="mb-4">
         <input
           type="password"

@@ -9,6 +9,7 @@ import ResultCard from "../components/ResultCard";
 import LanguageInput from "../components/LanguageInput";
 import ModelInput from "../components/ModelInput";
 import { defaultModelFor } from "../api/models";
+import { transcriptSlug } from "../transcript";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
@@ -307,7 +308,7 @@ export default function TranscribePage() {
               This source is already in your vault.
             </p>
             <Link
-              to={`/history/${result.file_path.split("/").pop()?.replace(/\.md$/, "")}`}
+              to={`/history/${transcriptSlug(result.file_path)}`}
               className="text-xs text-amber hover:underline font-mono break-all"
             >
               {result.file_path}

@@ -1,5 +1,7 @@
-import { Check, Copy, FileText, Plus } from "lucide-react";
+import { BookOpen, Check, Copy, FileText, Plus } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { transcriptSlug } from "../transcript";
 import type { JobResult } from "../api/types";
 import { useLocalModelNames } from "../hooks/useLocalModelNames";
 
@@ -97,20 +99,33 @@ export default function ResultCard({ result, onReset }: ResultCardProps) {
         </button>
       </div>
 
-      {/* Actions */}
-      <button
-        onClick={onReset}
-        className="
-          flex items-center justify-center gap-2
-          rounded-lg border border-border hover:border-border/80
-          bg-surface-raised hover:bg-surface-hover
-          px-5 py-2.5 w-full text-sm text-text-secondary hover:text-text
-          transition-colors cursor-pointer
-        "
-      >
-        <Plus className="w-4 h-4" />
-        New transcription
-      </button>
+      {/* Actions: reading it is the main one */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Link
+          to={`/history/${transcriptSlug(result.file_path)}`}
+          className="
+            flex-1 flex items-center justify-center gap-2
+            rounded-lg bg-amber/90 hover:bg-amber px-5 py-2.5
+            text-sm font-semibold text-bg transition-colors
+          "
+        >
+          <BookOpen className="w-4 h-4" />
+          Read transcript
+        </Link>
+        <button
+          onClick={onReset}
+          className="
+            flex items-center justify-center gap-2
+            rounded-lg border border-border hover:border-border/80
+            bg-surface-raised hover:bg-surface-hover
+            px-5 py-2.5 text-sm text-text-secondary hover:text-text
+            transition-colors cursor-pointer
+          "
+        >
+          <Plus className="w-4 h-4" />
+          New transcription
+        </button>
+      </div>
     </div>
   );
 }

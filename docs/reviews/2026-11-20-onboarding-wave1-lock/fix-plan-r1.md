@@ -1,0 +1,12 @@
+# Fix plan, round 1 (lead's choices; binding)
+
+Fix every UPHELD finding except L1 (a nit the lead keeps as residue; it goes to the BACKLOG, see below).
+
+- **LF1** (scope addition approved by the lead): `ui/src/components/LocalModelPicker.tsx:85` "incomplete: the download resumes" becomes "incomplete: setup downloads it again"; `docs/user/troubleshooting.md` around 642-643 "the download picks up where it stopped." becomes "the download starts again." Grep `git grep -n -i "resume\|picks up where"` across `ui/src`, `docs/user`, `src/anyscribe/skill` and `CHANGELOG.md` for any other claim that a stopped download resumes, and fix each to match the real-run evidence. Remove the wave 2 BACKLOG line about these strings (now fixed).
+- **L2**: S14 becomes "Setup didn't finish. Click Try again to start it again." The troubleshooting entry for it explains, without claiming a cause: "anyscribe isn't reporting a running setup or its result. This can happen after anyscribe was closed or restarted, or if the start request never reached it. Click **Try again** to start it again." Update the harness cases' fixed strings and the journal quote.
+- **L3**: when setup ends with `setup_error`, the step shows "anyscribe couldn't finish setting up local transcription. Click Try again." (no raw text), the button reads "Try again", and the raw text stays only in the install log, which no longer opens by itself (the existing "show install log" control opens it). Add a harness case with a `setup_error` holding a status code and JSON, asserting neither appears outside the log.
+- **LF2**: S12 becomes "Can't reach anyscribe right now. If you closed it, the download stopped too: open anyscribe again and this page shows a Try again button to start it again." Update troubleshooting.md and CHANGELOG where quoted.
+- **LF3**: while the confirmation is open, Escape means "Keep setting up" (hides it). Update the proof's earlier statement.
+- **LF4**: CHANGELOG: "the wizard is never locked; Back and the model choices are off until the setup finishes."
+- **LF5**: the code comment states the finding: "Try again does not resume a half-downloaded model: a real download stopped at 35.6% restarted from 0% (docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md, rule 12)."
+- **L1 residue**: add a wave 2 BACKLOG line: "Setup wizard: an opening status reply that arrives after the local step mounted is not handed to it, so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); reconcile it through the step's start-ordering guard."

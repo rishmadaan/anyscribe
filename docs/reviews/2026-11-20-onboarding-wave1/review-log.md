@@ -5,7 +5,7 @@ Packet: v1
 
 | Round | Role | Model, effort | Lane | Target (sha/version) | Verdict | Raised | Upheld | Minutes | Fixer |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | correctness | gpt-6.1-sol, high | Codex CLI read-only | 8d63221 | NOT YET | 5 | 5 | 24 | Claude Opus fixer, Agent tool |
+| 1 | correctness | gpt-6.1-sol, high | Codex CLI read-only | 8d63221 | NOT YET | 5 | 5 | 7 | Claude Opus fixer, Agent tool |
 | 1 | fit | Opus 5.5, default effort | Agent tool (Claude lane, read-only by instruction; snapshot unchanged) | 8d63221 | CONDITIONAL | 10 | 9 | 7 | Claude Opus fixer, Agent tool |
 
 Round 1 fit seat ran at the Agent tool's default effort (the tool's effort is set only on explicit instruction); the roster names high.
@@ -27,3 +27,4 @@ Round 1 fit seat ran at the Agent tool's default effort (the tool's effort is se
 | F8 | 1 | opus fit | nit | UPHELD | install.ps1 non-desktop route with ffmpeg missing tells them to type in the same window | |
 | F9 | 1 | opus fit | nit | UPHELD | Sarvam: first Next only shows the amber note | |
 | F10 | 1 | opus fit | nit | UPHELD | missingPart() says "the local engine (faster-whisper)" and "install log" | |
+CI on 8d63221: all 9 checks pass (gh pr checks 26, 2026-11-20).

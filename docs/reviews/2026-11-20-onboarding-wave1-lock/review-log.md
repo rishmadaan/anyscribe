@@ -30,3 +30,13 @@ Round 1 minutes from timestamps: correctness 17:41:19 to 17:46:55; fit 197 s (Ag
 
 Round 2 minutes from timestamps: correctness 18:10:28 to 18:14:36; fit 173 s (Agent tool). CI on 03f6562: all 9 checks pass.
 Cap reached (round 2 of 2 at M) with one UPHELD should-fix (R2LF1, a display-only sentence on a repeated-failure path) and three nits. Per the review skill step 7 at M, the lead fixed them after the cap and reports these last changes as UNREVIEWED, lead-verified: a new browser check failed on the old build and passes on the new one (proof.md, "Lead-made changes after the round 2 re-check"). L1 is now marked "Before the next PyPI release" in BACKLOG, honouring the owner's promise that the lock's leftovers never reach a customer.
+
+## Cost (phlinux, 2026-11-20 18:26)
+
+| Round | Codex runs | Codex tokens used | Codex minutes | Claude agents | Claude fresh+out tokens | Claude minutes |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0.0 | 1 | 530,322 | 35.8 |
+| 1 | 1 | 178,838 | 5.3 | 2 | 427,016 | 24.3 |
+| 2 | 1 | 152,487 | 3.8 | 1 | 126,478 | 2.9 |
+
+A round run on the other machine is added by running this there. Claude usage counted once per message id; Codex tokens are the last figure Codex prints. A duration shown as ? could not be measured (no rollout file or no timestamps): unknown, not zero. Codex children in T3 and anything on the other machine are not counted here. The lead's own tokens are not separable and are not counted.

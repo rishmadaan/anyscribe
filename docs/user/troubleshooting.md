@@ -601,6 +601,13 @@ anyscribe was closed or restarted, or if the start request never reached it.
 Click **Try again** to start it again. Nothing you chose on the wizard's
 screens is lost while the wizard stays open.
 
+### "anyscribe couldn't finish setting up local transcription." (setup wizard)
+
+The setup ran but stopped with an error. Click **Try again**. If it fails again,
+untick local transcription and go on, or choose a cloud service instead. To see
+why it failed, click **show install log** above the model cards: the last line
+starting with `[error]` names the reason, and you can look it up on this page.
+
 ### `faster-whisper is not installed` / `onnx-asr is not installed`
 
 The local provider is opt-in and needs a one-time install:

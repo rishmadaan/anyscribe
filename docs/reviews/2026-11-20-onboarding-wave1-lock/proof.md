@@ -219,3 +219,17 @@ clean before this file's edit
 
 - Stopped by pid after reading each command line: the dashboard (8491, pid 1606393) and `serve.py` (8497, pid 1606395); no listener left on 8490 to 8499. Closed my preview tab.
 - Kept under `~/.review-runs/2026-11-20-onboarding-wave1-lock/`: `home-r1fix`, the instruments and results, `screens/r1fix-*.png`.
+
+## Lead-made changes after the round 2 re-check (post-cap, reported to the owner as unreviewed)
+
+- **R2LF1** `OnboardingWizard.tsx`: the setup-failure sentence is now "anyscribe couldn't finish setting up local transcription. Click Try again; if it fails again, <untick local transcription and go on | choose a cloud service instead>." (the step's existing `otherwise(required)` helper, as its three sibling sentences use).
+- **R2LF2** `OnboardingWizard.tsx`: while anyscribe can't be reached, the progress line reads "Waiting for anyscribe…" instead of claiming the download is running.
+- **R2LF3** `docs/user/troubleshooting.md`: an entry keyed on "anyscribe couldn't finish setting up local transcription." (landing/docs regenerated).
+- **R2LF4** `src/anyscribe/cli/models_cmd.py`: `anyscribe model info` says "Download it again: anyscribe model pull <id>" instead of "Resume the download"; BACKLOG's line now covers only the code comments.
+- BACKLOG: L1 marked "Before the next PyPI release"; R2L1 added to wave 2.
+
+Proof (harness copies in `~/.review-runs/2026-11-20-onboarding-wave1-lock/instruments/`, results in `results/`):
+- New lead check `lead-r2.js` on the OLD build (`index-DyrxykgW.js`, 03f6562): FAIL "failure sentence names a way out" (got "...Click Try again."), FAIL "progress line says Waiting for anyscribe" (got "Installing the local engines and downloading the model…"); `results/lead-r2-oldbuild.json`.
+- Same check on the NEW build (`index-BKmerAkr.js`): all 4 PASS; `results/lead-r2-newbuild.json`.
+- Full suite on the new build (`results/lead-postcap-all.json`): 25 of 26; T7 failed only because the harness's progress reader recognised just "Downloading|Installing|Install log". With the reader taught "Waiting for anyscribe" and T7's and L3's expected strings updated (old copies kept as `harness.r1.js`, `cases.r1.js`), T7, T6 and T9 re-run PASS (`results/lead-t7.json`).
+- `ruff check src tests scripts`: All checks passed. `pytest -q`: 931 passed, 6 skipped. `npm run lint && npm run build`: clean, bundle `index-BKmerAkr.js`. `build-docs.py` + `check-docs.py`: exit 0.

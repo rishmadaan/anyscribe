@@ -500,6 +500,11 @@ quitting anyscribe stops it.</p>
 anyscribe was closed or restarted, or if the start request never reached it.
 Click <strong>Try again</strong> to start it again. Nothing you chose on the wizard's
 screens is lost while the wizard stays open.</p>
+<h3 id="anyscribe-couldnt-finish-setting-up-local-transcription-setup-wizard">"anyscribe couldn't finish setting up local transcription." (setup wizard)</h3>
+<p>The setup ran but stopped with an error. Click <strong>Try again</strong>. If it fails again,
+untick local transcription and go on, or choose a cloud service instead. To see
+why it failed, click <strong>show install log</strong> above the model cards: the last line
+starting with <code>[error]</code> names the reason, and you can look it up on this page.</p>
 <h3 id="faster-whisper-is-not-installed-onnx-asr-is-not-installed"><code>faster-whisper is not installed</code> / <code>onnx-asr is not installed</code></h3>
 <p>The local provider is opt-in and needs a one-time install:</p>
 <pre><code class="language-bash">anyscribe local setup --model parakeet-v3

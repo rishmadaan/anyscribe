@@ -688,8 +688,9 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 - [ ] LocalSetupModal has the same lock shape: `disableClose={running}`, `Promise.all`, swallowed errors.
 - [ ] `beforeunload` guard on reload.
 - [ ] tests/conftest.py leaves a /tmp/ascli-test-home-* folder per pytest run (about 300 so far, harmless)
-- [ ] Setup wizard: an opening status reply that arrives after the local step mounted is not handed to it, so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); reconcile it through the step's start-ordering guard.
-- [ ] `anyscribe model info` still says "Resume the download: anyscribe model pull <id>" for an incomplete model (`cli/models_cmd.py`), and code comments in `providers/local_models.py` and `web/routes/models.py` say a pull resumes; with huggingface_hub 2.4 a stopped download starts again from 0% (`docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`, rule 12). The dashboard and docs wording was fixed in the W6 follow-up.
+- [ ] **Before the next PyPI release** (the leftovers of the lock were promised not to reach customers): setup wizard: an opening status reply that arrives after the local step mounted is not handed to it, so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); reconcile it through the step's start-ordering guard.
+- [ ] Code comments in `providers/local_models.py` and `web/routes/models.py` say a pull resumes; with huggingface_hub 2.4 a stopped download starts again from 0% (`docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`, rule 12). The dashboard, docs and `anyscribe model info` wording was fixed in the W6 follow-up.
+- [ ] Setup wizard: when the last install-log read fails, or the log is past its 500-line cap, the failure's `[error]` line never reaches the browser's install log; keep the ending status's `setup_error` in the log panel (review R2L1, 2026-11-20).
 
 ### Wave 3
 

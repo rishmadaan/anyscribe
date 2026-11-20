@@ -85,7 +85,7 @@ const S12 =
 // no cause named: the server answers the same after a restart and when the start never reached it
 const S14 = "Setup didn't finish. Click Try again to start it again.";
 // the server's own error text (installer stderr, HTTP details) stays in the install log
-const SETUP_FAILED = "anyscribe couldn't finish setting up local transcription. Click Try again.";
+const SETUP_FAILED = "anyscribe couldn't finish setting up local transcription.";
 
 /** Send a request with a time limit; ``ctl`` lets the caller abort it too. */
 function limited<T>(
@@ -781,7 +781,7 @@ function StepOfflineOptIn({
           stop = true;
           setWatching(false);
           if (s.setup_error) {
-            setMissing(SETUP_FAILED);
+            setMissing(`${SETUP_FAILED} Click Try again; if it fails again, ${otherwise(required)}.`);
           } else if (s.set_up && s.models.find((m) => m.size === selected)?.runnable) {
             // set_up means some model can run: All set names this one as ready.
             // The server queued the extras (Turbo for a mix) itself; All set
@@ -907,7 +907,9 @@ function StepOfflineOptIn({
               {busy && <Loader2 className="w-4 h-4 animate-spin text-amber" />}
               <p className="text-xs text-text font-mono">
                 {busy
-                  ? !unreachable && status?.setup_progress?.percent != null
+                  ? unreachable
+                    ? "Waiting for anyscribe…"
+                    : status?.setup_progress?.percent != null
                     ? `Downloading ${runningName ?? "the model"}… ${status.setup_progress.percent}%`
                     : "Installing the local engines and downloading the model…"
                   : "Install log"}

@@ -10,6 +10,8 @@ import type { ReactNode } from "react";
 
 // `code` | **bold** | *italic* | [text](url)
 // (bold and italic need no space just inside their stars, as in markdown)
+// shortcut: a link URL ends at its first ")", fine for the source URLs writer.py
+// writes; upgrade if transcripts start carrying links with parentheses.
 const INLINE = /`([^`]+)`|\*\*([^\s*](?:.*?\S)?)\*\*|\*([^*\s](?:[^*]*[^*\s])?)\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
 
 function inline(text: string): ReactNode[] {

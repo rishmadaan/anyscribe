@@ -704,7 +704,8 @@ function StepOfflineOptIn({
             onSetupDone({ alsoModels: s.setup_also, restartNeeded: s.restart_needed });
             onNext();
           } else if (s.ffmpeg_ok) {
-            setMissing(missingPart(s));
+            const name = s.models.find((m) => m.size === selected)?.spec.display_name;
+            setMissing(missingPart(s, name, required));
           }
         }
       } catch {
@@ -712,7 +713,7 @@ function StepOfflineOptIn({
       }
     }, 1500);
     return () => clearInterval(id);
-  }, [settingUp, selected, onNext, onSetupDone, onRunning]);
+  }, [settingUp, selected, required, onNext, onSetupDone, onRunning]);
 
   // The only way forward with local on: setup (quick when the model can
   // already run) switches the default and queues the extras server-side.
@@ -896,6 +897,8 @@ function StepOfflineOptIn({
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Setting up…
                 </>
+              ) : missing ? (
+                "Try again"
               ) : !pick ? (
                 "Install now"
               ) : downloadMb > 0 ? (
@@ -933,14 +936,16 @@ function StepOfflineOptIn({
   );
 }
 
-/** Setup ended without an error but local still can't run: say which part. */
-function missingPart(s: LocalStatusResponse): string {
-  if (!s.faster_whisper_installed) {
-    return s.restart_needed
-      ? "Setup finished, but the local engine can't load until anyscribe restarts. Quit anyscribe and open it again, then continue."
-      : "Setup finished, but the local engine (faster-whisper) isn't installed. Open the install log below for details, then try again.";
+/** Setup ended without an error but the picked model can't run: say why, plainly. */
+function missingPart(s: LocalStatusResponse, name: string | undefined, required: boolean): string {
+  const otherwise = required ? "choose a cloud service instead" : "untick local transcription and go on";
+  if (!s.faster_whisper_installed && s.restart_needed) {
+    return "Setup finished, but anyscribe needs a restart before it can transcribe on this computer. Quit anyscribe and open it again, then continue.";
   }
-  return "Setup finished, but no model can run yet. Click the button below to try the download again.";
+  if (!s.faster_whisper_installed) {
+    return `A part anyscribe needs to transcribe on this computer didn't install. Click Try again; if it fails again, ${otherwise}.`;
+  }
+  return `Setup finished, but ${name ?? "the model"} can't run yet. Click Try again; if it fails again, ${otherwise}.`;
 }
 
 function StepWorkspace({

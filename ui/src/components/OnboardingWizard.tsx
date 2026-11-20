@@ -101,6 +101,11 @@ export default function OnboardingWizard({ onClose }: Props) {
     (s: string) => setForm((f) => (f.localModel ? f : { ...f, localModel: s })),
     []
   );
+  // stable, so the local step's mount effect runs once
+  const setEnableLocal = useCallback(
+    (e: boolean) => setForm((f) => ({ ...f, enableLocal: e })),
+    []
+  );
 
   // Preload the default workspace so StepWorkspace can show it as a hint.
   useEffect(() => {
@@ -123,6 +128,7 @@ export default function OnboardingWizard({ onClose }: Props) {
     getLocalStatus()
       .then((s) => {
         if (!s.setup_running) return;
+        setLocalRunning(true);
         setForm((f) => ({
           ...f,
           provider: "local",
@@ -133,6 +139,20 @@ export default function OnboardingWizard({ onClose }: Props) {
       })
       .catch(() => undefined);
   }, []);
+
+  // The lock follows the server, not the local step's mount: it ends only when
+  // /api/local/status says the setup stopped (the local step reports that itself).
+  useEffect(() => {
+    if (!localRunning || step === "offline_opt_in") return;
+    const id = setInterval(() => {
+      getLocalStatus()
+        .then((s) => {
+          if (!s.setup_running) setLocalRunning(false);
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => clearInterval(id);
+  }, [localRunning, step]);
 
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the
   // wizard again next page load.
@@ -263,7 +283,7 @@ export default function OnboardingWizard({ onClose }: Props) {
           required={form.provider === "local"}
           selected={form.localModel}
           enabled={form.enableLocal}
-          onSetEnabled={(e) => setForm((f) => ({ ...f, enableLocal: e }))}
+          onSetEnabled={setEnableLocal}
           onSelectSize={(s: string | null) => setForm((f) => ({ ...f, localModel: s }))}
           onPresetSize={presetSize}
           onSetLanguage={(code) => setForm((f) => ({ ...f, language: code }))}
@@ -639,13 +659,15 @@ function StepOfflineOptIn({
     getLocalStatus().then((s) => {
       setStatus(s);
       onPresetSize(s.recommended_model);
-      if (s.setup_running) setSettingUp(true); // watch the running download
+      if (s.setup_running) {
+        onSetEnabled(true); // watch the running download, locked, with its progress
+        setSettingUp(true);
+      }
     });
-  }, [onPresetSize]);
+  }, [onPresetSize, onSetEnabled]);
 
   useEffect(() => {
-    onRunning(settingUp);
-    return () => onRunning(false);
+    if (settingUp) onRunning(true); // off only when the server says the setup stopped
   }, [settingUp, onRunning]);
 
   // Poll during setup.
@@ -665,6 +687,7 @@ function StepOfflineOptIn({
         if (!s.setup_running) {
           clearInterval(id);
           setSettingUp(false);
+          onRunning(false);
           if (s.setup_error) {
             setSetupError(s.setup_error);
             setLogOpen(true);
@@ -682,7 +705,7 @@ function StepOfflineOptIn({
       }
     }, 1500);
     return () => clearInterval(id);
-  }, [settingUp, onNext, onSetupDone]);
+  }, [settingUp, onNext, onSetupDone, onRunning]);
 
   // The only way forward with local on: setup (quick when the model can
   // already run) switches the default and queues the extras server-side.
@@ -709,6 +732,7 @@ function StepOfflineOptIn({
       }
       setSetupError(msg);
       setSettingUp(false);
+      onRunning(false); // this setup never started
     }
   };
 
@@ -747,13 +771,17 @@ function StepOfflineOptIn({
               id="enable-local"
               checked={enabled}
               onChange={(e) => onSetEnabled(e.target.checked)}
-              className="cursor-pointer"
+              disabled={settingUp}
+              className="cursor-pointer disabled:cursor-not-allowed"
             />
             <label
               htmlFor="enable-local"
               className="text-sm text-text cursor-pointer"
             >
               Also enable offline / local transcription
+              {settingUp && (
+                <span className="text-text-muted"> (stays on until the download finishes)</span>
+              )}
             </label>
           </div>
         </div>
@@ -889,6 +917,9 @@ function StepOfflineOptIn({
         <p className="mt-2 text-right text-[11px] text-text-muted">
           Install ffmpeg first (see above), then click Check again.
         </p>
+      )}
+      {settingUp && (
+        <p className="mt-2 text-[11px] text-text-muted">Back is off until the download finishes.</p>
       )}
     </>
   );

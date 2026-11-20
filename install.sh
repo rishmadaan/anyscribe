@@ -624,7 +624,7 @@ desktop_where() {
     fi
 }
 
-# Where desktop mode put the app (S7a), in this OS's words.
+# Where desktop mode put the app, in this OS's words, for the last box.
 app_place() {
     if [[ "$OS" == "macos" ]]; then
         echo "in the Applications folder inside your home folder"

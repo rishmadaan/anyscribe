@@ -871,7 +871,12 @@ function StepOfflineOptIn({
 
       {(enabled || required) && ffmpegMissing && <FfmpegNotice onCheckAgain={checkFfmpeg} />}
 
-      {status?.restart_needed && <RestartBanner />}
+      {status?.restart_needed && (
+        <RestartBanner>
+          Restart anyscribe, then open the setup wizard again (Settings, then Run setup wizard);
+          the download is kept.
+        </RestartBanner>
+      )}
 
       {setupError && (
         <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 mb-3 mt-3">
@@ -1004,11 +1009,10 @@ function otherwise(required: boolean): string {
   return required ? "choose a cloud service instead" : "untick local transcription and go on";
 }
 
-/** Setup ended without an error but the picked model can't run: say why, plainly. */
-function missingPart(s: LocalStatusResponse, name: string | undefined, required: boolean): string {
-  if (!s.faster_whisper_installed && s.restart_needed) {
-    return "Setup finished, but anyscribe needs a restart before it can transcribe on this computer. Quit anyscribe and open it again, then continue.";
-  }
+/** Setup ended without an error but the picked model can't run: say why,
+ * plainly. Null when a restart is due: the RestartBanner says it alone. */
+function missingPart(s: LocalStatusResponse, name: string | undefined, required: boolean): string | null {
+  if (!s.faster_whisper_installed && s.restart_needed) return null;
   if (!s.faster_whisper_installed) {
     return `A part anyscribe needs to transcribe on this computer didn't install. Click Try again; if it fails again, ${otherwise(required)}.`;
   }

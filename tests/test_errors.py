@@ -6,6 +6,7 @@ import pytest
 
 from anyscribe.core.errors import (
     AuthenticationError,
+    NoCreditError,
     RateLimitError,
     ScribeAPIError,
     ServerError,
@@ -98,3 +99,59 @@ class TestWithRetry:
         with pytest.raises(RateLimitError):
             decorated()
         assert fn.call_count == 3  # 1 initial + 2 retries
+
+
+# OpenAI's real answer for an account with no credit (HTTP 429).
+OPENAI_NO_CREDIT_BODY = (
+    '{"error": {"message": "You exceeded your current quota, please check your plan and '
+    'billing details.", "type": "insufficient_quota", "param": null, '
+    '"code": "insufficient_quota"}}'
+)
+
+S1_OPENAI = (
+    "Your OpenAI account has no credit. OpenAI is prepaid: add credit at "
+    "https://platform.openai.com/settings/organization/billing and try again, or use the "
+    "free option instead (in the dashboard: Settings, then Run setup wizard, then On this "
+    "computer)."
+)
+
+
+class TestNoCredit:
+    @patch("anyscribe.core.errors.time.sleep")
+    def test_openai_insufficient_quota_is_not_retried_and_says_no_credit(self, mock_sleep):
+        fn = MagicMock(side_effect=classify_api_error(429, OPENAI_NO_CREDIT_BODY, "openai"))
+        with pytest.raises(NoCreditError) as exc:
+            with_retry(max_retries=3, base_delay=0.01)(fn)()
+        assert type(exc.value) is NoCreditError
+        assert exc.value.user_message == S1_OPENAI
+        assert str(exc.value) == S1_OPENAI  # the dashboard shows str(e)
+        assert exc.value.retryable is False
+        assert fn.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("anyscribe.core.errors.time.sleep")
+    def test_plain_429_is_still_rate_limited_and_retried(self, mock_sleep):
+        body = '{"error": {"message": "Rate limit reached", "type": "requests", "code": "rate_limit_exceeded"}}'
+        fn = MagicMock(side_effect=classify_api_error(429, body, "openai"))
+        with pytest.raises(RateLimitError) as exc:
+            with_retry(max_retries=2, base_delay=0.01)(fn)()
+        assert type(exc.value) is RateLimitError
+        assert exc.value.user_message.startswith("Rate limited by openai.")
+        assert fn.call_count == 3  # 1 + 2 retries
+        assert mock_sleep.call_count == 2
+
+    def test_openrouter_402_says_no_credit_without_the_openai_billing_link(self):
+        body = '{"error": {"message": "Insufficient credits", "code": 402}}'
+        err = classify_api_error(402, body, "openrouter")
+        assert type(err) is NoCreditError
+        assert err.user_message == (
+            "Your OpenRouter account has no credit. OpenRouter is prepaid: add credit and try "
+            "again, or use the free option instead (in the dashboard: Settings, then Run setup "
+            "wizard, then On this computer)."
+        )
+        assert not err.retryable
+
+    def test_groq_insufficient_quota_uses_its_display_name(self):
+        err = classify_api_error(429, '{"error": {"code": "insufficient_quota"}}', "groq")
+        assert type(err) is NoCreditError
+        assert err.user_message.startswith("Your Groq account has no credit. Groq is prepaid: add credit and")

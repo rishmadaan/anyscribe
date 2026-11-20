@@ -197,6 +197,8 @@ export interface ProviderTestCheck {
 
 export interface ProviderTestResult {
   success: boolean;
+  /** false: nothing confirmed or refused the key (Sarvam, or provider unreachable) */
+  checked?: boolean;
   message: string;
   checks?: {
     faster_whisper: ProviderTestCheck;

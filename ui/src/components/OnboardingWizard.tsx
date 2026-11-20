@@ -30,7 +30,12 @@ import {
   getSetupLog,
   getLocalRegistry,
 } from "../api/client";
-import type { LocalRecommendation, LocalRegistry, LocalStatusResponse } from "../api/types";
+import type {
+  LocalRecommendation,
+  LocalRegistry,
+  LocalStatusResponse,
+  ProviderTestResult,
+} from "../api/types";
 import LocalModelPicker from "./LocalModelPicker";
 import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
 import { downloadMbFor, formatMB, formatPerHour } from "../api/models";
@@ -400,27 +405,45 @@ function StepApiKey({
   onNext: () => void;
 }) {
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  // The last check and the text it checked: editing the key makes it stale.
+  const [check, setCheck] = useState<(ProviderTestResult & { key: string }) | null>(null);
+  const testResult = check && check.key === value ? check : null;
   const provider = API_PROVIDERS.find((p) => p.name === providerName);
+  // Accepted, or nothing could check it (Sarvam, provider unreachable): Next goes on.
+  // A refusal or an error answer stays, with "Use this key anyway".
+  const accepted = !!testResult?.success && testResult.checked !== false;
+  const unchecked = testResult?.checked === false;
+  const refused = !!testResult && !testResult.success && !unchecked;
 
-  const handleTest = async () => {
-    if (!value) return;
+  const runCheck = async (): Promise<ProviderTestResult | null> => {
+    if (!value) return null;
     setTesting(true);
-    setTestResult(null);
+    let result: ProviderTestResult;
     try {
       // Pass the typed-but-unsaved key to the test endpoint so it actually
       // validates what the user just entered (rather than whatever's already
       // in .env, which may be stale or empty during wizard-phase).
-      const result = await testProvider(providerName, value);
-      setTestResult(result);
+      result = await testProvider(providerName, value);
     } catch (e) {
-      setTestResult({
+      result = {
         success: false,
+        checked: false,
         message: e instanceof Error ? e.message : "Test failed",
-      });
+      };
     } finally {
       setTesting(false);
     }
+    setCheck({ ...result, key: value });
+    return result;
+  };
+
+  const handleNext = async () => {
+    if (testResult) {
+      if (!refused) onNext();
+      return;
+    }
+    const result = await runCheck();
+    if (result?.success && result.checked !== false) onNext();
   };
 
   return (
@@ -439,10 +462,7 @@ function StepApiKey({
         <input
           type="password"
           value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setTestResult(null);
-          }}
+          onChange={(e) => onChange(e.target.value)}
           placeholder="Paste key here"
           autoFocus
           className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text font-mono outline-none focus:border-amber/40"
@@ -464,26 +484,39 @@ function StepApiKey({
 
       {testResult && (
         <div
+          role="status"
           className={`rounded-md px-3 py-2 mb-4 border ${
-            testResult.success
+            accepted
               ? "border-green/30 bg-green/5"
-              : "border-red/30 bg-red/5"
+              : unchecked
+                ? "border-amber/30 bg-amber/5"
+                : "border-red/30 bg-red/5"
           }`}
         >
-          <div className="flex items-center gap-2">
-            {testResult.success ? (
-              <Check className="w-3.5 h-3.5 text-green" />
+          <div className="flex items-start gap-2">
+            {accepted ? (
+              <Check className="w-3.5 h-3.5 text-green mt-0.5 shrink-0" />
             ) : (
-              <AlertCircle className="w-3.5 h-3.5 text-red" />
+              <AlertCircle
+                className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${unchecked ? "text-amber" : "text-red"}`}
+              />
             )}
             <p
-              className={`text-xs font-mono ${
-                testResult.success ? "text-green" : "text-red"
+              className={`text-xs ${
+                accepted ? "text-green" : unchecked ? "text-amber" : "text-red"
               }`}
             >
               {testResult.message}
             </p>
           </div>
+          {refused && (
+            <button
+              onClick={onNext}
+              className="mt-2 ml-5.5 text-xs text-text-muted underline hover:text-text cursor-pointer"
+            >
+              Use this key anyway
+            </button>
+          )}
         </div>
       )}
 
@@ -497,19 +530,28 @@ function StepApiKey({
         </button>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleTest}
+            onClick={runCheck}
             disabled={!value || testing}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
           >
-            {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test key"}
+            Test key
           </button>
           <button
-            onClick={onNext}
-            disabled={!value}
+            onClick={handleNext}
+            disabled={!value || testing || refused}
             className="rounded-md bg-amber text-surface px-3 py-1.5 text-xs font-mono hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
           >
-            Next
-            <ChevronRight className="w-3 h-3" />
+            {testing ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Checking key…
+              </>
+            ) : (
+              <>
+                Next
+                <ChevronRight className="w-3 h-3" />
+              </>
+            )}
           </button>
         </div>
       </div>

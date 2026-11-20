@@ -362,8 +362,8 @@ on (in the wizard, press **Next** again): the first transcript checks the key.
 
 Sarvam has no way to check a key without running a paid transcription, so
 anyscribe doesn't pretend: it keeps the key (the wizard saves it when you
-finish) and shows this in amber instead of a green success. In the wizard,
-press **Next** again to carry on. If the key is wrong, the first transcript
+finish) and shows this in amber instead of a green success. The wizard's key
+step shows it from the start, and **Next** goes straight on. If the key is wrong, the first transcript
 fails with `Invalid or missing API key for sargam`.
 
 ### `WARNING: quality 'X' wants Y but no Y_API_KEY is set`

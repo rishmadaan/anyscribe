@@ -50,7 +50,7 @@ the next release.
   provider (before, any text passed). Every check answers in plain words:
   accepted, refused (check you copied all of it), an error from the provider,
   or couldn't reach it. Sarvam, which can't check a key in advance, says
-  "Not checked yet" in amber. Pressing **Next** on the key step runs the
+  "Not checked yet" in amber on its key step, and Next goes straight on. Pressing **Next** on the key step runs the
   check; a refused key stays on the step, with **Use this key anyway**.
 - **OpenAI is prepaid:** the OpenAI key step (dashboard and `anyscribe
   onboard`) says to add credit first.

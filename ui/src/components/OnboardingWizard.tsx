@@ -440,6 +440,8 @@ function StepApiKey({
   const accepted = !!testResult?.success && testResult.checked !== false;
   const unchecked = testResult?.checked === false;
   const refused = !!testResult && !testResult.success && !unchecked;
+  // Sarvam has no way to check a key in advance: say so up front, and Next just goes on.
+  const uncheckable = providerName === "sargam";
 
   const runCheck = async (): Promise<ProviderTestResult | null> => {
     if (!value) return null;
@@ -464,6 +466,7 @@ function StepApiKey({
   };
 
   const handleNext = async () => {
+    if (uncheckable) return onNext();
     if (testResult) {
       if (!refused) onNext();
       return;
@@ -482,6 +485,12 @@ function StepApiKey({
       {providerName === "openai" && (
         <p className="text-xs text-text-secondary border-l-[3px] border-amber bg-amber/[0.07] rounded-md px-3 py-2 mb-4">
           OpenAI is prepaid: add credit to your OpenAI account first, or transcripts will fail.
+        </p>
+      )}
+      {uncheckable && (
+        <p className="text-xs text-amber border-l-[3px] border-amber bg-amber/[0.07] rounded-md px-3 py-2 mb-4">
+          Not checked yet: Sarvam has no way to check a key in advance. It will be checked on your
+          first transcript.
         </p>
       )}
       <div className="mb-4">
@@ -559,13 +568,15 @@ function StepApiKey({
           Back
         </button>
         <div className="flex items-center gap-2">
-          <button
-            onClick={runCheck}
-            disabled={!value || testing}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Test key
-          </button>
+          {!uncheckable && (
+            <button
+              onClick={runCheck}
+              disabled={!value || testing}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-mono text-text-muted hover:text-text hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Test key
+            </button>
+          )}
           <button
             onClick={handleNext}
             disabled={!value || testing || refused}

@@ -19,3 +19,4 @@ Packet: v1
 
 Round 1 lead-made change: C3, trailing spaces removed from spec.md line 20 (`git diff --check` now exits 0).
 Outside L1, from the fit report's observation (not a finding): a late opening reply on the API key step turns a cloud user into a local user and jumps them to Local transcription; behaviour from before this PR, logged as a wave 2 BACKLOG line in the fix round.
+Round 2: the fit reviewer does not rejoin. The fixes change no copy or screen; the one behaviour change ("Close setup?" now also asks after a Back and return) is the code option the fit report itself gave for F1, and F3's records wording is checked by the correctness re-check.

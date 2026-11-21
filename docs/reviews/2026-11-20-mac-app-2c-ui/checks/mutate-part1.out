@@ -1,0 +1,28 @@
+OK  bridge/settings: killed={'Startup section as today': True} restored={'Startup section as today': True} scenario_all_pass=True
+OK  bridge/drag-strip: killed={'no drag strip': True} restored={'no drag strip': True} scenario_all_pass=True
+OK  bridge/drop-listener: killed={'dragging a file shows no overlay': True} restored={'dragging a file shows no overlay': True} scenario_all_pass=True
+OK  bridge/shutdown: killed={'app: no Shutdown button': True} restored={'app: no Shutdown button': True} scenario_all_pass=True
+OK  bridge/first-launch: killed={'Shutdown button present': True} restored={'Shutdown button present': True} scenario_all_pass=True
+OK  addToPath/settings-row: killed={"GUARD addToPath: the row's button only asks": True} restored={"GUARD addToPath: the row's button only asks": True} scenario_all_pass=True
+OK  addToPath/after-turn-on: killed={'GUARD addToPath: not called before the yes': True} restored={'GUARD addToPath: not called before the yes': True} scenario_all_pass=True
+OK  repeat/launcher-flag: killed={'GUARD repeat: not asked again after reload': True, 'GUARD repeat: both marked, nothing asked': True} restored={'GUARD repeat: not asked again after reload': True, 'GUARD repeat: both marked, nothing asked': True} scenario_all_pass=True
+OK  repeat/terminal-flag: killed={'GUARD repeat: neither question again after reload': True, 'GUARD repeat: both marked, nothing asked': True} restored={'GUARD repeat: neither question again after reload': True, 'GUARD repeat: both marked, nothing asked': True} scenario_all_pass=True
+OK  repeat/keep-marks: killed={'GUARD repeat: not asked again after reload': True} restored={'GUARD repeat: not asked again after reload': True} scenario_all_pass=True
+OK  repeat/terminal-marks: killed={'GUARD repeat: neither question again after reload': True} restored={'GUARD repeat: neither question again after reload': True} scenario_all_pass=True
+OK  repeat/removal-result-once: killed={'C7: closed with Escape, not shown again after another reload': True} restored={'C7: closed with Escape, not shown again after another reload': True} scenario_all_pass=True
+OK  repeat/removal-result-newer: killed={'AMEND2: an older lastRemoval is never shown': True} restored={'AMEND2: an older lastRemoval is never shown': True} scenario_all_pass=True
+OK  r1/outage-note: killed={'C1: after the reload, running again names the watched job': True} restored={'C1: after the reload, running again names the watched job': True} scenario_all_pass=True
+OK  r1/asked-restart-no-outage: killed={"F2: no Running again after Settings' restart": True} restored={"F2: no Running again after Settings' restart": True} scenario_all_pass=True
+OK  r1/queue-before-ack: killed={'C3: B survives the reload and is submitted by its path': True} restored={'C3: B survives the reload and is submitted by its path': True} scenario_all_pass=True
+OK  r1/removal-note-kept: killed={'C7: settled before the reload, the reloaded page still shows the result': True} restored={'C7: settled before the reload, the reloaded page still shows the result': True} scenario_all_pass=True
+OK  r1/removal-note-consumed: killed={'C7: the note is kept while the result card is open, gone once it is closed': True} restored={'C7: the note is kept while the result card is open, gone once it is closed': True} scenario_all_pass=True
+OK  r1/no-pieces-branch: killed={'C2: a kept result with no pieces shows its reason, Try again and Close': True} restored={'C2: a kept result with no pieces shows its reason, Try again and Close': True} scenario_all_pass=True
+build failed:
+
+> ui@0.0.0 build
+> tsc -b && vite build
+
+src/components/MacCards.tsx(459,18): error TS2339: Property 'reason' does not exist on type 'never'.
+src/components/MacCards.tsx(459,39): error TS2339: Property 'reason' does not exist on type 'never'.
+
+exit 1

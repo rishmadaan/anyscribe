@@ -10,7 +10,8 @@
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
     "make-icons": "electron scripts/make-icons.js --ozone-platform=headless",
-    "e2e": "node test/e2e.js"
+    "e2e": "node test/e2e.js",
+    "e2e:removal": "node --test test/removal.e2e.js"
   },
   "devDependencies": {
     "electron": "44.9.3"

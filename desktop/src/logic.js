@@ -4,11 +4,15 @@
 const path = require('node:path');
 
 const DEFAULT_PORT = 8470;
-const ALT_PORT = 8471; // only when today's desktop mode (desktop.json) already records 8470
 
-// One function picks the port: never the old launcher's recorded one.
-function choosePort(manifestPort) {
-  return manifestPort === DEFAULT_PORT ? ALT_PORT : DEFAULT_PORT;
+// One function picks the port. The app keeps the port it last ran on (saved), so the
+// dashboard's per-port storage stays put, unless the old launcher now records it; a first
+// choice is 8470 or the next port up that the old launcher does not record (avoid).
+function choosePort({ saved = null, avoid = [] } = {}) {
+  if (Number.isInteger(saved) && !avoid.includes(saved)) return saved;
+  let port = DEFAULT_PORT;
+  while (avoid.includes(port)) port += 1;
+  return port;
 }
 
 // Packaged: the Python inside the app. Dev: ANYSCRIBE_DEV_PYTHON, made absolute against the
@@ -293,7 +297,14 @@ function navigation(url, prefixes, startUrl, isMainFrame) {
 
 const SAFE = 'Your transcripts and settings are safe.';
 
-function failureMessage(failure) {
+// removal: the old launcher's removal that ran just before this start, if any (its result is
+// said too, so a removal is never silent behind "couldn't start").
+function failureMessage(failure, removal = null) {
+  const said = removal ? ` The old launcher's removal ran first: ${removal.ok ? 'it was removed.' : removal.reason}` : '';
+  return startFailure(failure) + said;
+}
+
+function startFailure(failure) {
   switch (failure.kind) {
     case 'port':
       return `Its engine couldn't start: ${failure.reason}. ${SAFE}`;
@@ -307,6 +318,57 @@ function failureMessage(failure) {
       return `${failure.reason}. ${SAFE}`;
     default:
       return `Its engine stopped before it was ready. ${SAFE}`;
+  }
+}
+
+// ---- the app's settings (userData/settings.json) ----
+
+const DOCK_MODES = ['menubar', 'both', 'dock'];
+const FIRST_LAUNCH_KEYS = ['oldLauncherAsked', 'terminalAsked']; // each first-launch question, asked once
+
+// Whatever the file holds (or nothing): a known Dock mode, and true only for a question asked.
+function parseSettings(saved) {
+  const s = saved && typeof saved === 'object' ? saved : {};
+  return {
+    dockMode: DOCK_MODES.includes(s.dockMode) ? s.dockMode : 'menubar',
+    oldLauncherAsked: s.oldLauncherAsked === true,
+    terminalAsked: s.terminalAsked === true,
+    port: Number.isInteger(s.port) && s.port > 1023 && s.port < 65536 ? s.port : null, // the port the app last ran on
+  };
+}
+
+// ---- files opened with the app (the Dock icon, a second launch) ----
+
+// A second launch's command line: absolute paths to files, never argv[0] (the app's own
+// binary), a flag, or the app's folder in dev.
+function openedFiles(argv, isFile) {
+  return argv.slice(1).filter((a) => !a.startsWith('-') && path.isAbsolute(a) && isFile(a));
+}
+
+// Each file is held, with an id, until the dashboard acknowledges it (its callback ran): sending
+// is not receiving. A subscriber gets every unacknowledged file in order; an unsubscribe or a
+// reload before the ack leaves it held for the next one. An ack for an unknown id does nothing,
+// so an acknowledged file is never sent again.
+class OpenFiles {
+  constructor() {
+    this.held = []; // [{id, file}]
+    this.nextId = 1;
+    this.deliver = null;
+  }
+  add(file) {
+    const item = { id: this.nextId++, file };
+    this.held.push(item);
+    this.deliver?.(item);
+  }
+  subscribe(deliver) {
+    this.deliver = deliver;
+    for (const item of this.held) deliver(item);
+  }
+  unsubscribe() {
+    this.deliver = null;
+  }
+  ack(id) {
+    this.held = this.held.filter((item) => item.id !== id);
   }
 }
 
@@ -332,7 +394,6 @@ class CrashWindow {
 
 module.exports = {
   DEFAULT_PORT,
-  ALT_PORT,
   choosePort,
   resolvePython,
   buildEnv,
@@ -355,4 +416,9 @@ module.exports = {
   failureMessage,
   navigation,
   CrashWindow,
+  DOCK_MODES,
+  FIRST_LAUNCH_KEYS,
+  parseSettings,
+  openedFiles,
+  OpenFiles,
 };

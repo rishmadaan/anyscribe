@@ -155,7 +155,8 @@ export function useJob() {
   }, [connectWs]);
 
   const submit = useCallback(
-    async (data: TranscribeRequest) => {
+    /** Resolves true once the engine accepted the job, false when it refused or was unreachable. */
+    async (data: TranscribeRequest): Promise<boolean> => {
       // Reset state
       setState({ ...IDLE, phase: "running" });
       reconnectAttemptRef.current = 0;
@@ -166,12 +167,14 @@ export function useJob() {
         jobIdRef.current = job_id;
         setState((prev) => ({ ...prev, plan: { provider, model, notes } }));
         connectWs(job_id);
+        return true;
       } catch (err) {
         setState({
           ...IDLE,
           phase: "error",
           error: err instanceof Error ? err.message : String(err),
         });
+        return false;
       }
     },
     [connectWs, stopPolling]

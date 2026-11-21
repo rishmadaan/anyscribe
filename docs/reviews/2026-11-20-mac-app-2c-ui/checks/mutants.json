@@ -1,0 +1,699 @@
+[
+ {
+  "mutant": "bridge/settings",
+  "file": "src/pages/SettingsPage.tsx",
+  "scenario": "browser",
+  "killed": {
+   "Startup section as today": true
+  },
+  "mutant_details": {
+   "Startup section as today": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "Startup section as today": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "bridge/drag-strip",
+  "file": "src/components/Layout.tsx",
+  "scenario": "browser",
+  "killed": {
+   "no drag strip": true
+  },
+  "mutant_details": {
+   "no drag strip": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "no drag strip": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "bridge/drop-listener",
+  "file": "src/components/Layout.tsx",
+  "scenario": "browser",
+  "killed": {
+   "dragging a file shows no overlay": true
+  },
+  "mutant_details": {
+   "dragging a file shows no overlay": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "dragging a file shows no overlay": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "bridge/shutdown",
+  "file": "src/components/Layout.tsx",
+  "scenario": "app_layout",
+  "killed": {
+   "app: no Shutdown button": true
+  },
+  "mutant_details": {
+   "app: no Shutdown button": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "app: no Shutdown button": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "bridge/first-launch",
+  "file": "src/App.tsx",
+  "scenario": "browser",
+  "killed": {
+   "Shutdown button present": true
+  },
+  "mutant_details": {
+   "Shutdown button present": ""
+  },
+  "crash": "Error: Page.evaluate: TypeError: Cannot read properties of null (reading 'dispatchEvent')\n    at ev (eval at evaluate (:370:30), <anonymous>:5:148)\n    at eval (eval at evaluate (:370:30), <anonymous>:7:3)\n    at UtilityScript.evaluate (<anonymous>:377:18)\n    at UtilityScript.<anonymous> (<anonymou",
+  "restored_pass": {
+   "Shutdown button present": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "addToPath/settings-row",
+  "file": "src/components/ThisMac.tsx",
+  "scenario": "settings",
+  "killed": {
+   "GUARD addToPath: the row's button only asks": true
+  },
+  "mutant_details": {
+   "GUARD addToPath: the row's button only asks": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"dialog\").get_by_role(\"button\", name=\"I'll do it myself\")\n",
+  "restored_pass": {
+   "GUARD addToPath: the row's button only asks": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "addToPath/after-turn-on",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "GUARD addToPath: not called before the yes": true
+  },
+  "mutant_details": {
+   "GUARD addToPath: not called before the yes": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "GUARD addToPath: not called before the yes": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/launcher-flag",
+  "file": "src/App.tsx",
+  "scenario": "first_launch,first_launch_marked",
+  "killed": {
+   "GUARD repeat: not asked again after reload": true,
+   "GUARD repeat: both marked, nothing asked": true
+  },
+  "mutant_details": {
+   "GUARD repeat: not asked again after reload": "",
+   "GUARD repeat: both marked, nothing asked": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"dialog\").get_by_role(\"button\", name=\"Try again\")\n    - locator resolved to <button class=\"rounded-md bg-amber text-surface px-3.5 py-1.5 text-sm font-medium hover:bg-amber/80 transition-colors cursor-pointe",
+  "restored_pass": {
+   "GUARD repeat: not asked again after reload": true,
+   "GUARD repeat: both marked, nothing asked": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/terminal-flag",
+  "file": "src/App.tsx",
+  "scenario": "first_launch,first_launch_marked",
+  "killed": {
+   "GUARD repeat: neither question again after reload": true,
+   "GUARD repeat: both marked, nothing asked": true
+  },
+  "mutant_details": {
+   "GUARD repeat: neither question again after reload": "",
+   "GUARD repeat: both marked, nothing asked": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"button\", name=\"Remove it\")\n    - locator resolved to <button class=\"inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-text-secondary hover:text-text hover:bg-surface-",
+  "restored_pass": {
+   "GUARD repeat: neither question again after reload": true,
+   "GUARD repeat: both marked, nothing asked": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/keep-marks",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "GUARD repeat: not asked again after reload": true
+  },
+  "mutant_details": {
+   "GUARD repeat: not asked again after reload": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"button\", name=\"OK\")\n",
+  "restored_pass": {
+   "GUARD repeat: not asked again after reload": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/terminal-marks",
+  "file": "src/App.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "GUARD repeat: neither question again after reload": true
+  },
+  "mutant_details": {
+   "GUARD repeat: neither question again after reload": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "GUARD repeat: neither question again after reload": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/removal-result-once",
+  "file": "src/desktop.ts",
+  "scenario": "removal_reload",
+  "killed": {
+   "C7: closed with Escape, not shown again after another reload": true
+  },
+  "mutant_details": {
+   "C7: closed with Escape, not shown again after another reload": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C7: closed with Escape, not shown again after another reload": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "repeat/removal-result-newer",
+  "file": "src/desktop.ts",
+  "scenario": "first_launch",
+  "killed": {
+   "AMEND2: an older lastRemoval is never shown": true
+  },
+  "mutant_details": {
+   "AMEND2: an older lastRemoval is never shown": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "AMEND2: an older lastRemoval is never shown": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/outage-note",
+  "file": "src/components/EngineBanner.tsx",
+  "scenario": "banner",
+  "killed": {
+   "C1: after the reload, running again names the watched job": true
+  },
+  "mutant_details": {
+   "C1: after the reload, running again names the watched job": "anyscribe\nTranscribe\nHistory\nSettings\n\n\u00a9 2026 Rishabh Madaan\n\nAGPLv3 or later \u00b7 no warranty\nSource \u00b7 Third-party notices\nTranscribe\n\nPaste a YouTube, Instagram, or local file URL to transcribe.\n\nTranscribe\ncustom \u00b7 auto \u00b7 clean"
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"link\", name=\"Open History\")\n",
+  "restored_pass": {
+   "C1: after the reload, running again names the watched job": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/asked-restart-no-outage",
+  "file": "src/components/EngineBanner.tsx",
+  "scenario": "banner",
+  "killed": {
+   "F2: no Running again after Settings' restart": true
+  },
+  "mutant_details": {
+   "F2: no Running again after Settings' restart": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "F2: no Running again after Settings' restart": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/queue-before-ack",
+  "file": "src/components/Layout.tsx",
+  "scenario": "open_file",
+  "killed": {
+   "C3: B survives the reload and is submitted by its path": true
+  },
+  "mutant_details": {
+   "C3: B survives the reload and is submitted by its path": "['https://www.youtube.com/watch?v=check']"
+  },
+  "crash": null,
+  "restored_pass": {
+   "C3: B survives the reload and is submitted by its path": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/removal-note-consumed",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "removal_reload",
+  "killed": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": true
+  },
+  "mutant_details": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": "{\"at\":1795234724932,\"before\":{\"launcher\":\"present\",\"loginItem\":\"present\",\"menuBarIcon\":\"running\"}}"
+  },
+  "crash": null,
+  "restored_pass": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/no-pieces-branch",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "removal_reload",
+  "killed": {
+   "C2: a kept result with no pieces shows its reason, Try again and Close": true
+  },
+  "mutant_details": {
+   "C2: a kept result with no pieces shows its reason, Try again and Close": "[\"Cannot read properties of null (reading 'launcher')\", \"Cannot read properties of null (reading 'launcher')\"]"
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"dialog\").get_by_role(\"button\", name=\"Close\")\n",
+  "restored_pass": {
+   "C2: a kept result with no pieces shows its reason, Try again and Close": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/readiness-gate-card",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "C5: shell not asked: 'The anyscribe command is added'": true
+  },
+  "mutant_details": {
+   "C5: shell not asked: 'The anyscribe command is added'": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C5: shell not asked: 'The anyscribe command is added'": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/readiness-gate-row",
+  "file": "src/components/ThisMac.tsx",
+  "scenario": "settings",
+  "killed": {
+   "C5: Settings row for a shell not asked": true
+  },
+  "mutant_details": {
+   "C5: Settings row for a shell not asked": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C5: Settings row for a shell not asked": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/quiet-answer-marks",
+  "file": "src/App.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "C6: a click outside the launcher question is Keep both": true
+  },
+  "mutant_details": {
+   "C6: a click outside the launcher question is Keep both": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C6: a click outside the launcher question is Keep both": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/mark-failure-shown",
+  "file": "src/desktop.ts",
+  "scenario": "first_launch",
+  "killed": {
+   "C6: a failed save is shown with its reason": true
+  },
+  "mutant_details": {
+   "C6: a failed save is shown with its reason": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"button\", name=\"OK\")\n",
+  "restored_pass": {
+   "C6: a failed save is shown with its reason": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/queue-accepted-only",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": true
+  },
+  "mutant_details": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": "(['/tmp/anyscribe-2c-ui-pdt1srj7/home-a/Media/b.m4a'], ['/tmp/anyscribe-2c-ui-pdt1srj7/home-a/Media/a.m4a'])"
+  },
+  "crash": null,
+  "restored_pass": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/queue-error-pause",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": true
+  },
+  "mutant_details": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": "(['/tmp/anyscribe-2c-ui-9x22sezs/home-a/Media/a.m4a', '/tmp/anyscribe-2c-ui-9x22sezs/home-a/Media/b.m4a'], ['/tmp/anyscribe-2c-ui-9x22sezs/home-a/Media/a.m4a', '/tmp/anyscribe-2c-ui-9x22sezs/home-a/Media/a.m4a', '/tmp/anyscribe-2c-ui-9x22sezs/home-a/Media/a.m4a', '/tmp/anyscribe-2c-ui-9x22sezs/home-"
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"button\", name=\"Try again\")\n",
+  "restored_pass": {
+   "A1: refused A, B waiting: the stored queue is exactly [A, B]": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/queue-running-gate",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "G1: engine down: nothing posted, no failure, B kept": true
+  },
+  "mutant_details": {
+   "G1: engine down: nothing posted, no failure, B kept": "(['/tmp/anyscribe-2c-ui-z1akpuou/home-a/Media/b.m4a'], [])"
+  },
+  "crash": null,
+  "restored_pass": {
+   "G1: engine down: nothing posted, no failure, B kept": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/new-drops-head-only",
+  "file": "src/components/Layout.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "A1: New after a typed link's failure keeps B": true
+  },
+  "mutant_details": {
+   "A1: New after a typed link's failure keeps B": "([], [{'url': 'https://www.youtube.com/watch?v=typed', 'language': 'auto', 'diarize': False, 'keep_media': False, 'output_format': 'clean', 'force': False}])"
+  },
+  "crash": null,
+  "restored_pass": {
+   "A1: New after a typed link's failure keeps B": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/note-not-mine",
+  "file": "src/desktop.ts",
+  "scenario": "r2_facts",
+  "killed": {
+   "[component] A2/G7: with the removal's card still open": true
+  },
+  "mutant_details": {
+   "[component] A2/G7: with the removal's card still open": "anyscribe\nTranscribe\nHistory\nSettings\n\n\u00a9 2026 Rishabh Madaan\n\nAGPLv3 or later \u00b7 no warranty\nSource \u00b7 Third-party notices\nRestarting anyscribe's engine.\n\nThis usually takes a few seconds.\n\nTranscribe\n\n"
+  },
+  "crash": null,
+  "restored_pass": {
+   "[component] A2/G7: with the removal's card still open": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/unmatched-clear",
+  "file": "src/desktop.ts",
+  "scenario": "r2_facts",
+  "killed": {
+   "A2: after the reload, the unmatched note is gone": true
+  },
+  "mutant_details": {
+   "A2: after the reload, the unmatched note is gone": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "A2: after the reload, the unmatched note is gone": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/no-shape-clear",
+  "file": "src/desktop.ts",
+  "scenario": "r2_facts",
+  "killed": {
+   "A2: a thrown removal settled just before the reload": true
+  },
+  "mutant_details": {
+   "A2: a thrown removal settled just before the reload": "anyscribe\nTranscribe\nHistory\nSettings\n\n\u00a9 2026 Rishabh Madaan\n\nAGPLv3 or later \u00b7 no warranty\nSource \u00b7 Third-party notices\nTranscribe\n\nPaste a YouTube, Instagram, or local file URL to transcribe.\n\nTranscribe\ncustom \u00b7 auto \u00b7 clean"
+  },
+  "crash": null,
+  "restored_pass": {
+   "A2: a thrown removal settled just before the reload": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/reason-always",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "A3/G3: carried over and the engine reason: both shown": true
+  },
+  "mutant_details": {
+   "A3/G3: carried over and the engine reason: both shown": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "A3/G3: carried over and the engine reason: both shown": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r2/stopped-branch",
+  "file": "src/components/EngineBanner.tsx",
+  "scenario": "r2_facts",
+  "killed": {
+   "G2: the stopped engine gets its red card": true
+  },
+  "mutant_details": {
+   "G2: the stopped engine gets its red card": "anyscribe\nTranscribe\nHistory\nSettings\n\n\u00a9 2026 Rishabh Madaan\n\nAGPLv3 or later \u00b7 no warranty\nSource \u00b7 Third-party notices\nTranscribe\n\nPaste a YouTube, Instagram, or local file URL to transcribe.\n\nTranscribe\ncustom \u00b7 auto \u00b7 clean\nOld launcher removed\n\nRemoved the old launcher, its login item and its m"
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"[role=status]\").get_by_role(\"button\", name=\"Restart engine\")\n",
+  "restored_pass": {
+   "G2: the stopped engine gets its red card": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/doomed-flag",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "H1: exactly one POST, body B, sent by the reloaded page": true
+  },
+  "mutant_details": {
+   "H1: exactly one POST, body B, sent by the reloaded page": "[('/tmp/anyscribe-2c-ui-v5brcxr1/home-a/Media/b.m4a', '0')]"
+  },
+  "crash": null,
+  "restored_pass": {
+   "H1: exactly one POST, body B, sent by the reloaded page": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/doomed-first-read",
+  "file": "src/desktop.ts",
+  "scenario": "r3_facts",
+  "killed": {
+   "H1: a page that first read 'restarting' is doomed too": true
+  },
+  "mutant_details": {
+   "H1: a page that first read 'restarting' is doomed too": "[('/tmp/anyscribe-2c-ui-mzm7hlyf/home-a/Media/b.m4a', '0')]"
+  },
+  "crash": null,
+  "restored_pass": {
+   "H1: a page that first read 'restarting' is doomed too": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/no-note-skip",
+  "file": "src/App.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "B1: no note at load, no recovery read": true
+  },
+  "mutant_details": {
+   "B1: no note at load, no recovery read": "(2, 'anyscribe\\nTranscribe\\nHistory\\nSettings\\n\\n\u00a9 2026 Rishabh Madaan\\n\\nAGPLv3 or later \u00b7 no warranty\\nSource \u00b7 Third-party notices\\nTranscribe\\n\\nPaste a YouTube, Instagram, or local file URL to transcribe.\\n\\nTranscribe\\ncustom \u00b7 auto \u00b7 clean\\nOld launcher removed\\n\\nRemoved the old launcher, it"
+  },
+  "crash": null,
+  "restored_pass": {
+   "B1: no note at load, no recovery read": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/at-match",
+  "file": "src/desktop.ts",
+  "scenario": "r3_facts",
+  "killed": {
+   "B1: the stored note is the click's": false
+  },
+  "mutant_details": {
+   "B1: the stored note is the click's": "(1795236646222, 1795236648039, 'anyscribe\\nTranscribe\\nHistory\\nSettings\\n\\n\u00a9 2026 Rishabh Madaan\\n\\nAGPLv3 or later \u00b7 no warranty\\nSource \u00b7 Third-party notices\\nTranscribe\\n\\nPaste a YouTube, Instagram, or local file URL to transcribe.\\n\\nTrans')"
+  },
+  "crash": null,
+  "restored_pass": {
+   "B1: the stored note is the click's": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/doomed-recovery",
+  "file": "src/App.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "Doomed recovery: no card and the note unchanged": false
+  },
+  "mutant_details": {
+   "Doomed recovery: no card and the note unchanged": "(True, True)"
+  },
+  "crash": null,
+  "restored_pass": {
+   "Doomed recovery: no card and the note unchanged": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/terminal-hold",
+  "file": "src/App.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "H3: terminal.status calls are [] until OK": true
+  },
+  "mutant_details": {
+   "H3: terminal.status calls are [] until OK": "[['terminal.status', []]]"
+  },
+  "crash": null,
+  "restored_pass": {
+   "H3: terminal.status calls are [] until OK": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/checklist-reason",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "B2: the checklist card shows the bridge's reason X": true
+  },
+  "mutant_details": {
+   "B2: the checklist card shows the bridge's reason X": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "B2: the checklist card shows the bridge's reason X": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/stub-settles-after-running",
+  "file": "../docs/reviews/2026-11-20-mac-app-2c-ui/checks/stub.js",
+  "scenario": "r3_facts",
+  "killed": {
+   "B3: the engine read 'running' when remove() settled": true
+  },
+  "mutant_details": {
+   "B3: the engine read 'running' when remove() settled": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "B3: the engine read 'running' when remove() settled": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/idle-line",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "H2: idle view names the waiting file": true
+  },
+  "mutant_details": {
+   "H2: idle view names the waiting file": "[]"
+  },
+  "crash": null,
+  "restored_pass": {
+   "H2: idle view names the waiting file": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/completed-line",
+  "file": "src/pages/TranscribePage.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "H2: completed view names the waiting file": true
+  },
+  "mutant_details": {
+   "H2: completed view names the waiting file": "(True, [('https://www.youtube.com/watch?v=done', '0')])"
+  },
+  "crash": null,
+  "restored_pass": {
+   "H2: completed view names the waiting file": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "restart/disabled",
+  "file": "src/components/ThisMac.tsx",
+  "scenario": "settings",
+  "killed": {
+   "GUARD restart: disabled while transcriptions run": true,
+   "GUARD restart: a click while disabled calls nothing": true
+  },
+  "mutant_details": {
+   "GUARD restart: disabled while transcriptions run": "",
+   "GUARD restart: a click while disabled calls nothing": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "GUARD restart: disabled while transcriptions run": true,
+   "GUARD restart: a click while disabled calls nothing": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "restart/pending-counts",
+  "file": "src/desktop.ts",
+  "scenario": "settings",
+  "killed": {
+   "engine with jobs line": true
+  },
+  "mutant_details": {
+   "engine with jobs line": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "engine with jobs line": true
+  },
+  "restored_scenario_all_pass": true
+ }
+]

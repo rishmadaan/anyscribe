@@ -15,6 +15,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { Engine, AppLog, trimLog, pickPort } = require('../src/engine');
 const { RESTART_REFUSED, RESTART_UNKNOWN } = require('../src/logic');
+const { removePausingEngine } = require('../src/old-launcher');
 
 const FAKE = path.join(__dirname, 'fake-engine.js');
 
@@ -154,15 +155,23 @@ function listen(port) {
   });
 }
 
-test('pickPort: 8470, 8471 beside the old desktop mode, and a taken port', async () => {
+test('pickPort: 8470, never a port the old launcher records, the saved one kept, and a taken port', async () => {
   const home = tempHome();
   assert.deepEqual(await pickPort(home), { port: 8470, taken: false });
   fs.mkdirSync(path.join(home, '.anyscribe'), { recursive: true });
   fs.writeFileSync(path.join(home, '.anyscribe', 'desktop.json'), JSON.stringify({ port: 8470 }));
   assert.deepEqual(await pickPort(home), { port: 8471, taken: false });
+  // C1: a partial install, no manifest, the login item on 8470.
+  fs.rmSync(path.join(home, '.anyscribe', 'desktop.json'));
+  const plist = path.join(home, 'Library', 'LaunchAgents', 'com.anyscribe.tray.plist');
+  fs.mkdirSync(path.dirname(plist), { recursive: true });
+  fs.writeFileSync(plist, '<plist><dict><key>ProgramArguments</key><array><string>/py</string><string>tray</string><string>--port</string><string>8470</string></array></dict></plist>');
+  assert.deepEqual(await pickPort(home), { port: 8471, taken: false });
+  fs.rmSync(plist);
+  assert.deepEqual(await pickPort(home, 8471), { port: 8471, taken: false }, 'F5: the saved port is kept');
   const srv = await listen(8471);
   try {
-    assert.deepEqual(await pickPort(home), { port: 8471, taken: true });
+    assert.deepEqual(await pickPort(home, 8471), { port: 8471, taken: true }, 'taken: couldn\'t start, never a move');
   } finally {
     srv.close();
   }
@@ -543,7 +552,127 @@ test('guard: an explicit stop during a restart cancels its relaunch (S3-A1)', as
   await stopped;
   await sleep(20);
   assert.equal(result.ok, false, 'the overtaken restart reports it did not restart');
+  assert.equal(result.reason, 'The engine was stopped.', 'G12: it says the engine was stopped, not that it failed');
   assert.equal(children.length, 1, 'no second engine');
   assert.equal(engine.run, null);
   assert.equal(engine.state, 'stopped');
+});
+
+// ---- removing the old launcher pauses the engine (round 3 design) ----
+
+// A removal ctx whose uninstall step is a stand-in that records when it ran.
+function removalCtx(home, calls, during = () => {}) {
+  return {
+    home,
+    platform: 'darwin',
+    python: '/app/python3',
+    env: { HOME: home },
+    setStartAtLogin: () => {},
+    loginItemState: () => 'enabled',
+    run: async () => {
+      calls.push('uninstall');
+      await during();
+      return { out: '{}', err: '', code: 0 };
+    },
+  };
+}
+
+for (const [name, fakeEnv, reason] of [
+  ['running', { FAKE_JOBS: JSON.stringify([{ job_id: 'a', status: 'running', stage: 'transcribe', url: 'u', title: null }]) }, RESTART_REFUSED],
+  ['waiting', { FAKE_JOBS: JSON.stringify([{ job_id: 'a', status: 'pending', stage: null, url: 'u', title: null }]) }, RESTART_REFUSED],
+  ['unknown', { FAKE_JOBS: '[]', FAKE_JOBS_STATUS: '500' }, RESTART_UNKNOWN],
+]) {
+  test(`guard: removing the old launcher is refused while transcriptions are ${name}; nothing runs`, async () => {
+    const { engine, home } = makeEngine(fakeEnv);
+    await engine.start();
+    const pid = engine.run.child.pid;
+    const calls = [];
+    const r = await removePausingEngine(engine, removalCtx(home, calls));
+    assert.deepEqual(r, { ok: false, reason, pieces: null, startAtLoginCarriedOver: false });
+    assert.deepEqual(calls, [], 'the uninstaller never ran');
+    assert.equal(engine.run.child.pid, pid, 'the same engine is still running');
+  });
+}
+
+test('guard: the uninstall runs after the old engine has exited and before the new one, never "stopped" between', async () => {
+  const { engine, children } = makeSeamEngine();
+  assert.equal(await engine.start(), true);
+  const old = children[0];
+  const states = [];
+  engine.on('status', (s) => states.push(s.state));
+  const calls = [];
+  let seen;
+  const r = await removePausingEngine(engine, removalCtx(engine.home, calls, () => {
+    seen = { oldExited: hasExited(old), spawned: children.length, run: engine.run?.child ?? null, state: engine.state };
+  }));
+  assert.deepEqual(calls, ['uninstall']);
+  assert.deepEqual(seen, { oldExited: true, spawned: 1, run: null, state: 'restarting' }, 'old gone, nothing spawned, still restarting');
+  assert.equal(r.ok, true);
+  assert.equal(children.length, 2, 'relaunched once');
+  assert.equal(engine.state, 'running');
+  assert.ok(!states.includes('stopped'), `states: ${states.join(', ')}`);
+});
+
+for (const [name, interrupt] of [
+  ['an explicit stop', (engine) => engine.stop()],
+  ['a quit', (engine) => engine.stopForQuit()],
+]) {
+  test(`guard: ${name} during the uninstall step spawns nothing afterwards (2b gate)`, async () => {
+    const { engine, children } = makeSeamEngine();
+    assert.equal(await engine.start(), true);
+    const calls = [];
+    const r = await removePausingEngine(engine, removalCtx(engine.home, calls, async () => {
+      interrupt(engine);
+      await sleep(20);
+    }));
+    await sleep(50);
+    assert.deepEqual(calls, ['uninstall'], 'the uninstall itself finished');
+    assert.equal(children.length, 1, 'no engine spawned after it');
+    assert.equal(engine.run, null);
+    assert.equal(engine.state, 'stopped');
+    assert.match(r.reason, /didn't start again afterwards: The engine was stopped\./);
+  });
+}
+
+test('guard: a second restart during the uninstall step is refused', async () => {
+  const { engine, children } = makeSeamEngine();
+  assert.equal(await engine.start(), true);
+  let second;
+  await removePausingEngine(engine, removalCtx(engine.home, [], async () => {
+    second = await engine.restart();
+  }));
+  assert.equal(second.ok, false);
+  assert.equal(second.reason, 'A restart is already under way.');
+  assert.equal(children.length, 2, 'one relaunch only');
+});
+
+test('guard: no start or restart while the removal step runs, even after a stop (B1)', async () => {
+  const { engine, children } = makeSeamEngine();
+  assert.equal(await engine.start(), true);
+  let release;
+  const held = new Promise((r) => (release = r));
+  let entered;
+  const inStep = new Promise((r) => (entered = r));
+  const restarting = engine.restart({ between: async () => (entered(), held) });
+  await inStep;
+  await engine.stop(); // discards the run; the uninstaller would still be running
+  assert.equal(await engine.start(), false, 'start refused while the step runs');
+  assert.deepEqual(await engine.restart(), { ok: false, reason: 'The old launcher is still being removed.' });
+  assert.equal(children.length, 1, 'only the first engine was ever spawned');
+  release();
+  await restarting;
+  await sleep(20);
+  assert.equal(children.length, 1, 'nothing spawned when the step ended either');
+  assert.equal(await engine.start(), true, 'after the step, start works');
+  assert.equal(children.length, 2);
+});
+
+test('a step that throws still releases the hold: start() works afterwards (B1)', async () => {
+  const { engine, children } = makeSeamEngine();
+  assert.equal(await engine.start(), true);
+  const r = await engine.restart({ between: async () => { throw new Error('the uninstall blew up'); } });
+  assert.equal(r.ok, true, 'relaunched after the failed step');
+  await engine.stop();
+  assert.equal(await engine.start(), true, 'start works');
+  assert.equal(children.length, 3);
 });

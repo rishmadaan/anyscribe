@@ -37,6 +37,7 @@ import type {
   ProviderTestResult,
 } from "../api/types";
 import LocalModelPicker from "./LocalModelPicker";
+import { TerminalFlow } from "./MacCards";
 import { ExtraDownloads, RestartBanner } from "./LocalSetupNotes";
 import { FfmpegNotice } from "./FfmpegNotice";
 import { downloadMbFor, formatMB, formatPerHour } from "../api/models";
@@ -58,7 +59,8 @@ type Step =
   | "api_key"
   | "offline_opt_in"
   | "workspace"
-  | "done";
+  | "done"
+  | "terminal"; // Mac app only: the optional last step, after Finish saved
 
 type FormState = {
   provider: string | null;
@@ -98,9 +100,11 @@ function limited<T>(
 
 interface Props {
   onClose: () => void;
+  /** Mac app, Terminal not yet asked: after Finish, offer it as the last step; called once answered. */
+  offerTerminal?: () => void;
 }
 
-export default function OnboardingWizard({ onClose }: Props) {
+export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
   const [step, setStep] = useState<Step>("welcome");
   const [form, setForm] = useState<FormState>({
     provider: null,
@@ -226,7 +230,8 @@ export default function OnboardingWizard({ onClose }: Props) {
             ? form.localModel || undefined
             : undefined,
       });
-      dismiss(true);
+      if (offerTerminal) setStep("terminal");
+      else dismiss(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Failed to save onboarding");
     } finally {
@@ -244,7 +249,15 @@ export default function OnboardingWizard({ onClose }: Props) {
   return (
     <Modal
       // with the confirmation open, Escape (and a click outside) means Keep setting up
-      onClose={() => (confirmClose ? setConfirmClose(false) : askOrClose(false))}
+      onClose={() => {
+        if (confirmClose) return setConfirmClose(false);
+        // the Terminal step is asked once: Escape or a click outside answers Skip for now (C6)
+        if (step === "terminal" && offerTerminal) {
+          offerTerminal();
+          return askOrClose(true);
+        }
+        askOrClose(false);
+      }}
       disableClose={saving}
       ariaLabelledBy="onboarding-title"
       size="xl"
@@ -259,14 +272,14 @@ export default function OnboardingWizard({ onClose }: Props) {
           >
             {stepTitle(step)}
           </h2>
-          {step !== "welcome" && step !== "done" && (
+          {step !== "welcome" && step !== "done" && step !== "terminal" && (
             <p className="text-[10px] font-mono text-text-muted mt-0.5">
               Step {stepIndex}
               {form.provider ? ` of ${path.length}` : ""}
             </p>
           )}
         </div>
-        {step !== "done" && !saving && (
+        {step !== "done" && step !== "terminal" && !saving && (
           <button
             onClick={() => askOrClose(true)}
             className="flex items-center gap-1 text-xs font-mono text-text-muted hover:text-text transition-colors cursor-pointer"
@@ -374,6 +387,15 @@ export default function OnboardingWizard({ onClose }: Props) {
           onFinish={finish}
         />
       )}
+      {step === "terminal" && offerTerminal && (
+        <TerminalFlow
+          eyebrow="Last step · optional"
+          onDone={() => {
+            offerTerminal();
+            dismiss(true);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -392,6 +414,8 @@ function stepTitle(step: Step): string {
       return "Workspace location";
     case "done":
       return "All set";
+    case "terminal":
+      return "One last thing";
   }
 }
 

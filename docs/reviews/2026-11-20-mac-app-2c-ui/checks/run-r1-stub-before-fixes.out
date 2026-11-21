@@ -1,0 +1,245 @@
+Traceback (most recent call last):
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 1020, in main
+    SCENARIOS[n](r)
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 409, in s_banner
+    p.get_by_role("link", name="Open History").click()
+  File "~/.local/lib/python3.12/site-packages/playwright/sync_api/_generated.py", line 11021, in click
+    self._sync(
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 174, in click
+    return await self._frame._click(self._selector, strict=True, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_frame.py", line 598, in _click
+    await self._channel.send("click", self._timeout, locals_to_params(locals()))
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("link", name="Open History")
+
+Traceback (most recent call last):
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 1020, in main
+    SCENARIOS[n](r)
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 893, in s_first_launch
+    p.get_by_role("button", name="OK").click()
+  File "~/.local/lib/python3.12/site-packages/playwright/sync_api/_generated.py", line 11021, in click
+    self._sync(
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 174, in click
+    return await self._frame._click(self._selector, strict=True, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_frame.py", line 598, in _click
+    await self._channel.send("click", self._timeout, locals_to_params(locals()))
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("button", name="OK")
+
+engine A: pid 204633 port 42663 HOME /tmp/anyscribe-2c-ui-zg3zy5pi/home-a
+engine C: pid 204677 port 48461 HOME /tmp/anyscribe-2c-ui-zg3zy5pi/home-a
+engine B: pid 204695 port 47825 HOME /tmp/anyscribe-2c-ui-zg3zy5pi/home-b
+engine B2: pid 204732 port 47121 HOME /tmp/anyscribe-2c-ui-zg3zy5pi/home-b2
+== browser
+  PASS no bridge in the page
+  PASS Shutdown button present
+  PASS no drag strip
+  PASS no overlay or engine banner text
+  PASS dragging a file shows no overlay
+  PASS a drop submits nothing
+  PASS Browse uploads the file (today's behaviour)
+  PASS Browse does not submit by itself
+  PASS Startup section as today (supported=True)
+  PASS no This Mac section
+  PASS no 'Show anyscribe in'
+  PASS no 'Use from Terminal'
+  PASS no 'Restart engine'
+  PASS no 'Old browser launcher'
+  PASS no 'Removing anyscribe'
+== browser_pixels
+  PASS browser / at 1440px identical to main's bundle
+  PASS browser / at 1000px identical to main's bundle
+  PASS browser / at 390px identical to main's bundle
+  PASS browser /history at 1440px identical to main's bundle
+    (new vs old per load [(256, 130, 264, 162), (256, 130, 264, 162), None]; new vs new [None, None])
+  PASS browser /history at 1000px identical to main's bundle
+  PASS browser /history at 390px identical to main's bundle
+  PASS browser /settings at 1440px identical to main's bundle
+  PASS browser /settings at 1000px identical to main's bundle
+  PASS browser /settings at 390px identical to main's bundle
+== app_layout
+  PASS app: no Shutdown button
+  PASS app on macOS: drag strip and logo row are drag regions
+  PASS drag strip computes app-region: drag
+  PASS top strip leaves room for the window buttons
+  PASS credits and KraftedX mark kept
+  PASS app on another OS: no drag strip, still no Shutdown
+== drop
+  PASS overlay names the file and size
+  PASS the drop is taken by the page (no navigation to the file)
+  PASS drop submits the file's path
+  PASS no upload copy
+  PASS pathForFile asked once
+  PASS overlay gone after the drop
+  PASS no name or size when the browser hides them
+  PASS dragging text shows no overlay
+== browse
+  PASS Browse submits the picked file's path
+  PASS Browse makes no upload copy
+== open_file
+  PASS a Dock file opens Transcribe
+  PASS a Dock file is submitted by path
+  PASS a file opened before load is submitted once
+  PASS a file arriving mid-job waits and is named
+  PASS it does not replace the running job
+== banner
+  PASS no banner while running
+  PASS restarting banner
+  FAIL running again names the watched job  [anyscribe
+Transcribe
+History
+Settings
+
+© 2026 Rishabh Madaan
+
+AGPLv3 or later · no warranty
+Source · Third-party notices
+Transcribe
+
+Paste a YouTube, Instagram, or local file URL to transcribe.
+
+Transcribe
+custom · auto · clean]
+  FAIL scenario ran to the end  [TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("link", name="Open History")
+]
+== settings
+  PASS This Mac replaces Startup
+  PASS menu bar help
+  PASS login help, menu bar
+  PASS terminal on line
+  PASS version line
+  PASS engine running line
+  PASS no launcher row when not installed
+  PASS removal help names the real workspace
+  PASS Dock calls setDockMode('dock')
+  PASS Dock help and login help follow
+  PASS both
+  PASS back to menu bar
+  PASS Start at login on
+  PASS Start at login off
+  PASS Open log folder
+  PASS switch off calls turnOff()
+  PASS off line
+  PASS switch on calls turnOn({replace:false})
+  PASS login waiting for approval
+  PASS other copy line
+  PASS switch on with another copy asks first (no turnOn)
+  PASS other copy card
+  PASS other copy note names uv
+  PASS Switch calls turnOn({replace:true})
+  PASS ready card
+  PASS Done closes and the row reads On
+  PASS skill missing line
+  PASS Try again still missing: the row says so, with the reason
+  PASS Try again succeeding
+  PASS path missing line
+  PASS GUARD addToPath: the row's button only asks
+  PASS the ask shows the exact line
+  PASS GUARD addToPath: I'll do it myself adds nothing
+  PASS the person's yes adds the line, then ready
+  PASS turnOff conflict asks keep or restore
+  PASS AMEND 1: the two answers reach turnOff({choice})
+  PASS conflict closes once settled
+  PASS AMEND 2: ok with a reason shows as information, not an error
+  PASS no Claude Code line
+  PASS ours written but another first: the status reason
+  PASS AMEND occupant: other copy elsewhere, reason shown
+  PASS AMEND occupant: no Switch without an occupant
+  PASS AMEND occupant: the switch writes ours without replacing anything
+  PASS AMEND uses: no 'runs this app's' claim when the shell wasn't asked; the reason instead
+  PASS AMEND launcher: a refusal shows its reason, no checklist
+  PASS AMEND carry-over: not confirmed, the reason instead
+  PASS engine with jobs line
+  PASS GUARD restart: disabled while transcriptions run
+  PASS GUARD restart: a click while disabled calls nothing
+  PASS enabled again when the jobs finish
+  PASS a refused restart shows the reason
+  PASS engine stopped row and banner
+  PASS Restart engine available when stopped
+  PASS row Restart engine calls restartEngine
+  PASS What happened scrolls to the banner
+  PASS engine restarting row
+  PASS launcher row
+  PASS Remove it, removed
+  PASS no Remove button once gone
+  PASS per-piece result
+  PASS Try again removes again
+  PASS Copy details copies the checklist
+== first_launch
+  PASS launcher question
+  PASS launcher note
+  PASS Keep both marks and removes nothing
+  PASS question closes
+  PASS GUARD repeat: not asked again after reload
+  PASS Remove marks and removes
+  PASS removed card
+  PASS OK closes
+  PASS cleanup checklist
+  PASS Try again, removed, no carry-over sentence
+  PASS no login item: no login words
+  PASS launcher first
+  PASS then the Terminal card, One more option
+  PASS Turn on, ready
+  PASS Done marks Terminal asked
+  PASS GUARD repeat: neither question again after reload
+  PASS Skip for now marks, turns nothing on
+  PASS other copy card on first launch
+  PASS Keep the one I have changes nothing
+  PASS skill card
+  PASS Try again, ready
+  PASS Continue marks and closes
+  PASS path card after Turn on
+  PASS GUARD addToPath: not called before the yes
+  PASS added, still missing
+  PASS addToPath refusal shows its reason
+  PASS I'll do it myself marks
+  PASS AMEND 3: bash refusal shows its reason and the line, selectable (same line)
+  PASS AMEND 3: no second Add it for me after a refusal
+  PASS AMEND 3: bash refusal shows its reason and the line, selectable (own line)
+  PASS AMEND 3: no second Add it for me after a refusal
+  PASS AMEND 2: Turn on ok with a reason: ready card carries the reason
+  PASS Turn on refused stays on the offer with the reason
+  PASS AMEND occupant: first-launch card without Switch, with the reason
+  PASS AMEND uses: ready card makes no 'runs this app's' claim when unknown
+  PASS AMEND launcher: first-launch refusal shows its reason on the question
+  PASS AMEND carry-over: first-launch card shows the reason
+  PASS AMEND2: the restarting banner covers the gap
+  FAIL AMEND2: the page reloaded during remove()  []
+  FAIL AMEND2: after the reload the result card comes from lastRemoval  []
+  PASS AMEND2: one removal, one mark
+  FAIL scenario ran to the end  [TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("button", name="OK")
+]
+== first_launch_marked
+  PASS GUARD repeat: both marked, nothing asked
+== wizard
+  PASS new person: the wizard, not the separate card
+  PASS Terminal is the wizard's last step
+  PASS Skip for now marks and closes the wizard, no second card
+== wizard_browser
+  PASS browser: Finish closes the wizard (no Terminal step)
+
+153 passed, 5 failed

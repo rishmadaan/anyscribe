@@ -6,10 +6,13 @@ const logic = require('../src/logic');
 
 const job = (status, extra = {}) => ({ job_id: Math.random().toString(36).slice(2), url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw', status, stage: null, title: null, completed_at: null, ...extra });
 
-test('port: 8470 unless the old desktop mode records 8470', () => {
-  assert.equal(logic.choosePort(null), 8470);
-  assert.equal(logic.choosePort(8457), 8470);
-  assert.equal(logic.choosePort(8470), 8471);
+test('port: the saved one is kept; a first choice avoids every port the old launcher records (C1, F5)', () => {
+  assert.equal(logic.choosePort(), 8470);
+  assert.equal(logic.choosePort({ avoid: [8457] }), 8470);
+  assert.equal(logic.choosePort({ avoid: [8470, 8457] }), 8471);
+  assert.equal(logic.choosePort({ avoid: [8470, 8471, 8457] }), 8472, 'manifest and login item on two ports');
+  assert.equal(logic.choosePort({ saved: 8471, avoid: [8457] }), 8471, 'kept after the old launcher is removed');
+  assert.equal(logic.choosePort({ saved: 8470, avoid: [8470, 8457] }), 8471, 'never a port the old launcher now records');
 });
 
 test('python: packaged uses the bundled one, dev needs ANYSCRIBE_DEV_PYTHON', () => {
@@ -281,4 +284,76 @@ test('menu: the header says "not answering" from the third failed read in a row 
   assert.equal(logic.menuModel({ engineState: 'running', jobs: [], failedReads: 5 }).header, 'anyscribe · Not answering', 'G9: idle reads Not answering, not Ready');
   assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 3, quitWhenDone: true }).header, 'Quitting when these finish · not answering');
   assert.equal(logic.menuModel({ engineState: 'stopped', stoppedRestarting: true, failedReads: 5 }).header, "Engine stopped · couldn't restart");
+});
+
+test('settings: the first-launch questions are kept beside the Dock mode, true only once asked', () => {
+  assert.deepEqual(logic.parseSettings(null), { dockMode: 'menubar', oldLauncherAsked: false, terminalAsked: false, port: null });
+  assert.deepEqual(logic.parseSettings({ dockMode: 'dock', terminalAsked: true, oldLauncherAsked: 'yes', port: 8471 }), {
+    dockMode: 'dock',
+    oldLauncherAsked: false,
+    terminalAsked: true,
+    port: 8471,
+  });
+  assert.equal(logic.parseSettings({ port: '8470' }).port, null);
+  assert.equal(logic.parseSettings({ port: 80 }).port, null);
+  assert.equal(logic.parseSettings({ dockMode: 'taskbar' }).dockMode, 'menubar');
+  assert.deepEqual(logic.FIRST_LAUNCH_KEYS, ['oldLauncherAsked', 'terminalAsked']);
+});
+
+test('opened files: absolute file paths from a second launch, never the binary, flags or folders', () => {
+  const files = new Set(['/usr/bin/electron', '/Users/me/talk.m4a', '/Users/me/b c.mp4']);
+  const isFile = (p) => files.has(p);
+  const argv = ['/usr/bin/electron', '--inspect=9334', '/Users/me/desktop', '--ozone-platform=headless', '/Users/me/talk.m4a', 'relative.mp3', '/Users/me/b c.mp4'];
+  assert.deepEqual(logic.openedFiles(argv, isFile), ['/Users/me/talk.m4a', '/Users/me/b c.mp4']);
+});
+
+test('guard: files opened before the dashboard subscribes are held, then delivered in order', () => {
+  const inbox = new logic.OpenFiles();
+  inbox.add('/a.m4a');
+  inbox.add('/b.m4a');
+  const got = [];
+  inbox.subscribe((item) => got.push(item));
+  assert.deepEqual(got.map((i) => i.file), ['/a.m4a', '/b.m4a'], 'held ones, in order, on subscribe');
+  inbox.add('/c.m4a');
+  assert.deepEqual(got.map((i) => i.file), ['/a.m4a', '/b.m4a', '/c.m4a'], 'then straight through');
+  for (const item of got) inbox.ack(item.id);
+  assert.deepEqual(inbox.held, [], 'acknowledged ones are dropped');
+});
+
+test('guard: a file is kept until the dashboard acknowledges it (C2)', () => {
+  // Subscribe, then unsubscribe at once: sent, never acknowledged, so the next subscriber gets it.
+  const inbox = new logic.OpenFiles();
+  inbox.add('/a.m4a');
+  const lost = [];
+  inbox.subscribe((item) => lost.push(item));
+  inbox.unsubscribe();
+  const next = [];
+  inbox.subscribe((item) => next.push(item));
+  assert.deepEqual(next.map((i) => i.file), ['/a.m4a'], 'the next subscriber still gets it');
+  // A reload while it is being delivered: the new page gets it again.
+  inbox.add('/b.m4a');
+  inbox.unsubscribe(); // did-start-navigation before the ack
+  const reloaded = [];
+  inbox.subscribe((item) => reloaded.push(item));
+  assert.deepEqual(reloaded.map((i) => i.file), ['/a.m4a', '/b.m4a']);
+  // Acknowledged twice, or an unknown id: nothing else is dropped, nothing is sent again.
+  const [a, b] = reloaded;
+  inbox.ack(a.id);
+  inbox.ack(a.id);
+  inbox.ack(9999);
+  assert.deepEqual(inbox.held.map((i) => i.file), ['/b.m4a']);
+  inbox.ack(b.id);
+  const again = [];
+  inbox.subscribe((item) => again.push(item));
+  assert.deepEqual(again, [], 'no file is delivered twice once acknowledged');
+});
+
+test("couldn't start after a removal also says the removal ran, with its result", () => {
+  const port = { kind: 'port', reason: 'another program is using port 8470' };
+  assert.equal(logic.failureMessage(port), "Its engine couldn't start: another program is using port 8470. Your transcripts and settings are safe.");
+  assert.equal(
+    logic.failureMessage(port, { ok: true }),
+    "Its engine couldn't start: another program is using port 8470. Your transcripts and settings are safe. The old launcher's removal ran first: it was removed."
+  );
+  assert.match(logic.failureMessage(port, { ok: false, reason: "Cleanup didn't finish: the old menu bar icon is still running." }), /removal ran first: Cleanup didn't finish/);
 });

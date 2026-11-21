@@ -1,0 +1,36 @@
+OK  bridge/settings: killed={'Startup section as today': True} restored={'Startup section as today': True} scenario_all_pass=True
+OK  bridge/drag-strip: killed={'no drag strip': True} restored={'no drag strip': True} scenario_all_pass=True
+OK  bridge/drop-listener: killed={'dragging a file shows no overlay': True} restored={'dragging a file shows no overlay': True} scenario_all_pass=True
+OK  bridge/shutdown: killed={'app: no Shutdown button': True} restored={'app: no Shutdown button': True} scenario_all_pass=True
+OK  bridge/first-launch: killed={'Shutdown button present': True} restored={'Shutdown button present': True} scenario_all_pass=True
+OK  addToPath/settings-row: killed={"GUARD addToPath: the row's button only asks": True} restored={"GUARD addToPath: the row's button only asks": True} scenario_all_pass=True
+OK  addToPath/after-turn-on: killed={'GUARD addToPath: not called before the yes': True} restored={'GUARD addToPath: not called before the yes': True} scenario_all_pass=True
+OK  repeat/launcher-flag: killed={'GUARD repeat: not asked again after reload': True, 'GUARD repeat: both marked, nothing asked': True} restored={'GUARD repeat: not asked again after reload': True, 'GUARD repeat: both marked, nothing asked': True} scenario_all_pass=True
+OK  repeat/terminal-flag: killed={'GUARD repeat: neither question again after reload': True, 'GUARD repeat: both marked, nothing asked': True} restored={'GUARD repeat: neither question again after reload': True, 'GUARD repeat: both marked, nothing asked': True} scenario_all_pass=True
+OK  repeat/keep-marks: killed={'GUARD repeat: not asked again after reload': True} restored={'GUARD repeat: not asked again after reload': True} scenario_all_pass=True
+OK  repeat/terminal-marks: killed={'GUARD repeat: neither question again after reload': True} restored={'GUARD repeat: neither question again after reload': True} scenario_all_pass=True
+OK  repeat/removal-result-once: killed={'C7: closed with Escape, not shown again after another reload': True} restored={'C7: closed with Escape, not shown again after another reload': True} scenario_all_pass=True
+OK  repeat/removal-result-newer: killed={'AMEND2: an older lastRemoval is never shown': True} restored={'AMEND2: an older lastRemoval is never shown': True} scenario_all_pass=True
+OK  r1/outage-note: killed={'C1: after the reload, running again names the watched job': True} restored={'C1: after the reload, running again names the watched job': True} scenario_all_pass=True
+OK  r1/asked-restart-no-outage: killed={"F2: no Running again after Settings' restart": True} restored={"F2: no Running again after Settings' restart": True} scenario_all_pass=True
+OK  r1/queue-before-ack: killed={'C3: B survives the reload and is submitted by its path': True} restored={'C3: B survives the reload and is submitted by its path': True} scenario_all_pass=True
+BAD r1/removal-note-consumed: killed={'C7: the note is kept while the result card is open, gone once it is closed': False} restored={'C7: the note is kept while the result card is open, gone once it is closed': False} scenario_all_pass=True
+OK  r1/no-pieces-branch: killed={'C2: a kept result with no pieces shows its reason, Try again and Close': True} restored={'C2: a kept result with no pieces shows its reason, Try again and Close': True} scenario_all_pass=True
+OK  r1/readiness-gate-card: killed={"C5: shell not asked: 'The anyscribe command is added'": True} restored={"C5: shell not asked: 'The anyscribe command is added'": True} scenario_all_pass=True
+OK  r1/readiness-gate-row: killed={'C5: Settings row for a shell not asked': True} restored={'C5: Settings row for a shell not asked': True} scenario_all_pass=True
+OK  r1/quiet-answer-marks: killed={'C6: a click outside the launcher question is Keep both': True} restored={'C6: a click outside the launcher question is Keep both': True} scenario_all_pass=True
+OK  r1/mark-failure-shown: killed={'C6: a failed save is shown with its reason': True} restored={'C6: a failed save is shown with its reason': True} scenario_all_pass=True
+OK  r2/queue-accepted-only: killed={'A1: refused A, B waiting: the stored queue is exactly [A, B]': True} restored={'A1: refused A, B waiting: the stored queue is exactly [A, B]': True} scenario_all_pass=True
+OK  r2/queue-error-pause: killed={'A1: refused A, B waiting: the stored queue is exactly [A, B]': True} restored={'A1: refused A, B waiting: the stored queue is exactly [A, B]': True} scenario_all_pass=True
+OK  r2/queue-running-gate: killed={'G1: engine down: nothing posted, no failure, B kept': True} restored={'G1: engine down: nothing posted, no failure, B kept': True} scenario_all_pass=True
+OK  r2/new-drops-head-only: killed={"A1: New after a typed link's failure keeps B": True} restored={"A1: New after a typed link's failure keeps B": True} scenario_all_pass=True
+OK  r2/note-not-mine: killed={"[component] A2/G7: with the removal's card still open": True} restored={"[component] A2/G7: with the removal's card still open": True} scenario_all_pass=True
+OK  r2/unmatched-clear: killed={'A2: after the reload, the unmatched note is gone': True} restored={'A2: after the reload, the unmatched note is gone': True} scenario_all_pass=True
+OK  r2/no-shape-clear: killed={'A2: a thrown removal settled just before the reload': True} restored={'A2: a thrown removal settled just before the reload': True} scenario_all_pass=True
+OK  r2/reason-always: killed={'A3/G3: carried over and the engine reason: both shown': True} restored={'A3/G3: carried over and the engine reason: both shown': True} scenario_all_pass=True
+OK  r2/stopped-branch: killed={'G2: the stopped engine gets its red card': True} restored={'G2: the stopped engine gets its red card': True} scenario_all_pass=True
+OK  restart/disabled: killed={'GUARD restart: disabled while transcriptions run': True, 'GUARD restart: a click while disabled calls nothing': True} restored={'GUARD restart: disabled while transcriptions run': True, 'GUARD restart: a click while disabled calls nothing': True} scenario_all_pass=True
+OK  restart/pending-counts: killed={'engine with jobs line': True} restored={'engine with jobs line': True} scenario_all_pass=True
+
+32 of 33 mutants killed and restored cleanly
+exit 1

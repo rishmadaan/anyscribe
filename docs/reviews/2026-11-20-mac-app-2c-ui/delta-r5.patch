@@ -1,0 +1,74 @@
+diff --git a/ui/src/components/MacCards.tsx b/ui/src/components/MacCards.tsx
+index 54ba253..296b1b0 100644
+--- a/ui/src/components/MacCards.tsx
++++ b/ui/src/components/MacCards.tsx
+@@ -83,7 +83,8 @@ function removedWords(before: Pieces | null): string {
+ /** The result's own reason; claimed after a reload, a "didn't start again" is out of date. */
+ function reasonWords(r: LauncherRemoval, afterReload: boolean): string | null {
+   if (!r.reason) return null;
+-  return afterReload && /didn't start again/.test(r.reason) ? `${r.reason} It is running again now.` : r.reason;
++  if (!afterReload || !/didn't start again/.test(r.reason)) return r.reason;
++  return `${r.reason}${/[.!?]$/.test(r.reason) ? "" : "."} It is running again now.`; // the engine's reason often ends bare (K4)
+ }
+ 
+ /** The result of a removal: "Removed", the cleanup checklist, or (no pieces) the reason alone. */
+@@ -139,6 +140,8 @@ export function RemovalResult({
+     );
+   }
+   const pieces = result.pieces;
++  // the bridge's reason opens with "Cleanup didn't finish: <what is left>.", which the title and checklist say (K1)
++  const extra = reason?.replace(/^Cleanup didn't finish: [^.]*\.\s*/, "") || null;
+   const copy = async () => {
+     const lines = PIECE_WORDS.map(([k, label]) => `${label}: ${pieces[k]}`);
+     if (result.reason) lines.push(`Reason: ${result.reason}`);
+@@ -165,12 +168,12 @@ export function RemovalResult({
+           );
+         })}
+       </ul>
+-      {reason && <p>{reason /* the bridge's own words, above the generic advice (B2) */}</p>}
+       <p>
+         {pieces.menuBarIcon === "still running"
+           ? "Log out and back in to stop it, or try again."
+           : "Try again. If it still doesn't finish, Copy details shows what was left."}
+       </p>
++      {extra && <p>{extra /* what the bridge adds (B2), below the advice so its "it" stays the icon (K1) */}</p>}
+       <Buttons>
+         {retryButtons}
+         <button onClick={copy} className={BTN_LINK}>{copied ? "Copied" : "Copy details"}</button>
+diff --git a/ui/src/pages/TranscribePage.tsx b/ui/src/pages/TranscribePage.tsx
+index 88317bb..cf32296 100644
+--- a/ui/src/pages/TranscribePage.tsx
++++ b/ui/src/pages/TranscribePage.tsx
+@@ -124,11 +124,12 @@ export default function TranscribePage() {
+   const waiting = (phase === "running" || phase === "error") && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
+   // H2: files that wait for the engine are named in the idle, completed and cancelled views
+   const names = (list: string[]) => list.map((p) => p.split(/[\\/]/).pop()).join(", ");
++  // while the engine is down every Up next line says so, whatever view it sits in (H2, K3)
++  const onceUp = (n: number) => `${n === 1 ? "It starts" : "They start in turn"} once anyscribe's engine is running again.`;
+   const waitingForEngine =
+     !engineUp && incoming.length > 0 ? (
+       <p className="mt-4 text-xs text-text-muted break-words">
+-        Up next: {names(incoming)}.{" "}
+-        {incoming.length === 1 ? "It starts" : "They start in turn"} once anyscribe's engine is running again.
++        Up next: {names(incoming)}. {onceUp(incoming.length)}
+       </p>
+     ) : null;
+   useEffect(() => {
+@@ -324,7 +325,7 @@ export default function TranscribePage() {
+           {waiting.length > 0 && (
+             <p className="mt-4 self-start text-xs text-text-muted break-words">
+               Up next: {names(waiting)}.{" "}
+-              {waiting.length === 1 ? "It starts" : "They start in turn"} when this one finishes.
++              {engineUp ? `${waiting.length === 1 ? "It starts" : "They start in turn"} when this one finishes.` : onceUp(waiting.length)}
+             </p>
+           )}
+           <button
+@@ -436,7 +437,7 @@ export default function TranscribePage() {
+           {waiting.length > 0 && (
+             <p className="mb-4 text-xs text-text-muted break-words">
+               Up next: {names(waiting)}.{" "}
+-              {waiting.length === 1 ? "It waits" : "They wait"} until you try this one again or choose New.
++              {engineUp ? `${waiting.length === 1 ? "It waits" : "They wait"} until you try this one again or choose New.` : onceUp(waiting.length)}
+             </p>
+           )}
+           <div className="flex gap-2">

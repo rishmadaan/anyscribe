@@ -1,0 +1,34 @@
+[
+ {
+  "mutant": "r3/at-match",
+  "file": "src/desktop.ts",
+  "scenario": "r3_facts",
+  "killed": {
+   "B1: the stored note is the click's": true
+  },
+  "mutant_details": {
+   "B1: the stored note is the click's": "(1795238075140, None, 'anyscribe\\nTranscribe\\nHistory\\nSettings\\n\\n\u00a9 2026 Rishabh Madaan\\n\\nAGPLv3 or later \u00b7 no warranty\\nSource \u00b7 Third-party notices\\nTranscribe\\n\\nPaste a YouTube, Instagram, or local file URL to transcribe.\\n\\nTrans')"
+  },
+  "crash": null,
+  "restored_pass": {
+   "B1: the stored note is the click's": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r3/doomed-recovery",
+  "file": "src/App.tsx",
+  "scenario": "r3_facts",
+  "killed": {
+   "Doomed recovery: no card and the note unchanged": true
+  },
+  "mutant_details": {
+   "Doomed recovery: no card and the note unchanged": "(True, True, False, False)"
+  },
+  "crash": null,
+  "restored_pass": {
+   "Doomed recovery: no card and the note unchanged": true
+  },
+  "restored_scenario_all_pass": true
+ }
+]

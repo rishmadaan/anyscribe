@@ -8,11 +8,13 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const logic = require('./logic');
 const { Engine, AppLog } = require('./engine');
+const terminal = require('./terminal');
+const oldLauncher = require('./old-launcher');
+const { killHelpers } = require('./run');
 
 const GUIDE_URL = 'https://github.com/rishmadaan/anyscribe/blob/main/docs/user/troubleshooting.md';
 const ASSETS = path.join(__dirname, '..', 'assets');
 const START_URL = pathToFileURL(path.join(__dirname, 'start.html')).href;
-const DOCK_MODES = ['menubar', 'both', 'dock'];
 const isMac = process.platform === 'darwin';
 
 if (!app.requestSingleInstanceLock()) {
@@ -40,6 +42,7 @@ function run() {
   const engine = new Engine({
     python,
     pythonError,
+    savedPort: () => settings.port,
     packaged: app.isPackaged,
     home,
     log,
@@ -52,7 +55,7 @@ function run() {
     }),
   });
 
-  let settings = { dockMode: 'menubar' };
+  let settings = logic.parseSettings(null);
   let mainWin = null;
   let startWin = null;
   let tray = null;
@@ -65,6 +68,9 @@ function run() {
   let quitting = false; // a quit question or engine stop is under way
   let allowQuit = false;
   let lastMenuKey = '';
+  // The last removal's result, kept here: the dashboard reloads when the engine comes back.
+  let lastRemoval = null;
+  let removalBeforeStart = null; // shown on "couldn't start" if the relaunch after a removal fails
 
   const engineOrigin = () => `http://127.0.0.1:${engine.port}`;
   const visible = (w) => w && !w.isDestroyed() && w.isVisible();
@@ -72,27 +78,33 @@ function run() {
   // ---- settings (userData/settings.json) ----
 
   const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+  // The Dock mode and the first-launch questions (never in ~/.anyscribe).
   function loadSettings() {
     try {
-      const s = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
-      return { dockMode: DOCK_MODES.includes(s.dockMode) ? s.dockMode : 'menubar' };
+      return logic.parseSettings(JSON.parse(fs.readFileSync(settingsFile(), 'utf8')));
     } catch {
-      return { dockMode: 'menubar' };
+      return logic.parseSettings(null);
     }
   }
+  // null, or why the file could not be written.
   function saveSettings() {
     try {
       fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
       fs.writeFileSync(settingsFile(), `${JSON.stringify(settings, null, 2)}\n`);
+      return null;
     } catch (err) {
       log.shell(`couldn't save settings: ${err.message}`); // the choice still applies until quit
+      return err.message;
     }
   }
   // The system's Login Items are the source of truth (he can turn it off in System Settings,
   // or it can wait for approval there); nothing is stored for it here.
-  function startsAtLogin() {
+  function loginItemState() {
     const s = app.getLoginItemSettings();
-    return s.status ? s.status === 'enabled' : s.openAtLogin === true;
+    return s.status ?? (s.openAtLogin ? 'enabled' : 'not-registered');
+  }
+  function startsAtLogin() {
+    return loginItemState() === 'enabled';
   }
 
   function setStartAtLogin(on) {
@@ -100,7 +112,7 @@ function run() {
     refreshMenu();
   }
   function setDockMode(mode) {
-    if (!DOCK_MODES.includes(mode)) throw new Error(`dockMode must be one of ${DOCK_MODES.join(', ')}`);
+    if (!logic.DOCK_MODES.includes(mode)) throw new Error(`dockMode must be one of ${logic.DOCK_MODES.join(', ')}`);
     settings.dockMode = mode;
     saveSettings();
     applyDockMode();
@@ -164,10 +176,14 @@ function run() {
       show: false,
       title: 'anyscribe',
       backgroundColor: '#0B0A0F',
-      // Default title bar until the dashboard has a drag area (slice 2c), then hiddenInset.
+      // The dashboard's sidebar runs up under the traffic lights; 2c-ui gives it the drag strip
+      // and the top padding. The lights sit where the mockup draws them (16 pt in, 16 pt down).
+      ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 } } : {}),
       webPreferences: { ...secure('preload.js'), additionalArguments: [`--anyscribe-version=${app.getVersion()}`] },
     });
     hideOnClose(mainWin);
+    // A new page must subscribe again before it gets opened files; until then they are held.
+    mainWin.webContents.on('did-start-navigation', (d) => d.isMainFrame && !d.isSameDocument && openFiles.unsubscribe());
     mainWin.loadURL(`${engineOrigin()}/`);
     return mainWin;
   }
@@ -193,7 +209,7 @@ function run() {
   function startState() {
     const f = engine.failure;
     if (engine.state !== 'stopped' || !f) return { phase: 'starting' };
-    return { phase: 'failed', message: logic.failureMessage(f), lines: f.lines };
+    return { phase: 'failed', message: logic.failureMessage(f, removalBeforeStart), lines: f.lines };
   }
 
   // ---- menu bar, Dock ----
@@ -316,7 +332,12 @@ function run() {
     e.preventDefault();
     if (!quitting) setImmediate(() => askQuit(decision));
   });
-  app.on('will-quit', () => engine.stopForQuit());
+  // The engine stops, and so does an old-launcher uninstall still running (it could otherwise stop
+  // the next launch's engine); neither is waited for, so a logout is never held up.
+  app.on('will-quit', () => {
+    engine.stopForQuit();
+    killHelpers();
+  });
   app.on('window-all-closed', () => {}); // keep running in the menu bar
 
   // ---- engine events and the job poll ----
@@ -325,6 +346,11 @@ function run() {
     if (startWin) startWin.webContents.send('start:state', startState());
     mainWin?.webContents.send('engine:status', status);
     if (status.state === 'running') {
+      removalBeforeStart = null;
+      if (settings.port !== engine.port) {
+        settings.port = engine.port; // kept, so the next launch uses it again
+        saveSettings();
+      }
       if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`${engineOrigin()}/`); // after a restart
       if (visible(startWin)) showUI(); // someone is waiting for it
     }
@@ -372,7 +398,7 @@ function run() {
       return fn(...args);
     });
   }
-  handle('settings:get', () => ({ ...settings, startAtLogin: startsAtLogin() }));
+  handle('settings:get', () => ({ dockMode: settings.dockMode, startAtLogin: startsAtLogin() }));
   handle('settings:dockMode', (mode) => setDockMode(mode));
   handle('settings:startAtLogin', (on) => setStartAtLogin(on));
   handle('engine:status', () => engine.status());
@@ -382,6 +408,68 @@ function run() {
     if (typeof p !== 'string' || !path.isAbsolute(p)) throw new Error('revealInFinder needs an absolute path');
     shell.showItemInFolder(p);
   });
+  // Terminal, the skill and the old launcher change files: one call at a time.
+  let chain = Promise.resolve();
+  const oneAtATime = (fn) => (...args) => {
+    const result = chain.then(() => fn(...args));
+    chain = result.catch(() => {});
+    return result;
+  };
+  const terminalCtx = () => ({
+    home,
+    shell: process.env.SHELL || os.userInfo().shell,
+    python,
+    pythonError,
+    env: engine.env,
+    appVersion: app.getVersion(),
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    execPath: process.execPath,
+  });
+  handle('terminal:status', oneAtATime(() => terminal.status(terminalCtx())));
+  handle('terminal:turnOn', oneAtATime((opts) => terminal.turnOn(terminalCtx(), { replace: opts?.replace === true })));
+  handle(
+    'terminal:turnOff',
+    oneAtATime((opts) => terminal.turnOff(terminalCtx(), { choice: ['keep-current', 'restore'].includes(opts?.choice) ? opts.choice : null }))
+  );
+  handle('terminal:addToPath', oneAtATime(() => terminal.addToPath(terminalCtx())));
+  handle('terminal:retrySkill', oneAtATime(() => terminal.retrySkill(terminalCtx())));
+  handle('oldLauncher:status', async () => ({ ...(await oldLauncher.status({ home, platform: process.platform })), lastRemoval }));
+  handle(
+    'oldLauncher:remove',
+    oneAtATime(() =>
+      oldLauncher.removePausingEngine(
+        engine,
+        { home, platform: process.platform, python, pythonError, env: engine.env, setStartAtLogin, loginItemState },
+        (result) => {
+          lastRemoval = { ...result, at: Date.now() };
+          removalBeforeStart = lastRemoval;
+        }
+      )
+    )
+  );
+  handle('firstLaunch:get', () => ({ ok: true, oldLauncherAsked: settings.oldLauncherAsked, terminalAsked: settings.terminalAsked }));
+  handle('firstLaunch:mark', (key) => {
+    if (!logic.FIRST_LAUNCH_KEYS.includes(key)) throw new Error(`firstLaunch.mark takes one of ${logic.FIRST_LAUNCH_KEYS.join(', ')}`);
+    settings[key] = true;
+    const error = saveSettings();
+    return error ? { ok: false, reason: `anyscribe couldn't save that this was asked: ${error}` } : { ok: true };
+  });
+  // Opened files go only to the dashboard window's own page.
+  const fromDashboard = (e) => mainWin && !mainWin.isDestroyed() && e.sender === mainWin.webContents && ours(e.senderFrame?.url || '');
+  ipcMain.handle('openFile:subscribe', (e) => {
+    if (!fromDashboard(e)) throw new Error('not allowed from this page');
+    const contents = e.sender;
+    openFiles.subscribe((item) => {
+      if (!contents.isDestroyed()) contents.send('open-file', item); // kept until the page acks it
+    });
+  });
+  ipcMain.handle('openFile:unsubscribe', (e) => {
+    if (fromDashboard(e)) openFiles.unsubscribe();
+  });
+  ipcMain.handle('openFile:ack', (e, id) => {
+    if (fromDashboard(e)) openFiles.ack(id);
+  });
   handle('start:state', () => startState());
   handle('start:retry', () => engine.state === 'stopped' && engine.start());
   handle('start:copy', () => clipboard.writeText(log.tail(40).join('\n')));
@@ -389,7 +477,29 @@ function run() {
 
   // ---- launch ----
 
-  app.on('second-instance', showUI);
+  // Files dropped on the Dock icon or opened with the app (macOS sends open-file, also at launch,
+  // so it is registered before ready), and files named on a second launch's command line.
+  const openFiles = new logic.OpenFiles();
+  const isFile = (p) => {
+    try {
+      return fs.statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  };
+  function receiveFile(file) {
+    if (typeof file !== 'string' || !path.isAbsolute(file)) return;
+    openFiles.add(file);
+    if (app.isReady()) showUI();
+  }
+  app.on('open-file', (e, file) => {
+    e.preventDefault();
+    receiveFile(file);
+  });
+  app.on('second-instance', (_e, argv) => {
+    for (const file of logic.openedFiles(argv, isFile)) openFiles.add(file);
+    showUI();
+  });
   app.on('activate', showUI); // Dock icon clicked, or the app opened again while running
   nativeTheme.on('updated', refreshMenu);
 

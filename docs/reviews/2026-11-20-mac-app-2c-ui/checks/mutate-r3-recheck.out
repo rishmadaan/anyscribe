@@ -1,0 +1,5 @@
+OK  r3/at-match: killed={"B1: the stored note is the click's": True} restored={"B1: the stored note is the click's": True} scenario_all_pass=True
+OK  r3/doomed-recovery: killed={'Doomed recovery: no card and the note unchanged': True} restored={'Doomed recovery: no card and the note unchanged': True} scenario_all_pass=True
+
+2 of 2 mutants killed and restored cleanly
+exit 0

@@ -1,0 +1,827 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index c6058e3..6617b70 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -36,6 +36,7 @@ are the source of truth.
+ ```bash
+ npm test     # unit tests (node --test): pure logic, plus the supervisor against test/fake-engine.js
+ ANYSCRIBE_DEV_PYTHON=$(pwd)/../.venv/bin/python npm run e2e   # the real app against the real engine
++ANYSCRIBE_DEV_PYTHON=$(pwd)/../.venv/bin/python npm run e2e:removal   # old-launcher removal with the real uninstaller (port 8470 free)
+ ```
+ 
+ `npm test` uses ports 8470 and 8471, so both must be free. The Terminal and
+@@ -159,12 +160,12 @@ left alone).
+ | Member | Gives |
+ |--------|-------|
+ | `terminal.status()` | `{ok, reason, state, command, uses, appVersion, claudeCode, skill}`. `state`: `"off"` (no command of ours), `"on"` (Terminal runs ours; also when ours is written and the login shell couldn't be asked, with `reason` saying so), `"other-copy"` (Terminal runs a different anyscribe first), `"path-missing"` (ours is written, the login shell finds no anyscribe). `command`: our command's path, or null. `uses`: `{path, version, via: "uv" \| "pipx" \| "pip" \| "app" \| "unknown"}` or null (an alias or function: path null, via unknown). `occupant`: `{path, via, version}` for whatever sits at `~/.local/bin/anyscribe` when it is not ours, else null; offer "Switch to this app's copy" only when it is set. When ours is written but another copy comes first, `reason` is "Terminal finds another anyscribe at <path> first." `claudeCode`: `~/.claude` exists. `skill`: `"installed" \| "missing" \| "not-applicable"` |
+-| `terminal.turnOn({replace})` | Writes our command. With another file at `~/.local/bin/anyscribe` and no `replace: true`: `ok: false` (state `other-copy` when Terminal runs it), nothing touched. With `replace`, the other file or symlink is moved to `~/.anyscribe/runtime/replaced/anyscribe` (an older one there is renamed with a timestamp, never deleted). Then, if `~/.claude` exists, `python -m anyscribe install-skill --force`. `ok: false` only when the command was not written; a failed skill shows as `skill: "missing"` with `reason` until a later install succeeds, even when an older skill folder is still there. The new command's hash is recorded only after it is in place, so a failed refresh leaves the old one ours |
++| `terminal.turnOn({replace})` | Writes our command. With another file at `~/.local/bin/anyscribe` and no `replace: true`: `ok: false` (state `other-copy` when Terminal runs it), nothing touched. With `replace`, the other file or symlink is moved to `~/.anyscribe/runtime/replaced/anyscribe` (an older one there is renamed with a timestamp, never deleted). Then, if `~/.claude` exists, `python -m anyscribe install-skill --force`. `ok: false` only when the command was not written; a failed skill shows as `skill: "missing"` with `reason` until a later install succeeds, even when an older skill folder is still there. Writes are committed by the record: temp files with fresh names created exclusively (a file or symlink already at a name is never written through), the record first (the new hash, the current one still accepted as `previousSha256`), then the file moves; a record that cannot be saved leaves the command untouched |
+ | `terminal.turnOff({choice})` | Removes ours only if it is still ours (marker and recorded hash); puts back what it replaced in one rename. If ours was changed or removed since and something can be put back: `{ok: false, needsChoice: "keep-current-or-restore", reason}`, nothing touched. Answer with `turnOff({choice: "keep-current"})` (leave the current file, forget ours) or `turnOff({choice: "restore"})` (the current file is moved aside into `replaced/`, the old one put back). A changed command with nothing to put back is left as it is (`ok: true`, `reason` says so). Then the skill folder `~/.claude/skills/anyscribe` is removed only if the login shell finds no anyscribe at all (unknown keeps it) |
+ | `terminal.addToPath()` | `{ok, file, line}`: appends `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile` (zsh) or `~/.bash_profile` (bash), creating it if missing, never twice. Then it asks the login shell again: if `~/.local/bin` is still not on PATH, `ok: true` with the reason "The line is in ~/.zprofile, but your shell setup removes it again later (check ~/.zshrc)." Not ok for any other shell, and for bash when `~/.bash_profile` is missing but `~/.bash_login` or `~/.profile` exists (creating it would hide them): `reason` gives the line to add by hand |
+ | `terminal.retrySkill()` | Runs `install-skill --force` again; `ok` when the skill is installed |
+-| `oldLauncher.status()` | `{ok, installed, pieces: {launcher, loginItem, menuBarIcon}}`: `~/Applications/anyscribe.app` and `~/Library/LaunchAgents/com.anyscribe.tray.plist` `"present" \| "absent"`; the old menu bar icon `"running" \| "not running"` (`~/.anyscribe/tray.pid` names a live process whose command line is an anyscribe tray). `installed` (any piece left, a running old menu bar icon alone included) is true only on macOS |
+-| `oldLauncher.remove()` | macOS only. Refuses, running nothing, when the uninstall would target this app's engine port (the manifest's port, else the login item's, else 8457): `ok: false`, `pieces: null`, `reason` "The old launcher is set to the same port as this app, so removing it now would stop this app's engine. Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal." Otherwise runs `python -m anyscribe desktop uninstall --json` with the engine's environment, then checks each piece itself: `{ok, pieces: {launcher: "removed" \| "still there", loginItem: "removed" \| "still there", menuBarIcon: "stopped" \| "still running"}, startAtLoginCarriedOver}`; ok only when all three are gone. When the old login item was there before and is gone after, the app's own Start at login is turned on; `startAtLoginCarriedOver` is true only when the system then reads it as enabled, else `reason` says what macOS needs (approval in System Settings, General, Login Items) |
++| `oldLauncher.status()` | `{ok, installed, pieces: {launcher, loginItem, menuBarIcon}, lastRemoval}`: `~/Applications/anyscribe.app` and `~/Library/LaunchAgents/com.anyscribe.tray.plist` `"present" \| "absent"`; the old menu bar icon `"running" \| "not running"` (`~/.anyscribe/tray.pid` names a live process whose command line is an anyscribe tray). `installed` (any piece left, a running old menu bar icon alone included) is true only on macOS. `lastRemoval`: `{ok, pieces, startAtLoginCarriedOver, reason, at}` of the most recent removal, kept by the app across the dashboard's reload, or null |
++| `oldLauncher.remove()` | macOS only. Pauses the app's engine: refuses exactly like Restart engine (transcriptions running or waiting, the list unknown, a restart under way), with its reason, `pieces: null`, and nothing run. Otherwise the engine restarts around the removal (the dashboard reloads; the menu reads Restarting), and between the old engine's exit and the relaunch it runs `python -m anyscribe desktop uninstall --json` with the engine's environment, then checks each piece itself: `{ok, pieces: {launcher: "removed" \| "still there", loginItem: "removed" \| "still there", menuBarIcon: "stopped" \| "still running"}, startAtLoginCarriedOver}`; ok only when all three are gone. When the old login item was there before and is gone after, the app's own Start at login is turned on; `startAtLoginCarriedOver` is true only when the system then reads it as enabled, else `reason` says what macOS needs (approval in System Settings, General, Login Items). If the engine does not start again, `reason` says so, and the start window's "couldn't start" also says the removal ran, with its result |
+ | `firstLaunch.get()` | `{ok, oldLauncherAsked, terminalAsked}` |
+ | `firstLaunch.mark(key)` | Records `"oldLauncherAsked"` or `"terminalAsked"` as asked; any other key is rejected |
+ | `onOpenFile(callback)` | Calls `callback(absolutePath)` for each opened file; held files arrive on the first subscribe. Returns an unsubscribe function. Only the dashboard window's page can subscribe. The app keeps each file until the page acknowledges it (the preload does, after the callbacks ran), so an unsubscribe or reload in between never loses it, and an acknowledged file is never sent again |
+diff --git a/desktop/package.json b/desktop/package.json
+index 03362cc..44e605e 100644
+--- a/desktop/package.json
++++ b/desktop/package.json
+@@ -10,7 +10,8 @@
+     "start": "electron .",
+     "test": "node --test \"test/*.test.js\"",
+     "make-icons": "electron scripts/make-icons.js --ozone-platform=headless",
+-    "e2e": "node test/e2e.js"
++    "e2e": "node test/e2e.js",
++    "e2e:removal": "node --test test/removal.e2e.js"
+   },
+   "devDependencies": {
+     "electron": "44.9.3"
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index eef05bb..2b08dad 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -197,13 +197,14 @@ class Engine extends EventEmitter {
+     return this._launch('starting', false);
+   }
+ 
+-  // Resolves true once this run is ready, false when it ends first.
+-  _launch(state, auto) {
++  // Resolves true once this run is ready, false when it ends first. before: a step to run before
++  // anything else (a restart's step between the old engine's exit and the new spawn).
++  _launch(state, auto, before = null) {
+     let settle;
+     const done = new Promise((resolve) => (settle = resolve));
+     let exited;
+     const exitedPromise = new Promise((resolve) => (exited = resolve));
+-    const run = { child: null, cancelled: false, restartRequested: false, ready: false, failure: null, auto, stdout: '', stderr: '', settle, exited, exitedPromise, next: null };
++    const run = { child: null, cancelled: false, restartRequested: false, ready: false, failure: null, auto, stdout: '', stderr: '', settle, exited, exitedPromise, next: null, before };
+     this.run = run;
+     this.failure = null;
+     if (this.state !== state) this._set(state);
+@@ -212,6 +213,16 @@ class Engine extends EventEmitter {
+   }
+ 
+   async _start(run) {
++    if (run.before) {
++      // The old engine and its group are gone and nothing is spawned yet. A stop or quit meanwhile
++      // cancels this run, and the one gate after the port check below spawns nothing (a gate
++      // here as well was an equivalent mutant: no test could tell it apart, so it is not kept).
++      try {
++        await run.before();
++      } catch (err) {
++        this.log.shell(`the step before the restart failed: ${err.message}`);
++      }
++    }
+     if (this.pythonError) return this._failBeforeSpawn(run, 'python', { reason: this.pythonError });
+     const logError = this.log.probe(); // every launch, so Try again sees a repaired log
+     if (logError) return this._failBeforeSpawn(run, 'log', { reason: `Can't write the log file: ${logError}` });
+@@ -310,7 +321,7 @@ class Engine extends EventEmitter {
+     } else if (run.cancelled) {
+       this.log.shell(`engine stopped (pid ${pid})`);
+       if (run.restartRequested && !this.quitting) {
+-        run.next = this._launch('restarting', false);
++        run.next = this._launch('restarting', false, run.relaunchBefore);
+       } else {
+         this.lastExit = null;
+         this._set('stopped');
+@@ -393,7 +404,9 @@ class Engine extends EventEmitter {
+ 
+   // Refused while any job is pending or running, or while that cannot be known, and while
+   // another restart is pending (not queued).
+-  async restart() {
++  // between: an optional step run after the old engine has exited and before the new one is
++  // spawned (removing the old launcher, whose uninstall could otherwise reach this engine).
++  async restart({ between = null } = {}) {
+     if (this.restartPending) return { ok: false, reason: 'A restart is already under way.' };
+     if (this.state === 'starting' || this.state === 'restarting') {
+       return { ok: false, reason: 'The engine is already starting.' };
+@@ -415,10 +428,11 @@ class Engine extends EventEmitter {
+       let ready;
+       if (run) {
+         run.restartRequested = true;
++        run.relaunchBefore = between;
+         await this._cancel(run, 'stopping the engine');
+         ready = await (run.next ?? false);
+       } else {
+-        ready = await this._launch('restarting', false);
++        ready = await this._launch('restarting', false, between);
+       }
+       if (ready) return { ok: true, reason: null };
+       // A failed start always records lastExit; only a stop (stop() or quitting) leaves it null.
+diff --git a/desktop/src/logic.js b/desktop/src/logic.js
+index 5ab3d99..bd2bb1c 100644
+--- a/desktop/src/logic.js
++++ b/desktop/src/logic.js
+@@ -297,7 +297,14 @@ function navigation(url, prefixes, startUrl, isMainFrame) {
+ 
+ const SAFE = 'Your transcripts and settings are safe.';
+ 
+-function failureMessage(failure) {
++// removal: the old launcher's removal that ran just before this start, if any (its result is
++// said too, so a removal is never silent behind "couldn't start").
++function failureMessage(failure, removal = null) {
++  const said = removal ? ` The old launcher's removal ran first: ${removal.ok ? 'it was removed.' : removal.reason}` : '';
++  return startFailure(failure) + said;
++}
++
++function startFailure(failure) {
+   switch (failure.kind) {
+     case 'port':
+       return `Its engine couldn't start: ${failure.reason}. ${SAFE}`;
+diff --git a/desktop/src/main.js b/desktop/src/main.js
+index a981aa4..30138d6 100644
+--- a/desktop/src/main.js
++++ b/desktop/src/main.js
+@@ -67,6 +67,9 @@ function run() {
+   let quitting = false; // a quit question or engine stop is under way
+   let allowQuit = false;
+   let lastMenuKey = '';
++  // The last removal's result, kept here: the dashboard reloads when the engine comes back.
++  let lastRemoval = null;
++  let removalBeforeStart = null; // shown on "couldn't start" if the relaunch after a removal fails
+ 
+   const engineOrigin = () => `http://127.0.0.1:${engine.port}`;
+   const visible = (w) => w && !w.isDestroyed() && w.isVisible();
+@@ -205,7 +208,7 @@ function run() {
+   function startState() {
+     const f = engine.failure;
+     if (engine.state !== 'stopped' || !f) return { phase: 'starting' };
+-    return { phase: 'failed', message: logic.failureMessage(f), lines: f.lines };
++    return { phase: 'failed', message: logic.failureMessage(f, removalBeforeStart), lines: f.lines };
+   }
+ 
+   // ---- menu bar, Dock ----
+@@ -337,6 +340,7 @@ function run() {
+     if (startWin) startWin.webContents.send('start:state', startState());
+     mainWin?.webContents.send('engine:status', status);
+     if (status.state === 'running') {
++      removalBeforeStart = null;
+       if (settings.port !== engine.port) {
+         settings.port = engine.port; // kept, so the next launch uses it again
+         saveSettings();
+@@ -424,11 +428,18 @@ function run() {
+   );
+   handle('terminal:addToPath', oneAtATime(() => terminal.addToPath(terminalCtx())));
+   handle('terminal:retrySkill', oneAtATime(() => terminal.retrySkill(terminalCtx())));
+-  handle('oldLauncher:status', () => oldLauncher.status({ home, platform: process.platform }));
++  handle('oldLauncher:status', async () => ({ ...(await oldLauncher.status({ home, platform: process.platform })), lastRemoval }));
+   handle(
+     'oldLauncher:remove',
+     oneAtATime(() =>
+-      oldLauncher.remove({ home, platform: process.platform, python, pythonError, env: engine.env, enginePort: engine.port, setStartAtLogin, loginItemState })
++      oldLauncher.removePausingEngine(
++        engine,
++        { home, platform: process.platform, python, pythonError, env: engine.env, setStartAtLogin, loginItemState },
++        (result) => {
++          lastRemoval = { ...result, at: Date.now() };
++          removalBeforeStart = lastRemoval;
++        }
++      )
+     )
+   );
+   handle('firstLaunch:get', () => ({ ok: true, oldLauncherAsked: settings.oldLauncherAsked, terminalAsked: settings.terminalAsked }));
+diff --git a/desktop/src/old-launcher.js b/desktop/src/old-launcher.js
+index 6c7d117..3b43d8e 100644
+--- a/desktop/src/old-launcher.js
++++ b/desktop/src/old-launcher.js
+@@ -116,19 +116,15 @@ async function status({ home, platform, cmdline }) {
+   return { ok: true, installed: platform === 'darwin' && left, pieces: p };
+ }
+ 
+-const SAME_PORT =
+-  "The old launcher is set to the same port as this app, so removing it now would stop this app's engine. Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal.";
+-
+-// ctx: {home, platform, python, pythonError, env (the engine's), enginePort (the app engine's
+-// port), setStartAtLogin, loginItemState (the system's: "enabled", "requires-approval", ...),
+-// cmdline?, run?}. ok only when all three pieces are gone. When the old
+-// login item was there and is now gone, the app's own Start at login is turned on in its place.
+-async function remove({ home, platform, python, pythonError, env, enginePort, setStartAtLogin, loginItemState, cmdline, run = runCapture }) {
+-  if (platform !== 'darwin') return { ok: false, reason: 'The old launcher is removed only on a Mac.', pieces: null, startAtLoginCarriedOver: false };
+-  // The uninstall stops whatever anyscribe answers on its port: never this app's engine.
+-  if (enginePort != null && uninstallTarget(home) === enginePort) {
+-    return { ok: false, reason: SAME_PORT, pieces: null, startAtLoginCarriedOver: false };
+-  }
++const ONLY_MAC = { ok: false, reason: 'The old launcher is removed only on a Mac.', pieces: null, startAtLoginCarriedOver: false };
++
++// The uninstall step. ctx: {home, platform, python, pythonError, env (the engine's),
++// setStartAtLogin, loginItemState (the system's: "enabled", "requires-approval", ...), cmdline?,
++// run?}. ok only when all three pieces are gone. When the old login item was there and is now
++// gone, the app's own Start at login is turned on in its place. Run it only through
++// removePausingEngine: the uninstall can stop this app's engine.
++async function remove({ home, platform, python, pythonError, env, setStartAtLogin, loginItemState, cmdline, run = runCapture }) {
++  if (platform !== 'darwin') return ONLY_MAC;
+   const before = await pieces(home, cmdline);
+   const r = python
+     ? await run(python, ['-m', 'anyscribe', 'desktop', 'uninstall', '--json'], { env, cwd: home, timeoutMs: 60_000 })
+@@ -160,4 +156,35 @@ async function remove({ home, platform, python, pythonError, env, enginePort, se
+   return { ok, reason: [`Cleanup didn't finish: ${left.join(', ')}.${failed}`, loginNote].filter(Boolean).join(' '), pieces: result, startAtLoginCarriedOver };
+ }
+ 
+-module.exports = { TRAY_COMMAND, ENGINE_DEFAULT_PORT, files, manifestPort, loginItemPort, uninstallTarget, recordedPorts, trayRunning, pieces, status, remove };
++// Removal pauses the app's engine (round 3 design). `desktop uninstall` stops whatever anyscribe
++// answers on the old launcher's port and whatever its server.pid names, and either can be this
++// app's engine; no check of ours can tell them apart. So the uninstall runs inside
++// engine.restart(), after the engine and its group have exited and before it is spawned again.
++// restart() refuses (running, waiting or unknown transcriptions; a restart under way) and then
++// nothing runs. onResult(result) is called before the engine comes back, so a reloaded dashboard
++// finds it.
++async function removePausingEngine(engine, ctx, onResult = () => {}) {
++  if (ctx.platform !== 'darwin') return ONLY_MAC;
++  let result = null;
++  let step = null; // the uninstall step, once restart() reached it
++  const restarted = await engine.restart({
++    between: () =>
++      (step = (async () => {
++        try {
++          result = await remove(ctx);
++        } catch (err) {
++          result = { ok: false, reason: `The removal failed: ${err.message}`, pieces: null, startAtLoginCarriedOver: false };
++        }
++        onResult(result);
++      })()),
++  });
++  await step; // a stop or quit during the step ends the restart early; the step still finishes
++  if (!result) return { ok: false, reason: restarted.reason, pieces: null, startAtLoginCarriedOver: false };
++  if (restarted.ok) return result;
++  const note = `anyscribe's engine didn't start again afterwards: ${restarted.reason}`;
++  const final = { ...result, reason: [result.reason, note].filter(Boolean).join(' ') };
++  onResult(final);
++  return final;
++}
++
++module.exports = { TRAY_COMMAND, ENGINE_DEFAULT_PORT, files, manifestPort, loginItemPort, uninstallTarget, recordedPorts, trayRunning, pieces, status, remove, removePausingEngine };
+diff --git a/desktop/src/terminal.js b/desktop/src/terminal.js
+index a5ff63f..50cf4ce 100644
+--- a/desktop/src/terminal.js
++++ b/desktop/src/terminal.js
+@@ -61,7 +61,7 @@ function commandScript({ appVersion, python, packaged, resourcesPath, execPath }
+   return lines.join('\n');
+ }
+ 
+-// ~/.anyscribe/runtime/terminal.json: {command, sha256, appVersion, replaced, skillError}.
++// ~/.anyscribe/runtime/terminal.json: {command, sha256, previousSha256, appVersion, replaced, skillError}.
+ function readRecord(f) {
+   try {
+     const rec = JSON.parse(fs.readFileSync(f.record, 'utf8'));
+@@ -71,21 +71,45 @@ function readRecord(f) {
+   }
+ }
+ 
++// A fresh temp file beside `target`, created exclusively ('wx'): an existing file or symlink at
++// that name is never written through or removed. Tests replace naming.tempTag to plant one.
++const naming = { tempTag: () => crypto.randomBytes(6).toString('hex') };
++function writeTemp(target, data, mode) {
++  const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${naming.tempTag()}.tmp`);
++  const fd = fs.openSync(tmp, 'wx', mode);
++  let written = false;
++  try {
++    fs.writeFileSync(fd, data);
++    fs.fchmodSync(fd, mode);
++    written = true;
++  } finally {
++    fs.closeSync(fd);
++    if (!written) fs.rmSync(tmp, { force: true }); // ours: this call created it
++  }
++  return tmp;
++}
++
+ function writeRecord(f, rec) {
+   fs.mkdirSync(path.dirname(f.record), { recursive: true });
+-  const tmp = `${f.record}.tmp`;
+-  fs.writeFileSync(tmp, `${JSON.stringify(rec, null, 2)}\n`);
+-  fs.renameSync(tmp, f.record);
++  const tmp = writeTemp(f.record, `${JSON.stringify(rec, null, 2)}\n`, 0o644);
++  try {
++    fs.renameSync(tmp, f.record);
++  } catch (err) {
++    fs.rmSync(tmp, { force: true });
++    throw err;
++  }
+ }
+ 
+-// Ours: a regular file whose second line is our marker and whose content hash is the one we
+-// recorded when we wrote it. A symlink, an edited copy or a copy we never recorded is not ours.
++// Ours: a regular file whose second line is our marker and whose content hash is one the record
++// accepts: the new one, or the one it replaces (a write is committed by the record before the
++// file moves, so ours stays ours at every step). A symlink, an edited copy or a copy we never
++// recorded is not ours.
+ function isOurs(f, rec) {
+   if (!rec.sha256) return false;
+   try {
+     if (!fs.lstatSync(f.command).isFile()) return false;
+     const text = fs.readFileSync(f.command, 'utf8');
+-    return text.split('\n')[1]?.startsWith(`# ${MARKER} `) === true && sha256(text) === rec.sha256;
++    return text.split('\n')[1]?.startsWith(`# ${MARKER} `) === true && [rec.sha256, rec.previousSha256].includes(sha256(text));
+   } catch {
+     return false;
+   }
+@@ -271,15 +295,24 @@ async function turnOn(ctx, { replace = false } = {}) {
+   if (other && !replace) return { ...(await status(ctx)), ok: false, reason: OTHER_AT_PATH };
+   const text = commandScript(ctx);
+   let replaced = rec.replaced && lexists(f.backup) ? rec.replaced : null;
++  let tmp = null;
+   let movedAside = false;
+-  let linked = false;
+-  const tmp = `${f.command}.anyscribe-tmp`;
+   try {
+     fs.mkdirSync(f.bin, { recursive: true });
+-    fs.writeFileSync(tmp, text, { mode: 0o755 });
+-    fs.chmodSync(tmp, 0o755);
++    tmp = writeTemp(f.command, text, 0o755);
++    if (other) replaced = describe(f.command);
++    // The record commits the write (round 3): it names the new hash and still accepts the current
++    // one, so a record that cannot be saved stops here with the command untouched, and a crash at
++    // any later point leaves ours ours.
++    writeRecord(f, {
++      command: f.command,
++      sha256: sha256(text),
++      previousSha256: ours ? sha256(fs.readFileSync(f.command, 'utf8')) : null,
++      appVersion: ctx.appVersion,
++      replaced,
++      skillError: null,
++    });
+     if (other) {
+-      replaced = describe(f.command);
+       fs.mkdirSync(path.dirname(f.backup), { recursive: true });
+       if (lexists(f.backup)) fs.renameSync(f.backup, `${f.backup}.${Date.now()}`); // an older one, kept too
+       fs.renameSync(f.command, f.backup);
+@@ -289,15 +322,11 @@ async function turnOn(ctx, { replace = false } = {}) {
+       fs.renameSync(tmp, f.command);
+     } else {
+       fs.linkSync(tmp, f.command); // fails if anything appeared there since
+-      linked = true;
+-      fs.unlinkSync(tmp);
++      fs.rmSync(tmp, { force: true });
+     }
+-    // Recorded only once the new command is in place (C4): a failed write or rename keeps the
+-    // previous record, so an untouched command of ours is still ours.
+-    writeRecord(f, { command: f.command, sha256: sha256(text), appVersion: ctx.appVersion, replaced, skillError: null });
++    tmp = null;
+   } catch (err) {
+-    fs.rmSync(tmp, { force: true });
+-    if (linked) fs.rmSync(f.command, { force: true }); // ours, never recorded: take it back out
++    if (tmp) fs.rmSync(tmp, { force: true }); // only the temp this call created
+     if (movedAside && !lexists(f.command)) fs.renameSync(f.backup, f.command); // put theirs back
+     return { ...(await status(ctx)), ok: false, reason: `Couldn't write ~/.local/bin/anyscribe: ${err.message}` };
+   }
+@@ -395,6 +424,7 @@ async function addToPath(ctx) {
+ }
+ 
+ module.exports = {
++  naming,
+   MARKER,
+   PATH_LINE,
+   files,
+diff --git a/desktop/test/e2e.js b/desktop/test/e2e.js
+index ae9a463..fc6acc5 100644
+--- a/desktop/test/e2e.js
++++ b/desktop/test/e2e.js
+@@ -150,7 +150,8 @@ async function main() {
+   assert.deepEqual(await call('d.firstLaunch.get()'), { ok: true, oldLauncherAsked: false, terminalAsked: true });
+   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')), { dockMode: 'dock', oldLauncherAsked: false, terminalAsked: true, port: 8470 });
+   assert.match(await call("d.firstLaunch.mark('bogus').then(() => 'accepted', (e) => e.message)"), /firstLaunch\.mark takes one of/);
+-  assert.deepEqual(await call('d.oldLauncher.status()'), { ok: true, installed: false, pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'not running' } });
++  assert.deepEqual(await call('d.oldLauncher.status()'), { ok: true, installed: false, pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'not running' }, lastRemoval: null });
++  assert.deepEqual(await call('d.oldLauncher.remove()'), { ok: false, reason: 'The old launcher is removed only on a Mac.', pieces: null, startAtLoginCarriedOver: false });
+   step('firstLaunch and oldLauncher answer; a marked question is saved in the app\'s settings');
+ 
+   fs.mkdirSync(path.join(HOME, '.claude'));
+diff --git a/desktop/test/engine.test.js b/desktop/test/engine.test.js
+index c9a3176..f9dd597 100644
+--- a/desktop/test/engine.test.js
++++ b/desktop/test/engine.test.js
+@@ -15,6 +15,7 @@ const net = require('node:net');
+ const path = require('node:path');
+ const { Engine, AppLog, trimLog, pickPort } = require('../src/engine');
+ const { RESTART_REFUSED, RESTART_UNKNOWN } = require('../src/logic');
++const { removePausingEngine } = require('../src/old-launcher');
+ 
+ const FAKE = path.join(__dirname, 'fake-engine.js');
+ 
+@@ -556,3 +557,91 @@ test('guard: an explicit stop during a restart cancels its relaunch (S3-A1)', as
+   assert.equal(engine.run, null);
+   assert.equal(engine.state, 'stopped');
+ });
++
++// ---- removing the old launcher pauses the engine (round 3 design) ----
++
++// A removal ctx whose uninstall step is a stand-in that records when it ran.
++function removalCtx(home, calls, during = () => {}) {
++  return {
++    home,
++    platform: 'darwin',
++    python: '/app/python3',
++    env: { HOME: home },
++    setStartAtLogin: () => {},
++    loginItemState: () => 'enabled',
++    run: async () => {
++      calls.push('uninstall');
++      await during();
++      return { out: '{}', err: '', code: 0 };
++    },
++  };
++}
++
++for (const [name, fakeEnv, reason] of [
++  ['running', { FAKE_JOBS: JSON.stringify([{ job_id: 'a', status: 'running', stage: 'transcribe', url: 'u', title: null }]) }, RESTART_REFUSED],
++  ['waiting', { FAKE_JOBS: JSON.stringify([{ job_id: 'a', status: 'pending', stage: null, url: 'u', title: null }]) }, RESTART_REFUSED],
++  ['unknown', { FAKE_JOBS: '[]', FAKE_JOBS_STATUS: '500' }, RESTART_UNKNOWN],
++]) {
++  test(`guard: removing the old launcher is refused while transcriptions are ${name}; nothing runs`, async () => {
++    const { engine, home } = makeEngine(fakeEnv);
++    await engine.start();
++    const pid = engine.run.child.pid;
++    const calls = [];
++    const r = await removePausingEngine(engine, removalCtx(home, calls));
++    assert.deepEqual(r, { ok: false, reason, pieces: null, startAtLoginCarriedOver: false });
++    assert.deepEqual(calls, [], 'the uninstaller never ran');
++    assert.equal(engine.run.child.pid, pid, 'the same engine is still running');
++  });
++}
++
++test('guard: the uninstall runs after the old engine has exited and before the new one, never "stopped" between', async () => {
++  const { engine, children } = makeSeamEngine();
++  assert.equal(await engine.start(), true);
++  const old = children[0];
++  const states = [];
++  engine.on('status', (s) => states.push(s.state));
++  const calls = [];
++  let seen;
++  const r = await removePausingEngine(engine, removalCtx(engine.home, calls, () => {
++    seen = { oldExited: hasExited(old), spawned: children.length, run: engine.run?.child ?? null, state: engine.state };
++  }));
++  assert.deepEqual(calls, ['uninstall']);
++  assert.deepEqual(seen, { oldExited: true, spawned: 1, run: null, state: 'restarting' }, 'old gone, nothing spawned, still restarting');
++  assert.equal(r.ok, true);
++  assert.equal(children.length, 2, 'relaunched once');
++  assert.equal(engine.state, 'running');
++  assert.ok(!states.includes('stopped'), `states: ${states.join(', ')}`);
++});
++
++for (const [name, interrupt] of [
++  ['an explicit stop', (engine) => engine.stop()],
++  ['a quit', (engine) => engine.stopForQuit()],
++]) {
++  test(`guard: ${name} during the uninstall step spawns nothing afterwards (2b gate)`, async () => {
++    const { engine, children } = makeSeamEngine();
++    assert.equal(await engine.start(), true);
++    const calls = [];
++    const r = await removePausingEngine(engine, removalCtx(engine.home, calls, async () => {
++      interrupt(engine);
++      await sleep(20);
++    }));
++    await sleep(50);
++    assert.deepEqual(calls, ['uninstall'], 'the uninstall itself finished');
++    assert.equal(children.length, 1, 'no engine spawned after it');
++    assert.equal(engine.run, null);
++    assert.equal(engine.state, 'stopped');
++    assert.match(r.reason, /didn't start again afterwards: The engine was stopped\./);
++  });
++}
++
++test('guard: a second restart during the uninstall step is refused', async () => {
++  const { engine, children } = makeSeamEngine();
++  assert.equal(await engine.start(), true);
++  let second;
++  await removePausingEngine(engine, removalCtx(engine.home, [], async () => {
++    second = await engine.restart();
++  }));
++  assert.equal(second.ok, false);
++  assert.equal(second.reason, 'A restart is already under way.');
++  assert.equal(children.length, 2, 'one relaunch only');
++});
+diff --git a/desktop/test/logic.test.js b/desktop/test/logic.test.js
+index ed87014..e549069 100644
+--- a/desktop/test/logic.test.js
++++ b/desktop/test/logic.test.js
+@@ -347,3 +347,13 @@ test('guard: a file is kept until the dashboard acknowledges it (C2)', () => {
+   inbox.subscribe((item) => again.push(item));
+   assert.deepEqual(again, [], 'no file is delivered twice once acknowledged');
+ });
++
++test("couldn't start after a removal also says the removal ran, with its result", () => {
++  const port = { kind: 'port', reason: 'another program is using port 8470' };
++  assert.equal(logic.failureMessage(port), "Its engine couldn't start: another program is using port 8470. Your transcripts and settings are safe.");
++  assert.equal(
++    logic.failureMessage(port, { ok: true }),
++    "Its engine couldn't start: another program is using port 8470. Your transcripts and settings are safe. The old launcher's removal ran first: it was removed."
++  );
++  assert.match(logic.failureMessage(port, { ok: false, reason: "Cleanup didn't finish: the old menu bar icon is still running." }), /removal ran first: Cleanup didn't finish/);
++});
+diff --git a/desktop/test/old-launcher.test.js b/desktop/test/old-launcher.test.js
+index fc12679..ed46f7b 100644
+--- a/desktop/test/old-launcher.test.js
++++ b/desktop/test/old-launcher.test.js
+@@ -177,22 +177,6 @@ test('uninstall target: the manifest port, else the login item port, else 8457',
+   assert.equal(launcher.uninstallTarget(s.home), 8457);
+ });
+ 
+-test("guard: remove refuses, running nothing, when the uninstall would target this app's port (C1)", async () => {
+-  const s = await installed();
+-  writePlist(s.f, 8470); // a partial install: no manifest, the login item on 8470, a live tray
+-  let ran = false;
+-  const { ctx: c, turnedOn } = ctx(s, { enginePort: 8470, run: async () => ((ran = true), { code: 0 }) });
+-  const r = await launcher.remove(c);
+-  assert.equal(ran, false, 'desktop uninstall was never run');
+-  assert.equal(r.ok, false);
+-  assert.match(r.reason, /same port as this app.*Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal/);
+-  assert.deepEqual(turnedOn, []);
+-  assert.equal((await launcher.status({ home: s.home, platform: 'darwin' })).pieces.menuBarIcon, 'running', 'nothing changed');
+-  // Another port: removal goes ahead.
+-  const other = ctx(s, { enginePort: 8471, run: uninstaller(s, ['launcher', 'loginItem', 'menuBarIcon']) });
+-  assert.equal((await launcher.remove(other.ctx)).ok, true);
+-});
+-
+ test('guard: Start at login counts as carried over only when the system reads it back enabled (C5)', async () => {
+   const s = await installed();
+   const { ctx: c, turnedOn } = ctx(s, { run: uninstaller(s, ['launcher', 'loginItem', 'menuBarIcon']), loginItemState: () => 'requires-approval' });
+diff --git a/desktop/test/removal.e2e.js b/desktop/test/removal.e2e.js
+new file mode 100644
+index 0000000..9837230
+--- /dev/null
++++ b/desktop/test/removal.e2e.js
+@@ -0,0 +1,129 @@
++// Removing the old launcher against the real engine and the real `desktop uninstall` (round 3,
++// A1 and A2): the app's engine is never the uninstall's target, because the uninstall runs while
++// the engine is down. Needs a Python with anyscribe (slice 2a) installed:
++//   ANYSCRIBE_DEV_PYTHON=/path/to/python node --test test/removal.e2e.js
++// Not part of `npm test`. Throwaway homes under the system temp folder; port 8470 must be free.
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const { spawn, execFileSync } = require('node:child_process');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const logic = require('../src/logic');
++const { Engine, AppLog, health } = require('../src/engine');
++const launcher = require('../src/old-launcher');
++const { runCapture } = require('../src/run');
++
++const python = process.env.ANYSCRIBE_DEV_PYTHON;
++const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'anyscribe-removal-e2e-'));
++const started = [];
++const engines = [];
++test.afterEach(async () => {
++  for (const e of engines.splice(0)) await e.stop(); // each test needs 8470 free
++});
++test.after(async () => {
++  for (const c of started) if (c.exitCode === null && c.signalCode === null) c.kill('SIGKILL');
++  fs.rmSync(ROOT, { recursive: true, force: true });
++});
++
++const alive = (pid) => {
++  try {
++    process.kill(pid, 0);
++    return true;
++  } catch {
++    return false;
++  }
++};
++
++let n = 0;
++async function realEngine() {
++  const home = path.join(ROOT, `home-${n++}`);
++  fs.mkdirSync(path.join(home, '.anyscribe'), { recursive: true });
++  return { home };
++}
++
++async function start(home) {
++  const engine = new Engine({
++    python,
++    home,
++    env: logic.buildEnv({ home, packaged: false, tmpdir: os.tmpdir() }),
++    log: new AppLog(path.join(home, '.anyscribe', 'logs', 'app.log')),
++  });
++  engines.push(engine);
++  assert.equal(await engine.start(), true, `the engine started: ${JSON.stringify(engine.failure)}`);
++  return engine;
++}
++
++// The removal, with the real uninstaller; records whether the old engine was alive when it ran.
++async function removeWithRealUninstaller(engine, home) {
++  const during = {};
++  const oldPid = engine.run.child.pid;
++  const result = await launcher.removePausingEngine(engine, {
++    home,
++    platform: 'darwin', // the real uninstaller still runs Linux's own branch here
++    python,
++    env: engine.env,
++    setStartAtLogin: () => {},
++    loginItemState: () => 'enabled',
++    run: async (cmd, args, opts) => {
++      during.oldEngineAlive = alive(oldPid);
++      during.args = args;
++      const r = await runCapture(cmd, args, opts);
++      during.output = r.out.trim();
++      return r;
++    },
++  });
++  return { result, during, oldPid };
++}
++
++async function assertSurvived(engine, oldPid, during) {
++  assert.deepEqual(engine.crashes.exits, [], 'the engine never stopped unexpectedly');
++  assert.equal(engine.lastExit, null);
++  assert.equal(engine.state, 'running');
++  const pid = engine.run.child.pid;
++  assert.notEqual(pid, oldPid, 'a new engine');
++  assert.equal((await health(engine.port))?.pid, pid, 'the engine on the port is ours');
++  assert.equal(during.oldEngineAlive, false, 'the old engine had exited when the uninstall ran');
++  assert.deepEqual(during.args, ['-m', 'anyscribe', 'desktop', 'uninstall', '--json']);
++}
++
++test('A1: a stale server.pid that names the app engine; the manifest on 8457', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async () => {
++  const { home } = await realEngine();
++  fs.writeFileSync(path.join(home, '.anyscribe', 'desktop.json'), JSON.stringify({ port: 8457 }));
++  const engine = await start(home);
++  const oldPid = engine.run.child.pid;
++  // The old launcher's server.pid, reused by the app's engine (alive, and it runs `anyscribe ui`).
++  fs.writeFileSync(path.join(home, '.anyscribe', 'server.pid'), String(oldPid));
++  const { result, during } = await removeWithRealUninstaller(engine, home);
++  await assertSurvived(engine, oldPid, during);
++  assert.equal(result.ok, true, JSON.stringify(result));
++  assert.equal(fs.existsSync(path.join(home, '.anyscribe', 'desktop.json')), false, 'the real uninstall ran: the manifest is gone');
++  assert.equal(fs.existsSync(path.join(home, '.anyscribe', 'server.pid')), false, 'and so is server.pid');
++});
++
++test('A2: a binary LaunchAgent plist on the app\'s port with a live old tray, no manifest', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async () => {
++  const { home } = await realEngine();
++  const plist = launcher.files(home).loginItem;
++  fs.mkdirSync(path.dirname(plist), { recursive: true });
++  execFileSync(python, ['-c', 'import plistlib, sys; open(sys.argv[1], "wb").write(plistlib.dumps({"Label": "com.anyscribe.tray", "ProgramArguments": ["/py", "-m", "anyscribe", "tray", "--port", "8470"]}, fmt=plistlib.FMT_BINARY))', plist]);
++  assert.equal(fs.readFileSync(plist).subarray(0, 8).toString(), 'bplist00', 'a binary plist');
++  const env = { ...process.env, HOME: home };
++  const enginePort = execFileSync(python, ['-c', 'from anyscribe.core.desktop import installed_port; print(installed_port())'], { env }).toString().trim();
++  assert.equal(enginePort, '8470', "the engine's own reading: the old launcher is on 8470");
++  assert.equal(launcher.uninstallTarget(home), launcher.ENGINE_DEFAULT_PORT, "the app's XML reading misses it (the shortcut)");
++  const tray = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)', '--', '-m', 'anyscribe', 'tray'], { stdio: 'ignore' });
++  started.push(tray);
++  await new Promise((r) => tray.once('spawn', r));
++  fs.writeFileSync(path.join(home, '.anyscribe', 'tray.pid'), String(tray.pid));
++  const engine = await start(home);
++  assert.equal(engine.port, 8470, "the app's engine is on the old launcher's port");
++  const oldPid = engine.run.child.pid;
++  const { result, during } = await removeWithRealUninstaller(engine, home);
++  await assertSurvived(engine, oldPid, during);
++  assert.match(during.output, /"stopped": true/, 'the real uninstall stopped the old tray');
++  assert.equal(result.pieces.menuBarIcon, 'stopped');
++  // On Linux the engine's uninstall removes the XDG login item, not this plist: Mac-only check.
++  assert.equal(result.pieces.loginItem, 'still there');
++});
+diff --git a/desktop/test/terminal.test.js b/desktop/test/terminal.test.js
+index 5f5f12b..f58fb8c 100644
+--- a/desktop/test/terminal.test.js
++++ b/desktop/test/terminal.test.js
+@@ -323,6 +323,75 @@ test('guard: a refresh that cannot be written keeps ours ours, and turnOff still
+   assert.equal(fs.readlinkSync(cmdPath(h)), target, 'the uv copy is back');
+ });
+ 
++test('guard: temp files are created exclusively; a planted symlink and the profile it points at are left as they were (A3)', async () => {
++  const h = home({ dirs: ['.local/bin'] });
++  const profile = path.join(h, '.zprofile');
++  const profileBytes = read(profile);
++  const runtime = path.join(h, '.anyscribe', 'runtime');
++  fs.mkdirSync(runtime, { recursive: true });
++  fs.mkdirSync(path.dirname(cmdPath(h)), { recursive: true });
++  const recordTemp = path.join(runtime, '.terminal.json.planted.tmp');
++  const commandTemp = path.join(path.dirname(cmdPath(h)), '.anyscribe.planted.tmp');
++  const tag = terminal.naming.tempTag;
++  terminal.naming.tempTag = () => 'planted';
++  try {
++    // The record's temp name is taken: nothing written through it; the command's own temp is cleaned up.
++    fs.symlinkSync(profile, recordTemp);
++    let r = await terminal.turnOn(ctx(h));
++    assert.equal(r.ok, false);
++    assert.match(r.reason, /EEXIST/);
++    assert.equal(read(profile), profileBytes, 'the profile is unchanged');
++    assert.equal(fs.readlinkSync(recordTemp), profile, 'the planted link is still there');
++    assert.deepEqual(fs.readdirSync(path.dirname(cmdPath(h))), [], 'no command and no temp of ours left');
++    // The command's temp name is taken too.
++    fs.symlinkSync(profile, commandTemp);
++    r = await terminal.turnOn(ctx(h));
++    assert.equal(r.ok, false);
++    assert.equal(read(profile), profileBytes, 'the profile is unchanged');
++    assert.equal(fs.readlinkSync(commandTemp), profile);
++    assert.equal(fs.readlinkSync(recordTemp), profile);
++  } finally {
++    terminal.naming.tempTag = tag;
++  }
++});
++
++test('guard: a record that cannot be saved leaves the command untouched and ours (A4)', async () => {
++  const h = home({ dirs: ['.local/bin'] });
++  const target = uvCopy(h);
++  await terminal.turnOn(ctx(h), { replace: true });
++  const before = read(cmdPath(h));
++  const runtime = path.join(h, '.anyscribe', 'runtime');
++  fs.chmodSync(runtime, 0o555); // unwritable from the start of the refresh
++  let r;
++  try {
++    r = await terminal.turnOn(ctx(h, { python: '/a/moved/python3', appVersion: '0.20.1' }));
++  } finally {
++    fs.chmodSync(runtime, 0o755);
++  }
++  assert.equal(r.ok, false);
++  assert.match(r.reason, /EACCES/);
++  assert.equal(read(cmdPath(h)), before, "the command's bytes are identical");
++  const f = terminal.files(h);
++  assert.equal(terminal.isOurs(f, terminal.readRecord(f)), true, 'still ours');
++  const off = await terminal.turnOff(ctx(h));
++  assert.equal(off.ok, true, JSON.stringify(off));
++  assert.equal(fs.readlinkSync(cmdPath(h)), target, 'the uv copy is back');
++});
++
++test('guard: in the crash window the record names the new hash and still accepts the old one (round 3)', async () => {
++  const h = home({ dirs: ['.local/bin'] });
++  const target = uvCopy(h);
++  await terminal.turnOn(ctx(h), { replace: true });
++  const f = terminal.files(h);
++  const rec = terminal.readRecord(f);
++  // As if a refresh had committed its record and stopped before moving the new command in.
++  fs.writeFileSync(f.record, JSON.stringify({ ...rec, sha256: 'f'.repeat(64), previousSha256: rec.sha256 }));
++  assert.equal(terminal.isOurs(f, terminal.readRecord(f)), true, 'the old command is still ours');
++  const off = await terminal.turnOff(ctx(h));
++  assert.equal(off.ok, true);
++  assert.equal(fs.readlinkSync(cmdPath(h)), target);
++});
++
+ test('guard: turnOff refuses when ours was changed and something can be put back; then each choice', async () => {
+   for (const choice of ['restore', 'keep-current']) {
+     const h = home({ dirs: ['.local/bin'] });
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 551a555..9d534bf 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -224,20 +224,26 @@ bridge contract.
+   it back only while the path holds exactly our file, else asks. The skill
+   (`install-skill --force`, only when `~/.claude` exists) is removed only when
+   the login shell then finds no anyscribe. `addToPath` writes one line to the
+-  login shell's own profile, never twice.
++  login shell's own profile, never twice. A command write is committed by the
++  record: exclusive-create temp names, the record first (the new hash, still
++  accepting the current one), then the file moves; a crash at any point leaves
++  ours ours.
+ - `src/old-launcher.js` (bridge `oldLauncher.*`, Node only): the old browser
+   launcher's three pieces (the `.app`, the LaunchAgent, a live tray named in
+   `tray.pid` with a tray's command line), removed by today's
+   `desktop uninstall --json` and then checked one by one; the old login item
+   hands over to the app's own Start at login. The uninstall stops whatever
+-  anyscribe answers on the old launcher's port (the manifest's, else the
+-  login item's, else 8457), so the app never chooses any of those ports, keeps
+-  the port it last ran on (userData `settings.json`, so the dashboard's
+-  per-port storage stays put), and refuses to run the uninstall when its target
+-  is the app engine's port. The engine-side protection (an uninstall that
+-  never signals the app's port) is not built: `src/` was out of this slice, and
+-  the app-side refusal covers every case the app can reach, because the app
+-  itself starts the uninstall and knows its own port.
++  anyscribe answers on the old launcher's port and whatever its `server.pid`
++  names, and the app's engine can be either; no check of the app's can tell
++  them apart. So removal pauses the engine: the uninstall runs inside
++  `Engine.restart({between})`, after the engine and its group have exited and
++  before the next spawn (the step runs at the start of the next run's
++  `_start`, so a stop or quit during it is caught by the one gate after the
++  port check). It refuses exactly like Restart engine, and the result is kept
++  in the main process as `lastRemoval` because the dashboard reloads. The app
++  still avoids the old launcher's ports and keeps the port it last ran on
++  (userData `settings.json`, so per-port browser storage stays put), but only
++  as tidiness.
+ - First-launch questions are recorded in the app's own `settings.json`
+   (userData), never in `~/.anyscribe`. Files opened with the app (`open-file`,
+   a second launch's arguments) are held until the dashboard subscribes. On
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-app.md b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+index 50e02aa..4eacc60 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-app.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+@@ -113,3 +113,26 @@ login shell on macOS (`/etc/zprofile` and `path_helper`).
+   title bar needs the dashboard's drag strip and top padding from 2c-ui; on its
+   own the Mac window cannot be dragged and the sidebar's top row sits under the
+   traffic lights.
++
++## Round 3: remove the target, commit by the record
++
++Round 2 found two more ways the uninstall reached the app's engine: a stale
++`server.pid` reused by the engine's pid (the uninstall kills it by pid, not by
++port), and a binary LaunchAgent plist the app's XML reading could not parse
++(Python's `plistlib` can). The diagnosis: each fix guarded a model of the
++uninstaller, and every launcher test swapped the uninstaller for a stand-in, so
++the tests proved the model agrees with itself. The fix removes the target
++instead: removal runs inside `Engine.restart()`, between the old engine's exit
++and the relaunch, so there is no engine for any of the uninstall's three kill
++paths to reach. The same-port refusal is gone. Two tests now run the real
++`desktop uninstall` from the engine against the real engine (stale `server.pid`;
++binary plist with a live tray); with the uninstaller run while the engine is
++up, both record an unexpected engine exit.
++
++Command writes had two files and no single commit point. Now the record
++commits: fresh temp names created exclusively, the record first (new hash,
++previous hash still accepted), then the file moves.
++
++A gate right after the removal step turned out to be an equivalent mutant: the
++existing gate after the port check already stops a cancelled run, so it was
++not kept.

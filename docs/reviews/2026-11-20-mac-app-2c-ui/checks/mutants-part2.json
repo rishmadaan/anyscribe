@@ -1,0 +1,85 @@
+[
+ {
+  "mutant": "r1/readiness-gate-row",
+  "file": "src/components/ThisMac.tsx",
+  "scenario": "settings",
+  "killed": {
+   "C5: Settings row for a shell not asked": true
+  },
+  "mutant_details": {
+   "C5: Settings row for a shell not asked": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C5: Settings row for a shell not asked": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/quiet-answer-marks",
+  "file": "src/App.tsx",
+  "scenario": "first_launch",
+  "killed": {
+   "C6: a click outside the launcher question is Keep both": true
+  },
+  "mutant_details": {
+   "C6: a click outside the launcher question is Keep both": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "C6: a click outside the launcher question is Keep both": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "r1/mark-failure-shown",
+  "file": "src/desktop.ts",
+  "scenario": "first_launch",
+  "killed": {
+   "C6: a failed save is shown with its reason": true
+  },
+  "mutant_details": {
+   "C6: a failed save is shown with its reason": ""
+  },
+  "crash": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"button\", name=\"OK\")\n",
+  "restored_pass": {
+   "C6: a failed save is shown with its reason": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "restart/disabled",
+  "file": "src/components/ThisMac.tsx",
+  "scenario": "settings",
+  "killed": {
+   "GUARD restart: disabled while transcriptions run": true,
+   "GUARD restart: a click while disabled calls nothing": true
+  },
+  "mutant_details": {
+   "GUARD restart: disabled while transcriptions run": "",
+   "GUARD restart: a click while disabled calls nothing": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "GUARD restart: disabled while transcriptions run": true,
+   "GUARD restart: a click while disabled calls nothing": true
+  },
+  "restored_scenario_all_pass": true
+ },
+ {
+  "mutant": "restart/pending-counts",
+  "file": "src/desktop.ts",
+  "scenario": "settings",
+  "killed": {
+   "engine with jobs line": true
+  },
+  "mutant_details": {
+   "engine with jobs line": ""
+  },
+  "crash": null,
+  "restored_pass": {
+   "engine with jobs line": true
+  },
+  "restored_scenario_all_pass": true
+ }
+]

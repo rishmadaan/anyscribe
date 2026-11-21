@@ -1,0 +1,11 @@
+OK  r1/readiness-gate-card: killed={"C5: shell not asked: 'The anyscribe command is added'": True} restored={"C5: shell not asked: 'The anyscribe command is added'": True} scenario_all_pass=True
+build failed:
+
+> ui@0.0.0 build
+> tsc -b && vite build
+
+src/components/ThisMac.tsx(8,113): error TS6133: 'runsOurs' is declared but its value is never read.
+src/components/ThisMac.tsx(167,12): error TS18047: 'terminal' is possibly 'null'.
+src/components/ThisMac.tsx(170,11): error TS18047: 'terminal' is possibly 'null'.
+
+exit 1

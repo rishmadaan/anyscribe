@@ -1,0 +1,1144 @@
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index e4d9893..234af49 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -104,12 +104,20 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
+ - Web tests: `tests/test_web*.py`, `test_autostart_route.py`, `test_keys_status.py`, `test_ui_port.py`, `test_tailnet.py` (FastAPI TestClient; the tailscale CLI faked)
+ 
+ #### The dashboard inside the Mac app (`ui/src/desktop.ts`)
+-The Mac app (Electron, `desktop/`) loads this same dashboard and gives it a bridge, `window.anyscribeDesktop` (contract: `desktop/README.md`, bridge v2 with its amendments). `ui/src/desktop.ts` is the one module that reads it: typed bridge, `desktop` (null in a browser), `isMac`, `useEngineStatus()`, `runningJobs()` (reads `GET /api/jobs`, counts pending and running). Every Mac screen renders only when `desktop` is set, so a browser gets today's dashboard pixel for pixel (checked against the previous bundle in `docs/reviews/2026-11-20-mac-app-2c-ui/checks/`).
+-- `components/Layout.tsx`: no Shutdown in the app; on macOS a 28 px drag strip (`.app-drag`, CSS `app-region: drag`) above the logo so the window's buttons clear it; files dropped on the window (and `onOpenFile` from the Dock) become paths, queued and submitted by the Transcribe page through the outlet context (one at a time; a file arriving mid-job waits and is named under Stop). Chromium hides a dragged file's name and size until the drop, so the overlay names the file only when the browser gives it.
+-- `components/EngineBanner.tsx`: the engine trouble banner on every page from `onEngineStatus` (restarting, running again naming the job the page was watching, keeps stopping with Restart engine, Copy details and the troubleshooting guide).
++The Mac app (Electron, `desktop/`) loads this same dashboard and gives it a bridge, `window.anyscribeDesktop` (contract: `desktop/README.md`, bridge v2 with its amendments). `ui/src/desktop.ts` is the one module that reads it: typed bridge, `desktop` (null in a browser), `isMac`, `useEngineStatus()`, `runningJobs()` (reads `GET /api/jobs`, counts pending and running), and the notes below. Every Mac screen renders only when `desktop` is set, so a browser gets today's dashboard pixel for pixel (checked against the previous bundle in `docs/reviews/2026-11-20-mac-app-2c-ui/checks/`).
++
++**The reload after every restart.** The app loads the dashboard's `/` again each time the engine returns to running (2c-app `main.js`, the `loadURL` in the engine status handler). A restart keeps the port, so the page's origin and its storage survive; anything that must outlive a restart is written to storage before the reload can happen:
++- the outage note (`OUTAGE` in sessionStorage, `{job, at}`): written when the engine stops by itself; the reloaded page shows "Running again" naming the job once;
++- the restart this page asked for (Restart engine, or the old launcher's removal): noted first, so the banner says "Restarting anyscribe's engine." and records no outage;
++- the queue of dropped and Dock files (sessionStorage), written inside the callback because the preload acknowledges a file as soon as it returns; a file leaves it once the engine has answered its submission;
++- the removal note (localStorage, `{at, before}`): kept until the reloaded page claims `oldLauncher.status().lastRemoval` (newer than the note) or the result card is closed; a refusal (no restart seen) clears it at once;
++- a first-launch answer the app couldn't save (`firstLaunch.mark` gave `{ok: false, reason}`), shown once things are quiet.
++
++- `components/Layout.tsx`: no Shutdown in the app; on macOS a 28 px drag strip (`.app-drag`, CSS `app-region: drag`) above the logo so the window's buttons clear it; drops and Dock files go to the stored queue and open Transcribe, which starts them one at a time and names those waiting. The overlay reads "Drop to transcribe" only: a browser gives the dragged file's name only on the drop.
++- `components/EngineBanner.tsx`: the engine trouble banner on every page (restarting, in his words when he asked for it; running again naming the watched job; keeps stopping with Restart engine, Copy details, Open log folder and the troubleshooting guide).
+ - `components/ThisMac.tsx`: Settings "This Mac" in place of Startup (Show anyscribe in, Start at login, Terminal and Claude Code, version, Engine with Restart engine disabled while `runningJobs()` is above zero, the old launcher while installed, how to remove the app).
+-- `components/MacCards.tsx`: the old-launcher question and the Terminal cards, used by `App.tsx` on first launch (launcher first, then Terminal; each marked through `firstLaunch.mark` on the person's answer, never on Escape) and as the setup wizard's optional last step (`OnboardingWizard` step `terminal`, after Finish saved). `terminal.addToPath()` is called only from the card that shows the exact line. Removing the old launcher restarts the engine, so the page reloads mid-call: `removeOldLauncher()` notes the start in localStorage and `App.tsx` shows `oldLauncher.status().lastRemoval` once after the reload, only when it is newer than that note (`claimRemoval`).
+-- Browse in the app submits `pathForFile(file)` instead of uploading a copy (`components/URLInput.tsx`).
++- `components/MacCards.tsx`: the old-launcher question and the Terminal cards, used by `App.tsx` on first launch (launcher first, then Terminal) and as the setup wizard's optional last step ("One last thing"). Each question is asked once: Escape or a click outside is the quiet answer (Keep both, Skip for now). "Ready in Terminal" only when the login shell found this app's command (`runsOurs`); "Switch to this app's copy" whenever a copy sits at `~/.local/bin/anyscribe` unused (`occupant`). `terminal.addToPath()` is called only from the card that shows the exact line.
++- Browse in the app puts `pathForFile(file)` in the box (no upload copy); he starts it as in the browser (`components/URLInput.tsx`).
+ 
+ ### Desktop surface (`cli/desktop_cmd.py` + `core/desktop.py`, `core/launcher.py`, `core/service.py`)
+ 
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-ui.md b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+index 4dd3d40..a8577df 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-ui.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+@@ -54,3 +54,16 @@ details includes it.
+ `docs/reviews/2026-11-20-mac-app-2c-ui/proof.md`: the click-through
+ (`checks/check_ui.py` with the stub bridge `checks/stub.js`), the drag probe
+ and the mutation run of the four guards (`checks/mutate.py`).
++
++## Round 1 (review: both NOT YET)
++
++The real app reloads the dashboard to `/` every time the engine returns to
++running, and the round-0 stub did not, so the outage banner, the Up next
++queue and the removal note had never been tested across that reload. The
++stub now reloads as `main.js` does; before any fix, 5 checks failed against
++it (`checks/run-r1-stub-before-fixes.out`). Each piece of state that must
++outlive a restart now goes to storage before the reload can happen (see
++architecture.md, "The reload after every restart"). Other round 1 decisions:
++each first-launch question is asked once (Escape and a click outside are the
++quiet answer); "ready in Terminal" only when the login shell confirmed it;
++Browse fills the box as in the browser (the spec's "submits" was an error).
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index 9793838..91b7080 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -8,9 +8,9 @@ import TranscriptView from "./pages/TranscriptView";
+ import SettingsPage from "./pages/SettingsPage";
+ import { getOnboardingStatus } from "./api/client";
+ import Modal from "./components/Modal";
+-import { LauncherQuestion, RemovalAfterReload, TerminalFlow } from "./components/MacCards";
+-import { claimRemoval, desktop } from "./desktop";
+-import type { FirstLaunch, LauncherRemoval, LauncherStatus } from "./desktop";
++import { BTN_MAIN, Card, LauncherQuestion, RemovalAfterReload, TerminalFlow } from "./components/MacCards";
++import { claimRemoval, desktop, MARK_PROBLEM, MARK_PROBLEM_EVENT, markAsked, session } from "./desktop";
++import type { FirstLaunch, LauncherStatus } from "./desktop";
+ 
+ /**
+  * Wizard trigger: on app mount, ask the backend whether onboarding has been
+@@ -31,7 +31,7 @@ export default function App() {
+   const [asked, setAsked] = useState<FirstLaunch | null>(null);
+   const [launcher, setLauncher] = useState<LauncherStatus | null>(null);
+   // a removal this page started before the engine restart reloaded it
+-  const [removed, setRemoved] = useState<LauncherRemoval | null>(null);
++  const [removed, setRemoved] = useState<ReturnType<typeof claimRemoval>>(null);
+ 
+   useEffect(() => {
+     const dismissed = localStorage.getItem("scribe_onboarding_dismissed") === "1";
+@@ -60,9 +60,26 @@ export default function App() {
+   const askLauncher = !!asked && !asked.oldLauncherAsked && !!launcher?.installed;
+   const askTerminal = !!asked && !asked.terminalAsked && !askLauncher && !removed;
+   const terminalAnswered = () => {
+-    void desktop?.firstLaunch.mark("terminalAsked");
++    void markAsked("terminalAsked");
+     setAsked((a) => a && { ...a, terminalAsked: true });
+   };
++  // Each question is asked once (the owner's answer): Escape or a click outside is the quiet
++  // answer, Keep both or Skip for now.
++  const launcherKept = () => {
++    void markAsked("oldLauncherAsked");
++    setAsked((a) => a && { ...a, oldLauncherAsked: true });
++  };
++  // An answer the app couldn't save (firstLaunch.mark said so): shown once things are quiet.
++  const [markProblem, setMarkProblem] = useState<string | null>(() => session.get<string>(MARK_PROBLEM));
++  useEffect(() => {
++    const show = () => setMarkProblem(session.get<string>(MARK_PROBLEM));
++    window.addEventListener(MARK_PROBLEM_EVENT, show);
++    return () => window.removeEventListener(MARK_PROBLEM_EVENT, show);
++  }, []);
++  const markProblemSeen = () => {
++    session.del(MARK_PROBLEM);
++    setMarkProblem(null);
++  };
+ 
+   // Escape hatch: let any component (Settings page) reopen the wizard.
+   useEffect(() => {
+@@ -84,11 +101,11 @@ export default function App() {
+       </Routes>
+       {removed && (
+         <Modal onClose={() => setRemoved(null)} ariaLabel="The old browser launcher" size="lg">
+-          <RemovalAfterReload initial={removed} onDone={() => setRemoved(null)} />
++          <RemovalAfterReload initial={removed.result} before={removed.before} onDone={() => setRemoved(null)} />
+         </Modal>
+       )}
+       {askLauncher && launcher && (
+-        <Modal onClose={() => setAsked((a) => a && { ...a, oldLauncherAsked: true })} ariaLabel="The old browser launcher" size="lg">
++        <Modal onClose={launcherKept} ariaLabel="The old browser launcher" size="lg">
+           <LauncherQuestion
+             status={launcher}
+             onDone={() => setAsked((a) => a && { ...a, oldLauncherAsked: true })}
+@@ -96,10 +113,21 @@ export default function App() {
+         </Modal>
+       )}
+       {askTerminal && wizardDecided && !showWizard && (
+-        <Modal onClose={() => setAsked((a) => a && { ...a, terminalAsked: true })} ariaLabel="Terminal and Claude Code" size="lg">
++        <Modal onClose={terminalAnswered} ariaLabel="Terminal and Claude Code" size="lg">
+           <TerminalFlow eyebrow="One more option" onDone={terminalAnswered} />
+         </Modal>
+       )}
++      {markProblem && !removed && !askLauncher && !(askTerminal && wizardDecided) && !showWizard && (
++        <Modal onClose={markProblemSeen} ariaLabel="Your answer wasn't saved" size="md">
++          <Card tone="warn" title="anyscribe couldn't save your answer">
++            <p>{markProblem}</p>
++            <p>This question may come back the next time anyscribe starts.</p>
++            <div className="flex gap-2 pt-1">
++              <button autoFocus onClick={markProblemSeen} className={BTN_MAIN}>OK</button>
++            </div>
++          </Card>
++        </Modal>
++      )}
+       {showWizard && !askLauncher && (
+         <OnboardingWizard
+           offerTerminal={askTerminal ? terminalAnswered : undefined}
+diff --git a/ui/src/components/EngineBanner.tsx b/ui/src/components/EngineBanner.tsx
+index b5ca354..380ff6e 100644
+--- a/ui/src/components/EngineBanner.tsx
++++ b/ui/src/components/EngineBanner.tsx
+@@ -3,7 +3,7 @@
+ import { useEffect, useState } from "react";
+ import { Link } from "react-router-dom";
+ import { AlertCircle, Check, RefreshCw } from "lucide-react";
+-import { desktop, exitWords, GUIDE_URL } from "../desktop";
++import { desktop, exitWords, GUIDE_URL, OUTAGE, restartConsumed, restartEngine, restartIsMine, session } from "../desktop";
+ import type { EngineStatus } from "../desktop";
+ 
+ const BTN_MAIN =
+@@ -16,26 +16,36 @@ export default function EngineBanner({ watching }: { watching: { current: string
+   const [backAgain, setBackAgain] = useState<{ job: string | null } | null>(null);
+   const [refused, setRefused] = useState<string | null>(null);
+   const [copied, setCopied] = useState(false);
++  const [mine, setMine] = useState(false); // this page asked for the restart
+ 
+   useEffect(() => {
+     if (!desktop) return;
+-    // Set when the engine stops after running (or is seen restarting); running
+-    // again then shows "Running again", naming the job watched at the stop.
+-    let outage: { job: string | null } | null = null;
++    // The app reloads this page to / when the engine is back (2c-app main.js), so an outage is
++    // noted in sessionStorage: the reloaded page shows "Running again", naming the job watched
++    // when the engine stopped. A restart this page asked for is not an outage.
+     let wasRunning = false;
++    let first = true;
+     let live = true;
+     const onStatus = (s: EngineStatus) => {
+       if (!live) return;
+       setStatus(s);
++      const asked = restartIsMine();
++      setMine(asked);
+       if (s.state === "running") {
+         setRefused(null);
+-        if (outage) setBackAgain(outage);
+-        outage = null;
+-      } else if (!outage && (wasRunning || s.state === "restarting")) {
+-        outage = { job: watching.current };
++        const note = session.get<{ job: string | null }>(OUTAGE);
++        if (note) setBackAgain({ job: note.job });
++        if (first) {
++          // a fresh page takes the notes; an older page leaves them for the reload that follows
++          session.del(OUTAGE);
++          restartConsumed();
++        }
++      } else if ((wasRunning || s.state === "restarting") && !asked && !session.get(OUTAGE)) {
++        session.set(OUTAGE, { job: watching.current, at: Date.now() });
+         setBackAgain(null);
+       }
+       wasRunning = s.state === "running";
++      first = false;
+     };
+     desktop.engineStatus().then(onStatus).catch(() => undefined);
+     const off = desktop.onEngineStatus(onStatus);
+@@ -57,7 +67,7 @@ export default function EngineBanner({ watching }: { watching: { current: string
+   if (status.stoppedRestarting) {
+     const restart = async () => {
+       setRefused(null);
+-      const r = await desktop!.restartEngine();
++      const r = await restartEngine();
+       if (!r.ok) setRefused(r.reason || "The engine couldn't be restarted.");
+     };
+     const copy = async () => {
+@@ -83,12 +93,13 @@ export default function EngineBanner({ watching }: { watching: { current: string
+         <h3 className="text-sm font-medium text-text">The engine keeps stopping</h3>
+         <p className="text-[13px] text-text-secondary">
+           It stopped 3 times in a minute, so anyscribe stopped restarting it. Your transcripts
+-          are safe. {exitWords(status.lastExit)}. Its log is in ~/.anyscribe/logs/app.log.
++          are safe. {exitWords(status.lastExit)}.
+         </p>
+         {refused && <p className="text-xs text-red">{refused}</p>}
+         <div className="flex flex-wrap items-center gap-3">
+           <button onClick={restart} className={BTN_MAIN}>Restart engine</button>
+           <button onClick={copy} className={BTN_LINK}>{copied ? "Copied" : "Copy details"}</button>
++          <button onClick={() => void desktop!.openLogFolder()} className={BTN_LINK}>Open log folder</button>
+           <a href={GUIDE_URL} target="_blank" rel="noopener noreferrer" className={BTN_LINK}>
+             Troubleshooting guide
+           </a>
+@@ -102,14 +113,19 @@ export default function EngineBanner({ watching }: { watching: { current: string
+       "border-amber/45 bg-amber/[0.08]",
+       <RefreshCw className="w-4 h-4 text-amber shrink-0 mt-0.5" />,
+       <>
+-        <h3 className="text-sm font-medium text-text">anyscribe's engine stopped. Restarting it.</h3>
++        <h3 className="text-sm font-medium text-text">
++          {mine ? "Restarting anyscribe's engine." : "anyscribe's engine stopped. Restarting it."}
++        </h3>
+         <p className="text-[13px] text-text-secondary">This usually takes a few seconds.</p>
+       </>
+     );
+   }
+ 
+   if (status.state === "running" && backAgain) {
+-    const dismiss = () => setBackAgain(null);
++    const dismiss = () => {
++      session.del(OUTAGE);
++      setBackAgain(null);
++    };
+     return wrap(
+       "border-green/40 bg-green/[0.07]",
+       <Check className="w-4 h-4 text-green shrink-0 mt-0.5" />,
+diff --git a/ui/src/components/Layout.tsx b/ui/src/components/Layout.tsx
+index 20cb25c..6821cc4 100644
+--- a/ui/src/components/Layout.tsx
++++ b/ui/src/components/Layout.tsx
+@@ -3,31 +3,37 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+ import { Mic, Clock, Settings, Waves, Power, Share2, FileAudio } from "lucide-react";
+ import SetupBanner from "./SetupBanner";
+ import EngineBanner from "./EngineBanner";
+-import { desktop, isMac } from "../desktop";
++import { desktop, isMac, session } from "../desktop";
+ import { TailnetLink } from "./TailnetShare";
+ import { REMOTE, useTailnet } from "../hooks/useTailnet";
+ 
+ /** What the Transcribe page gets from the layout (Mac app: files dropped or opened with the app). */
+ export type LayoutContext = {
+   incoming: string[];
+-  takeIncoming: () => void;
++  /** The file has been handed to the engine (accepted, or refused with its error on screen). */
++  doneIncoming: (path: string) => void;
+   /** The job the page is following, so the engine banner can name it after a restart. */
+   setWatching: (job: string | null) => void;
+ };
+ 
+-const mb = (bytes: number) => `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MB`;
++// Files waiting to be transcribed, kept in sessionStorage: the app acknowledges an opened file as
++// soon as the callback returns (preload), and reloads this page whenever the engine comes back.
++const QUEUE = "anyscribe_incoming";
+ 
+ /** Mac app only: files dragged onto the window or opened with the app become paths to transcribe. */
+ function useIncomingFiles() {
+   const navigate = useNavigate();
+-  const [incoming, setIncoming] = useState<string[]>([]);
+-  const [dragging, setDragging] = useState<{ name: string; size: number } | null | false>(false);
++  const [incoming, setIncoming] = useState<string[]>(() => session.get<string[]>(QUEUE) ?? []);
++  const [dragging, setDragging] = useState(false);
+   const depth = useRef(0);
+ 
+   const add = useCallback(
+     (paths: string[]) => {
+       if (!paths.length) return;
+-      setIncoming((q) => [...q, ...paths]);
++      // stored before this callback returns, so a reload after the app's acknowledgement keeps them
++      const q = [...(session.get<string[]>(QUEUE) ?? []), ...paths];
++      session.set(QUEUE, q);
++      setIncoming(q);
+       navigate("/");
+     },
+     [navigate]
+@@ -41,9 +47,7 @@ function useIncomingFiles() {
+       if (!hasFiles(e)) return;
+       e.preventDefault();
+       depth.current += 1;
+-      // Browsers hide a dragged file's name and size until the drop; show them when given.
+-      const f = e.dataTransfer?.files[0];
+-      setDragging(f ? { name: f.name, size: f.size } : null);
++      setDragging(true); // a browser gives the file's name only on the drop (drag_probe.out)
+     };
+     const over = (e: DragEvent) => {
+       if (hasFiles(e)) e.preventDefault(); // allows the drop
+@@ -74,8 +78,14 @@ function useIncomingFiles() {
+     };
+   }, [add]);
+ 
+-  const takeIncoming = useCallback(() => setIncoming((q) => q.slice(1)), []);
+-  return { incoming, takeIncoming, dragging };
++  const doneIncoming = useCallback((path: string) => {
++    const q = session.get<string[]>(QUEUE) ?? [];
++    const i = q.indexOf(path);
++    if (i >= 0) q.splice(i, 1);
++    session.set(QUEUE, q);
++    setIncoming(q);
++  }, []);
++  return { incoming, doneIncoming, dragging };
+ }
+ 
+ const NAV = [
+@@ -88,7 +98,7 @@ export default function Layout() {
+   const [confirmShutdown, setConfirmShutdown] = useState(false);
+   const [stopped, setStopped] = useState(false);
+   const { state: tailnet } = useTailnet();
+-  const { incoming, takeIncoming, dragging } = useIncomingFiles();
++  const { incoming, doneIncoming, dragging } = useIncomingFiles();
+   const watching = useRef<string | null>(null);
+   const setWatching = useCallback((job: string | null) => {
+     watching.current = job;
+@@ -253,18 +263,13 @@ export default function Layout() {
+       <main className="flex-1 overflow-y-auto relative">
+         <EngineBanner watching={watching} />
+         <SetupBanner />
+-        <Outlet context={{ incoming, takeIncoming, setWatching } satisfies LayoutContext} />
++        <Outlet context={{ incoming, doneIncoming, setWatching } satisfies LayoutContext} />
+ 
+-        {dragging !== false && (
++        {dragging && (
+           <div className="pointer-events-none fixed inset-3.5 sm:left-[calc(14rem+0.875rem)] z-50 grid place-items-center rounded-2xl border-2 border-dashed border-amber bg-[#1a140e]/90 text-center">
+             <div className="flex flex-col items-center gap-1.5">
+               <FileAudio className="w-6.5 h-6.5 text-amber" />
+               <p className="font-semibold text-text">Drop to transcribe</p>
+-              {dragging && (
+-                <p className="text-sm text-text-secondary">
+-                  {dragging.name} · {mb(dragging.size)}
+-                </p>
+-              )}
+             </div>
+           </div>
+         )}
+diff --git a/ui/src/components/MacCards.tsx b/ui/src/components/MacCards.tsx
+index d425602..d0c04ba 100644
+--- a/ui/src/components/MacCards.tsx
++++ b/ui/src/components/MacCards.tsx
+@@ -4,8 +4,8 @@
+ 
+ import { useEffect, useState } from "react";
+ import { AlertCircle, Check, Loader2 } from "lucide-react";
+-import { desktop, otherCopyWords, removeOldLauncher, runsOurs, VIA } from "../desktop";
+-import type { LauncherRemoval, LauncherStatus, TerminalStatus } from "../desktop";
++import { desktop, markAsked, occupantWords, otherCopyWords, removalConsumed, removalRefusal, removeOldLauncher, runsOurs, VIA } from "../desktop";
++import type { LauncherRemoval, LauncherStatus, Pieces, TerminalStatus } from "../desktop";
+ 
+ export const BTN_MAIN =
+   "rounded-md bg-amber text-surface px-3.5 py-1.5 text-sm font-medium hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+@@ -62,36 +62,68 @@ const PIECE_WORDS: [keyof NonNullable<LauncherRemoval["pieces"]>, string, string
+   ["menuBarIcon", "Old menu bar icon", "stopped"],
+ ];
+ 
+-/** The per-piece result of a removal: the "Removed" card or the cleanup checklist. */
++/** "Removed the old launcher, its login item and its menu bar icon.": only what was there before. */
++function removedWords(result: LauncherRemoval, before: Pieces | null): string {
++  const login = before ? before.loginItem === "present" : result.startAtLoginCarriedOver || !!result.reason;
++  const icon = before ? before.menuBarIcon === "running" : true;
++  const parts = ["the old launcher", login && "its login item", icon && "its menu bar icon"].filter(Boolean) as string[];
++  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
++  return `Removed ${list}.`;
++}
++
++/** The result of a removal: "Removed", the cleanup checklist, or (no pieces) the reason alone. */
+ export function RemovalResult({
+   result,
++  before,
+   onRetry,
+   onDone,
+   busy,
+ }: {
+   result: LauncherRemoval;
++  before: Pieces | null;
+   onRetry: () => void;
+   onDone?: () => void;
+   busy: boolean;
+ }) {
+   const [copied, setCopied] = useState(false);
++  const done = onDone && (() => {
++    removalConsumed();
++    onDone();
++  });
+   if (result.ok) {
+     return (
+       <Card tone="ok" title="Old launcher removed">
+         <p>
+-          Removed the old launcher, its login item and its menu bar icon.
++          {removedWords(result, before)}
+           {result.startAtLoginCarriedOver && " This app now starts at login instead; change it in Settings."}
+         </p>
+         {!result.startAtLoginCarriedOver && result.reason && <p>{result.reason}</p>}
+-        {onDone && (
++        {done && (
+           <Buttons>
+-            <button autoFocus onClick={onDone} className={BTN_MAIN}>OK</button>
++            <button autoFocus onClick={done} className={BTN_MAIN}>OK</button>
+           </Buttons>
+         )}
+       </Card>
+     );
+   }
+-  const pieces = result.pieces!; // a refusal (no pieces) is shown by the caller as a reason
++  const retryButtons = (
++    <>
++      <button onClick={onRetry} disabled={busy} className={BTN_MAIN}>
++        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : "Try again"}
++      </button>
++      {done && <button onClick={done} className={BTN_LINK}>Close</button>}
++    </>
++  );
++  if (!result.pieces) {
++    // the removal itself failed (the app kept {ok: false, pieces: null, reason}): its reason alone
++    return (
++      <Card tone="bad" title="Cleanup didn't finish">
++        <p>{result.reason || "The old launcher couldn't be removed."}</p>
++        <Buttons>{retryButtons}</Buttons>
++      </Card>
++    );
++  }
++  const pieces = result.pieces;
+   const copy = async () => {
+     const lines = PIECE_WORDS.map(([k, label]) => `${label}: ${pieces[k]}`);
+     if (result.reason) lines.push(`Reason: ${result.reason}`);
+@@ -124,18 +156,23 @@ export function RemovalResult({
+           : "Try again. If it still doesn't finish, Copy details shows what was left."}
+       </p>
+       <Buttons>
+-        <button onClick={onRetry} disabled={busy} className={BTN_MAIN}>
+-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : "Try again"}
+-        </button>
++        {retryButtons}
+         <button onClick={copy} className={BTN_LINK}>{copied ? "Copied" : "Copy details"}</button>
+-        {onDone && <button onClick={onDone} className={BTN_LINK}>Close</button>}
+       </Buttons>
+     </Card>
+   );
+ }
+ 
+ /** The result of a removal this page started, read from lastRemoval after the reload. */
+-export function RemovalAfterReload({ initial, onDone }: { initial: LauncherRemoval; onDone: () => void }) {
++export function RemovalAfterReload({
++  initial,
++  before,
++  onDone,
++}: {
++  initial: LauncherRemoval;
++  before: Pieces | null;
++  onDone: () => void;
++}) {
+   const [result, setResult] = useState(initial);
+   const [busy, setBusy] = useState(false);
+   const [problem, setProblem] = useState<string | null>(null);
+@@ -143,8 +180,8 @@ export function RemovalAfterReload({ initial, onDone }: { initial: LauncherRemov
+     setBusy(true);
+     setProblem(null);
+     try {
+-      const r = await removeOldLauncher();
+-      if (!r.ok && !r.pieces) setProblem(r.reason || "The old launcher couldn't be removed.");
++      const r = await removeOldLauncher(before);
++      if (!r.ok && !r.pieces) setProblem(removalRefusal(r));
+       else setResult(r);
+     } catch (e) {
+       setProblem(e instanceof Error ? e.message : String(e));
+@@ -154,7 +191,7 @@ export function RemovalAfterReload({ initial, onDone }: { initial: LauncherRemov
+   };
+   return (
+     <>
+-      <RemovalResult result={result} onRetry={retry} onDone={onDone} busy={busy} />
++      <RemovalResult result={result} before={before} onRetry={retry} onDone={onDone} busy={busy} />
+       <Problem text={problem} />
+     </>
+   );
+@@ -171,9 +208,9 @@ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; o
+     setBusy(true);
+     setProblem(null);
+     try {
+-      await desktop!.firstLaunch.mark("oldLauncherAsked");
+-      const r = await removeOldLauncher(); // the page usually reloads first: App shows the result then
+-      if (!r.ok && !r.pieces) setProblem(r.reason || "The old launcher couldn't be removed.");
++      await markAsked("oldLauncherAsked"); // a failed save is shown; the removal still runs
++      const r = await removeOldLauncher(status.pieces); // the app reloads the page: App shows the kept result
++      if (!r.ok && !r.pieces) setProblem(removalRefusal(r));
+       else setResult(r);
+     } catch (e) {
+       setProblem(e instanceof Error ? e.message : String(e));
+@@ -182,11 +219,11 @@ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; o
+     }
+   };
+   const keep = async () => {
+-    await desktop!.firstLaunch.mark("oldLauncherAsked");
++    await markAsked("oldLauncherAsked");
+     onDone();
+   };
+ 
+-  if (result) return <RemovalResult result={result} onRetry={remove} onDone={onDone} busy={busy} />;
++  if (result) return <RemovalResult result={result} before={status.pieces} onRetry={remove} onDone={onDone} busy={busy} />;
+   return (
+     <Card title="Replace the old anyscribe launcher?">
+       <p>
+@@ -214,10 +251,10 @@ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; o
+ 
+ // ── Terminal and Claude Code ─────────────────────────
+ 
+-type View = "loading" | "offer" | "other" | "on" | "skill" | "path" | "added-but-missing";
++type View = "loading" | "offer" | "switch" | "other" | "on" | "skill" | "path" | "added-but-missing";
+ 
+ function viewFor(s: TerminalStatus): View {
+-  if (s.state === "off") return "offer";
++  if (s.state === "off") return s.occupant ? "switch" : "offer"; // F5: a copy sits at our spot, unused
+   if (s.state === "other-copy") return "other";
+   if (s.state === "path-missing") return "path";
+   return s.skill === "missing" ? "skill" : "on";
+@@ -230,7 +267,8 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+   const [view, setView] = useState<View>("loading");
+   const [busy, setBusy] = useState(false);
+   const [problem, setProblem] = useState<string | null>(null);
+-  const [byHand, setByHand] = useState<string | null>(null); // addToPath refused: the line to add yourself
++  const [byHand, setByHand] = useState<{ line: string; reason: string } | null>(null); // addToPath refused (F4)
++  const [addedReason, setAddedReason] = useState<string | null>(null); // addToPath ok, with why it has no effect (F3)
+ 
+   useEffect(() => {
+     desktop!.terminal
+@@ -269,10 +307,12 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+     try {
+       const r = await desktop!.terminal.addToPath();
+       if (!r.ok) {
+-        setProblem(r.reason || "anyscribe couldn't add the line.");
+-        setByHand(r.line || null);
++        // with a line, it is guidance (add it by hand); without one, a failure
++        if (r.line) setByHand({ line: r.line, reason: r.reason || "Add this line by hand:" });
++        else setProblem(r.reason || "anyscribe couldn't add the line.");
+         return;
+       }
++      setAddedReason(r.reason || null);
+     } catch (e) {
+       setProblem(e instanceof Error ? e.message : String(e));
+       return;
+@@ -306,6 +346,26 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+       </Card>
+     );
+ 
++  if (view === "switch" && status)
++    return (
++      <Card eyebrow={eyebrow} title="Use anyscribe from Terminal and Claude Code">
++        <p>{occupantWords(status)}</p>
++        <ul className="list-disc pl-5 flex flex-col gap-0.5">
++          <li>Installs the anyscribe skill for Claude Code, if Claude Code is on this Mac</li>
++          <li>Turn it off any time in Settings</li>
++        </ul>
++        <Problem text={problem} />
++        <Buttons>
++          <button onClick={() => turnOn(true)} disabled={busy} className={BTN_MAIN}>{busy ? spin : "Switch to this app's copy"}</button>
++          <button onClick={onDone} disabled={busy} className={BTN_QUIET}>Skip for now</button>
++        </Buttons>
++        <Note>
++          If you switch, turning this off later puts your {VIA[status.occupant!.via] ? `${status.occupant!.via} ` : ""}
++          copy back, unless something has replaced the command since; then it asks first.
++        </Note>
++      </Card>
++    );
++
+   if (view === "other" && status) {
+     const { name, via } = otherCopyWords(status);
+     return (
+@@ -323,7 +383,9 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+         {status.claudeCode && <p>Claude Code keeps using that copy and its skill.</p>}
+         <Problem text={problem} />
+         <Buttons>
+-          <button onClick={onDone} disabled={busy} className={BTN_MAIN}>Keep the one I have</button>
++          <button onClick={onDone} disabled={busy} className={BTN_MAIN}>
++            {status.occupant ? "Keep the one I have" : "OK" /* F16: nothing to choose between */}
++          </button>
+           {status.occupant && (
+             <button onClick={() => turnOn(true)} disabled={busy} className={BTN_QUIET}>
+               {busy ? spin : "Switch to this app's copy"}
+@@ -342,7 +404,14 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+ 
+   if (view === "skill" && status)
+     return (
+-      <Card tone="warn" title="Terminal is ready, but the Claude Code skill couldn't be installed">
++      <Card
++        tone="warn"
++        title={
++          runsOurs(status)
++            ? "Terminal is ready, but the Claude Code skill couldn't be installed"
++            : "The anyscribe command is added, but the Claude Code skill couldn't be installed"
++        }
++      >
+         {status.reason && <p>{status.reason}</p>}
+         <Problem text={problem} />
+         <Buttons>
+@@ -358,7 +427,9 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+     return (
+       <Card tone="warn" title="One more step for Terminal">
+         {view === "added-but-missing" ? (
+-          <p>The line was added, but Terminal still can't see the command. Open a new Terminal window and check, or add it by hand.</p>
++          <p>{addedReason || "The line was added, but Terminal still can't see the command."}</p>
++        ) : byHand ? (
++          <p>{byHand.reason}</p>
+         ) : (
+           <p>
+             The command is in <code className={CODE}>~/.local/bin</code>, but your Terminal doesn't look in
+@@ -367,15 +438,10 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+           </p>
+         )}
+         <pre className="select-all rounded-lg border border-border-subtle bg-[#08070B] px-3 py-2.5 font-mono text-[11.5px] text-text-secondary overflow-x-auto">
+-          export PATH="$HOME/.local/bin:$PATH"
++          {byHand ? byHand.line : 'export PATH="$HOME/.local/bin:$PATH"'}
+         </pre>
+         {status?.reason && <Note>{status.reason}</Note>}
+         <Problem text={problem} />
+-        {byHand && byHand !== 'export PATH="$HOME/.local/bin:$PATH"' && (
+-          <pre className="select-all rounded-lg border border-border-subtle bg-[#08070B] px-3 py-2.5 font-mono text-[11.5px] text-text-secondary overflow-x-auto">
+-            {byHand}
+-          </pre>
+-        )}
+         <Buttons>
+           {view === "path" && !byHand && (
+             <button onClick={addToPath} disabled={busy} className={BTN_MAIN}>{busy ? spin : "Add it for me"}</button>
+@@ -386,15 +452,31 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+       </Card>
+     );
+ 
++  if (!runsOurs(status))
++    // C5: the command is written but the login shell could not be asked: no "ready" claim
++    return (
++      <Card tone="warn" title="The anyscribe command is added">
++        {status?.reason && <p>{status.reason}</p>}
++        <p>
++          Open a new Terminal window and type <code className={CODE}>anyscribe --help</code> to check.
++        </p>
++        <Buttons>
++          <button autoFocus onClick={onDone} className={BTN_MAIN}>Done</button>
++        </Buttons>
++      </Card>
++    );
++
+   return (
+     <Card tone="ok" title="anyscribe is ready in Terminal">
+       <p>
+-        Open a new Terminal window and type <code className={CODE}>anyscribe --help</code>. In Claude
+-        Code, ask it to transcribe a link.
++        Open a new Terminal window and type <code className={CODE}>anyscribe --help</code>.
++        {status?.claudeCode && " In Claude Code, ask it to transcribe a link."}
+       </p>
+       {status?.reason && <Note>{status.reason}</Note>}
+-      {runsOurs(status) && <Note>It runs this app's anyscribe {status?.appVersion} and updates with the app.</Note>}
+-      <Note>If Claude Code isn't on this Mac yet, turn this off and on again after installing it to add the skill.</Note>
++      <Note>It runs this app's anyscribe {status?.appVersion} and updates with the app.</Note>
++      {!status?.claudeCode && (
++        <Note>If Claude Code isn't on this Mac yet, turn this off and on again after installing it to add the skill.</Note>
++      )}
+       <Buttons>
+         <button autoFocus onClick={onDone} className={BTN_MAIN}>Done</button>
+       </Buttons>
+diff --git a/ui/src/components/OnboardingWizard.tsx b/ui/src/components/OnboardingWizard.tsx
+index 15c3c75..fb6f0ac 100644
+--- a/ui/src/components/OnboardingWizard.tsx
++++ b/ui/src/components/OnboardingWizard.tsx
+@@ -249,7 +249,15 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
+   return (
+     <Modal
+       // with the confirmation open, Escape (and a click outside) means Keep setting up
+-      onClose={() => (confirmClose ? setConfirmClose(false) : askOrClose(false))}
++      onClose={() => {
++        if (confirmClose) return setConfirmClose(false);
++        // the Terminal step is asked once: Escape or a click outside answers Skip for now (C6)
++        if (step === "terminal" && offerTerminal) {
++          offerTerminal();
++          return askOrClose(true);
++        }
++        askOrClose(false);
++      }}
+       disableClose={saving}
+       ariaLabelledBy="onboarding-title"
+       size="xl"
+@@ -405,8 +413,9 @@ function stepTitle(step: Step): string {
+     case "workspace":
+       return "Workspace location";
+     case "done":
+-    case "terminal":
+       return "All set";
++    case "terminal":
++      return "One last thing";
+   }
+ }
+ 
+diff --git a/ui/src/components/ThisMac.tsx b/ui/src/components/ThisMac.tsx
+index a271a41..44b9ed5 100644
+--- a/ui/src/components/ThisMac.tsx
++++ b/ui/src/components/ThisMac.tsx
+@@ -5,7 +5,7 @@ import { RefreshCw } from "lucide-react";
+ import Modal from "./Modal";
+ import Toggle from "./Toggle";
+ import { RemovalResult, TerminalFlow } from "./MacCards";
+-import { desktop, otherCopyWords, removeOldLauncher, runningJobs, runsOurs, useEngineStatus } from "../desktop";
++import { desktop, occupantWords, otherCopyWords, removalRefusal, removeOldLauncher, restartEngine, runningJobs, runsOurs, useEngineStatus } from "../desktop";
+ import type { DockMode, LauncherRemoval, LauncherStatus, TerminalStatus } from "../desktop";
+ 
+ const SMALL_BTN =
+@@ -54,6 +54,7 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+   const [loginAsked, setLoginAsked] = useState(false); // turned on here, so a system "off" needs a word
+   const [terminal, setTerminal] = useState<TerminalStatus | null>(null);
+   const [conflict, setConflict] = useState<string | null>(null);
++  const [skillRemoved, setSkillRemoved] = useState(false); // F8: this view's turnOff just removed it
+   const [flow, setFlow] = useState(false); // the Terminal card, opened from a row
+   const [launcher, setLauncher] = useState<LauncherStatus | null>(null);
+   const [removal, setRemoval] = useState<LauncherRemoval | null>(null);
+@@ -125,7 +126,10 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+       }
+       if (!r.ok) throw new Error(r.reason || "anyscribe couldn't turn this off.");
+       setConflict(null);
+-      await readTerminal();
++      const had = terminal?.skill === "installed";
++      const s = await bridge.terminal.status();
++      setTerminal(s);
++      setSkillRemoved(had && s.skill !== "installed");
+     });
+   const retrySkill = () =>
+     run("terminal", async () => {
+@@ -135,14 +139,14 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+     });
+   const removeLauncher = () =>
+     run("launcher", async () => {
+-      const r = await removeOldLauncher(); // the page usually reloads first: App shows the result then
+-      if (!r.ok && !r.pieces) throw new Error(r.reason || "The old launcher couldn't be removed.");
++      const r = await removeOldLauncher(launcher?.pieces ?? null); // the app reloads the page: App shows the kept result
++      if (!r.ok && !r.pieces) throw new Error(removalRefusal(r));
+       setRemoval(r);
+       setLauncher(await bridge.oldLauncher.status());
+     });
+   const restart = () =>
+     run("engine", async () => {
+-      const r = await bridge.restartEngine();
++      const r = await restartEngine();
+       if (!r.ok) throw new Error(r.reason || "The engine couldn't be restarted.");
+     });
+ 
+@@ -155,7 +159,17 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+   if (terminal) {
+     const { name, via } = otherCopyWords(terminal);
+     const other = `${name}${via ? `, installed ${via}` : ""}`;
+-    if (terminal.state === "on") {
++    if (terminal.state === "on" && !runsOurs(terminal)) {
++      // C5: written, but the login shell could not be asked; the reason shows below
++      terminalLine = (
++        <>
++          <span className="text-amber">On.</span> The command is added; anyscribe couldn't check that Terminal finds it.
++          {terminal.skill === "missing" && " The Claude Code skill isn't installed."}
++        </>
++      );
++      if (terminal.skill === "missing")
++        terminalExtra = <button onClick={retrySkill} disabled={!!busy} className={SMALL_BTN}>Try again</button>;
++    } else if (terminal.state === "on") {
+       if (terminal.skill === "missing") {
+         terminalLine = <><span className="text-amber">On.</span> Terminal is ready; the Claude Code skill isn't installed.</>;
+         terminalExtra = (
+@@ -163,14 +177,11 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+         );
+       } else {
+         const skill = terminal.skill === "installed" ? "Claude Code skill installed." : "Claude Code isn't on this Mac.";
+-        // the status reason (shell not asked) shows below instead of a claim about what Terminal runs
+-        terminalLine = runsOurs(terminal) ? (
++        terminalLine = (
+           <>
+             <span className="text-green">On.</span> Terminal runs this app's anyscribe {terminal.appVersion} from{" "}
+             <code className={CODE}>{terminal.command}</code>. {skill}
+           </>
+-        ) : (
+-          <><span className="text-green">On.</span> {skill}</>
+         );
+       }
+     } else if (terminal.state === "path-missing") {
+@@ -190,18 +201,21 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+           )}
+         </>
+       );
+-    } else {
++    } else if (terminal.occupant) {
++      // F5: a copy sits at ~/.local/bin/anyscribe that Terminal does not use
+       terminalLine = (
+         <>
+-          Off. anyscribe isn't in Terminal
+-          {terminal.claudeCode && terminal.skill !== "installed" ? ", and its Claude Code skill is removed" : ""}.
++          Off. {occupantWords(terminal)}{" "}
++          <button onClick={() => setFlow(true)} className={LINK}>Switch to this app's copy</button>
+         </>
+       );
++    } else {
++      terminalLine = <>Off. anyscribe isn't in Terminal{skillRemoved ? ", and its Claude Code skill is removed" : ""}.</>;
+     }
+   }
+   const toggleTerminal = (on: boolean) => {
+     if (!on) return void turnOff();
+-    if (terminal?.state === "other-copy" && terminal.occupant) return setFlow(true); // replacing another copy asks first
++    if (terminal?.occupant) return setFlow(true); // replacing another copy asks first
+     void turnOn();
+   };
+ 
+@@ -346,7 +360,7 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+             )}
+             {removal && (
+               <div className="mt-2 rounded-lg border border-border bg-surface-raised px-4 py-3">
+-                <RemovalResult result={removal} onRetry={removeLauncher} busy={busy === "launcher"} />
++                <RemovalResult result={removal} before={launcher?.pieces ?? null} onRetry={removeLauncher} busy={busy === "launcher"} />
+               </div>
+             )}
+             {failed("launcher")}
+diff --git a/ui/src/components/URLInput.tsx b/ui/src/components/URLInput.tsx
+index b3d17a5..199b2ea 100644
+--- a/ui/src/components/URLInput.tsx
++++ b/ui/src/components/URLInput.tsx
+@@ -48,11 +48,13 @@ export default function URLInput({ onSubmit, disabled }: URLInputProps) {
+     const file = e.target.files?.[0];
+     if (!file) return;
+ 
+-    // Mac app: the file is read where it sits, no upload copy, and submitted at once.
++    // Mac app: the file is read where it sits, no upload copy. As in the browser, its path goes in
++    // the box and he starts it (he may change the options first).
+     const path = desktop?.pathForFile(file);
+     if (path) {
+       if (fileRef.current) fileRef.current.value = "";
+-      onSubmit(path);
++      setUrl(path);
++      inputRef.current?.focus();
+       return;
+     }
+ 
+diff --git a/ui/src/desktop.ts b/ui/src/desktop.ts
+index 96e8586..2814a17 100644
+--- a/ui/src/desktop.ts
++++ b/ui/src/desktop.ts
+@@ -44,7 +44,7 @@ export type LauncherStatus = {
+ /** ok: false without pieces is a refusal (amendment 2: transcriptions running or waiting, the job
+  * list unknown, or a restart pending, worded as Restart engine's); nothing changed. */
+ export type LauncherRemoval = Result & {
+-  pieces?: {
++  pieces?: null | {
+     launcher: "removed" | "still there";
+     loginItem: "removed" | "still there";
+     menuBarIcon: "stopped" | "still running";
+@@ -82,7 +82,8 @@ export interface Bridge {
+   };
+   firstLaunch: {
+     get(): Promise<FirstLaunch>;
+-    mark(key: keyof FirstLaunch): Promise<unknown>;
++    /** {ok: false, reason} when the app couldn't save it (it still holds it until it quits). */
++    mark(key: keyof FirstLaunch): Promise<Result | undefined>;
+   };
+   onOpenFile(cb: (path: string) => void): () => void;
+ }
+@@ -105,6 +106,77 @@ export function exitWords(e: EngineStatus["lastExit"]): string {
+   return e?.reason ? `${how}: ${e.reason}` : `${how}; the reason wasn't reported`;
+ }
+ 
++/** Page state that must outlive the app's reload to / after every engine restart (2c-app main.js
++ * loadURL). A restart keeps the port, so the origin and its sessionStorage survive the reload. */
++export const session = {
++  get<T>(key: string): T | null {
++    try {
++      const v = sessionStorage.getItem(key);
++      return v ? (JSON.parse(v) as T) : null;
++    } catch {
++      return null;
++    }
++  },
++  set(key: string, value: unknown) {
++    try {
++      sessionStorage.setItem(key, JSON.stringify(value));
++    } catch {
++      /* storage off: this page's memory only */
++    }
++  },
++  del(key: string) {
++    try {
++      sessionStorage.removeItem(key);
++    } catch {
++      /* storage off */
++    }
++  },
++};
++
++/** The engine stopped by itself while this page was open: {job, at}. Read after the reload. */
++export const OUTAGE = "anyscribe_outage";
++/** This page asked for the restart (Restart engine): not an outage. */
++const RESTART_MINE = "anyscribe_restart_mine";
++
++/** True while a restart this page started is under way (Restart engine, or the old launcher's removal). */
++export function restartIsMine(): boolean {
++  return !!session.get(RESTART_MINE) || removalStarted();
++}
++export function restartConsumed() {
++  session.del(RESTART_MINE);
++}
++
++/** Restart engine, noted first so the restart reads as asked for, across the reload it causes. */
++export async function restartEngine(): Promise<Result> {
++  session.set(RESTART_MINE, Date.now());
++  try {
++    const r = await desktop!.restartEngine();
++    if (!r.ok) session.del(RESTART_MINE); // refused: nothing restarts
++    return r;
++  } catch (e) {
++    session.del(RESTART_MINE);
++    throw e;
++  }
++}
++
++/** A first-launch answer the app couldn't save: shown, so the question coming back is explained. */
++export const MARK_PROBLEM = "anyscribe_mark_problem";
++export const MARK_PROBLEM_EVENT = "anyscribe-mark-problem";
++
++/** Record a first-launch question as asked. The person's choice goes ahead either way (C6). */
++export async function markAsked(key: "oldLauncherAsked" | "terminalAsked") {
++  let r: Result | undefined;
++  try {
++    r = await desktop!.firstLaunch.mark(key);
++  } catch (e) {
++    r = { ok: false, reason: e instanceof Error ? e.message : String(e) };
++  }
++  if (r && r.ok === false) {
++    session.set(MARK_PROBLEM, r.reason || "anyscribe couldn't save your answer.");
++    window.dispatchEvent(new Event(MARK_PROBLEM_EVENT));
++  }
++}
++
+ /** Plain-words count of running transcriptions; null when the list can't be read. */
+ export async function runningJobs(): Promise<number | null> {
+   try {
+@@ -141,50 +213,91 @@ export function otherCopyWords(s: TerminalStatus) {
+   return { name: `anyscribe${s.uses?.version ? ` ${s.uses.version}` : ""}`, via };
+ }
+ 
+-/** Only an "app" copy is this app's anyscribe (amendment): never claim it otherwise. */
++/** "Another anyscribe 0.19.0 is already at ~/.local/bin/anyscribe, installed with uv." (F5) */
++export function occupantWords(s: TerminalStatus): string {
++  const o = s.occupant!;
++  const via = VIA[o.via];
++  return `Another anyscribe${o.version ? ` ${o.version}` : ""} is already at ~/.local/bin/anyscribe${via ? `, installed ${via}` : ""}.`;
++}
++
++/** Only an "app" copy is this app's anyscribe (amendment): never claim it otherwise. The readiness
++ * gate (C5): "ready in Terminal" only when the login shell was asked and found this app's command. */
+ export function runsOurs(s: TerminalStatus | null): boolean {
+   return s?.uses?.via === "app";
+ }
+ 
+-// Removing the old launcher restarts the engine around it (amendment 2), so the page usually
+-// reloads before remove() settles. The page notes when it started one; the reloaded page then
+-// shows lastRemoval once, only when it is newer than that note.
++// Removing the old launcher restarts the engine around it (amendment 2), and the app reloads this
++// page when the engine is back, before or after remove() settles. The page notes when it started a
++// removal and what was there before; the note is kept until the result is consumed: claimed by the
++// reloaded page (lastRemoval newer than the note), or its card closed. A refusal changes nothing
++// and the note goes at once.
+ const REMOVING = "anyscribe_launcher_removing";
+ const NOTE_LIFE_MS = 10 * 60 * 1000;
++export type Pieces = LauncherStatus["pieces"];
++type RemovalNote = { at: number; before: Pieces | null };
+ 
+-function note(value: string | null) {
++function readNote(): RemovalNote | null {
+   try {
+-    if (value) localStorage.setItem(REMOVING, value);
++    const v = localStorage.getItem(REMOVING);
++    return v ? (JSON.parse(v) as RemovalNote) : null;
++  } catch {
++    return null;
++  }
++}
++
++function note(value: RemovalNote | null) {
++  try {
++    if (value) localStorage.setItem(REMOVING, JSON.stringify(value));
+     else localStorage.removeItem(REMOVING);
+   } catch {
+     /* storage off: the result then shows only when no reload happened */
+   }
+ }
+ 
+-export async function removeOldLauncher(): Promise<LauncherRemoval> {
+-  note(String(Date.now()));
++function removalStarted(): boolean {
++  return !!readNote();
++}
++
++/** A refusal from the app, worded so he sees why a removal talks about the engine (F6). */
++export const removalRefusal = (r: LauncherRemoval) =>
++  `Removing the old launcher restarts the engine. ${r.reason || "The old launcher couldn't be removed."}`;
++
++/** The removal's card was closed (OK or Close): its result is consumed. */
++export function removalConsumed() {
++  note(null);
++}
++
++export async function removeOldLauncher(before: Pieces | null): Promise<LauncherRemoval> {
++  note({ at: Date.now(), before });
++  // A refusal answers before any restart. Once the engine has left "running", the app restarts it
++  // around the removal and keeps the result for the reloaded page, so the note must stay.
++  let restarted = false;
++  const off = desktop!.onEngineStatus((st) => {
++    if (st.state !== "running") restarted = true;
++  });
++  let r: LauncherRemoval;
+   try {
+-    return await desktop!.oldLauncher.remove(); // settled without a reload: the caller shows it
++    r = await desktop!.oldLauncher.remove();
++  } catch (e) {
++    if (!restarted) note(null);
++    throw e;
+   } finally {
+-    note(null);
++    off();
+   }
++  if (!r.ok && !r.pieces && !restarted) note(null); // refused: nothing changed, nothing kept
++  return r; // settled before any reload: the caller shows it, and the note waits for its card
+ }
+ 
+-/** After a reload: the removal this page started, once; null otherwise. */
+-export function claimRemoval(s: LauncherStatus | null): LauncherRemoval | null {
+-  let started = 0;
+-  try {
+-    started = Number(localStorage.getItem(REMOVING)) || 0;
+-  } catch {
+-    return null;
+-  }
+-  const r = s?.lastRemoval;
++/** After a reload: the removal this page started and what was there before, once; else null. */
++export function claimRemoval(s: LauncherStatus | null): { result: LauncherRemoval; before: Pieces | null } | null {
++  const started = readNote();
+   if (!started) return null;
++  const r = s?.lastRemoval;
+   const at = r ? (typeof r.at === "number" ? r.at : Date.parse(r.at)) : NaN;
+-  if (r && at >= started) {
++  if (r && at >= started.at) {
+     note(null);
+-    return r;
++    return { result: r, before: started.before };
+   }
+-  if (Date.now() - started > NOTE_LIFE_MS) note(null); // a removal that never reported back
++  if (Date.now() - started.at > NOTE_LIFE_MS) note(null); // a removal that never reported back
+   return null;
+ }
+diff --git a/ui/src/hooks/useJob.ts b/ui/src/hooks/useJob.ts
+index 2fd0261..a0e6f47 100644
+--- a/ui/src/hooks/useJob.ts
++++ b/ui/src/hooks/useJob.ts
+@@ -155,7 +155,8 @@ export function useJob() {
+   }, [connectWs]);
+ 
+   const submit = useCallback(
+-    async (data: TranscribeRequest) => {
++    /** Resolves true once the engine accepted the job, false when it refused or was unreachable. */
++    async (data: TranscribeRequest): Promise<boolean> => {
+       // Reset state
+       setState({ ...IDLE, phase: "running" });
+       reconnectAttemptRef.current = 0;
+@@ -166,12 +167,14 @@ export function useJob() {
+         jobIdRef.current = job_id;
+         setState((prev) => ({ ...prev, plan: { provider, model, notes } }));
+         connectWs(job_id);
++        return true;
+       } catch (err) {
+         setState({
+           ...IDLE,
+           phase: "error",
+           error: err instanceof Error ? err.message : String(err),
+         });
++        return false;
+       }
+     },
+     [connectWs, stopPolling]
+diff --git a/ui/src/pages/TranscribePage.tsx b/ui/src/pages/TranscribePage.tsx
+index 758033e..c8dafab 100644
+--- a/ui/src/pages/TranscribePage.tsx
++++ b/ui/src/pages/TranscribePage.tsx
+@@ -62,7 +62,7 @@ export default function TranscribePage() {
+   const [diarize, setDiarize] = useState(false);
+   const [keepMedia, setKeepMedia] = useState(false);
+   const [outputFormat, setOutputFormat] = useState("clean");
+-  const { incoming, takeIncoming, setWatching } = useOutletContext<LayoutContext>();
++  const { incoming, doneIncoming, setWatching } = useOutletContext<LayoutContext>();
+ 
+   useEffect(() => {
+     Promise.all([getConfig(), getProviders()]).then(([c, p]) => {
+@@ -81,10 +81,10 @@ export default function TranscribePage() {
+   const selectedProvider = providers.find((p) => p.name === provider);
+ 
+   const handleSubmit = (url: string, force = false) => {
+-    if (!config) return; // the input is disabled until config has loaded
++    if (!config) return Promise.resolve(false); // the input is disabled until config has loaded
+     setLastUrl(url);
+     // Quality only when picked here; provider only when overridden from "auto".
+-    submit({
++    return submit({
+       url,
+       quality: qualityPicked ? quality : undefined,
+       provider: provider || undefined,
+@@ -111,9 +111,12 @@ export default function TranscribePage() {
+   // Mac app: a dropped or opened file starts once config is in and no job is running here.
+   const next = incoming[0];
+   const startIncoming = useEffectEvent((path: string) => {
+-    takeIncoming();
+-    handleSubmit(path); // with the options set on this page right now
++    // with the options set on this page right now; the file leaves the stored queue only once the
++    // engine has answered (accepted; or refused, with the error on screen and Try again)
++    void handleSubmit(path).then(() => doneIncoming(path));
+   });
++  // the one being handed over is not "next" any more
++  const waiting = phase === "running" && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
+   useEffect(() => {
+     if (!next || !config || phase === "running") return;
+     const id = window.setTimeout(() => startIncoming(next), 0);
+@@ -303,10 +306,10 @@ export default function TranscribePage() {
+         <div className="w-full max-w-2xl flex flex-col items-center">
+           <ProgressTracker events={events} title={downloadedTitle} />
+           <PlanNotes plan={plan} />
+-          {incoming.length > 0 && (
++          {waiting.length > 0 && (
+             <p className="mt-4 self-start text-xs text-text-muted break-all">
+-              Up next: {incoming.map((p) => p.split(/[\\/]/).pop()).join(", ")}.{" "}
+-              {incoming.length === 1 ? "It starts" : "They start in turn"} when this one finishes.
++              Up next: {waiting.map((p) => p.split(/[\\/]/).pop()).join(", ")}.{" "}
++              {waiting.length === 1 ? "It starts" : "They start in turn"} when this one finishes.
+             </p>
+           )}
+           <button

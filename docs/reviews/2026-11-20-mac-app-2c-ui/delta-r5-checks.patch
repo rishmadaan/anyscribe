@@ -1,0 +1,117 @@
+diff --git a/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py b/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py
+index b921d59..f1674bc 100644
+--- a/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py
++++ b/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py
+@@ -118,7 +118,7 @@ ON_UNKNOWN = {**ON_OK, "uses": None, "reason": "anyscribe couldn't ask your logi
+ REFUSED = {"ok": False, "reason": "Wait for transcriptions to finish before restarting the engine."}
+ REMOVED_OK = {"ok": True, "pieces": {"launcher": "removed", "loginItem": "removed", "menuBarIcon": "stopped"}, "startAtLoginCarriedOver": True}
+ REMOVED_NOT_CARRIED = {"ok": True, "pieces": {"launcher": "removed", "loginItem": "removed", "menuBarIcon": "stopped"},
+-                       "startAtLoginCarriedOver": False, "reason": "Start at login needs your approval in System Settings, Login Items."}
++                       "startAtLoginCarriedOver": False, "reason": "This app is set to start at login, but macOS needs your approval: System Settings, General, Login Items."}
+ SKILL_MISSING = {**ON_OK, "skill": "missing", "reason": "Couldn't write to ~/.claude/skills (permission denied)."}
+ PATH_MISSING = {**ON_OK, "state": "path-missing", "uses": None}
+ ON_NO_CC = {**ON_OK, "claudeCode": False, "skill": "not-applicable"}
+@@ -126,7 +126,7 @@ OTHER_OURS = {**OTHER_ELSEWHERE, "command": "/Users/test/.local/bin/anyscribe"}
+ NO_LAUNCHER = {"installed": False, "pieces": {"launcher": "absent", "loginItem": "absent", "menuBarIcon": "not running"}}
+ LAUNCHER = {"installed": True, "pieces": {"launcher": "present", "loginItem": "present", "menuBarIcon": "running"}}
+ REMOVE_FAIL = {"ok": False, "pieces": {"launcher": "removed", "loginItem": "removed", "menuBarIcon": "still running"},
+-               "startAtLoginCarriedOver": True, "reason": "The old menu bar icon is still running."}
++               "startAtLoginCarriedOver": True, "reason": "Cleanup didn't finish: the old menu bar icon is still running."}
+ CONFLICT = {"ok": False, "needsChoice": "keep-current-or-restore",
+             "reason": "The anyscribe command in ~/.local/bin was changed since this app wrote it."}
+ SHELL_REASON = "anyscribe couldn't ask your login shell which anyscribe it runs, so this is a best guess."
+@@ -1306,7 +1306,7 @@ def s_r2_facts(r: Run):
+     p.context.close()
+ 
+     # A3/G3/G2: removal ok, carried over, the engine didn't start again: the card says so, and the banner
+-    X = "anyscribe's engine didn't start again afterwards: port 8470 is in use by another program."
++    X = "anyscribe's engine didn't start again afterwards: another program is using port 8470"  # bare, as engine.js gives it
+     OKX = {"ok": True, "pieces": {"launcher": "removed", "loginItem": "removed", "menuBarIcon": "stopped"}, "startAtLoginCarriedOver": True, "reason": X}
+     p = r.open(A, "/", cfg(launcher=LAUNCHER, firstLaunch={"oldLauncherAsked": False, "terminalAsked": True}, removalEngineStops=True,
+                            results={"oldLauncher.remove": [OKX], "restartEngine": [{"ok": False, "reason": "Port 8470 is still in use."}, {"ok": True}]}))
+@@ -1328,7 +1328,7 @@ def s_r2_facts(r: Run):
+     p.locator("[role=status]").get_by_role("button", name="Restart engine").click()
+     after_reload(p, 1500)
+     t = text(p)
+-    check(X + " It is running again now." in t, "A3: claimed after the reload, the card adds that it is running again now", t[:400])
++    check(X + ". It is running again now." in t, "A3, K4: claimed after the reload, the card adds that it is running again now, after a full stop", t[:400])
+     p.context.close()
+ 
+     # A5/G4: the Settings card names only what was there before (no reload: the engine didn't start again)
+@@ -1379,10 +1379,11 @@ def s_r2_facts(r: Run):
+ def s_r3_facts(r: Run):
+     """Round 3: a doomed page starts nothing; callbacks act only on the note present at page load."""
+     B_ = f"{FILE_DIR}/b.m4a"
+-    X = "Cleanup didn't finish: the old menu bar icon is still running. Log out and back in to stop it."
++    LOGIN = "This app is set to start at login, but macOS needs your approval: System Settings, General, Login Items."
++    X = "Cleanup didn't finish: the old menu bar icon is still running. " + LOGIN  # as old-launcher.js builds it
+     unasked_l = {"oldLauncherAsked": False, "terminalAsked": True}
+     OKX = {"ok": True, "pieces": {"launcher": "removed", "loginItem": "removed", "menuBarIcon": "stopped"},
+-           "startAtLoginCarriedOver": True, "reason": "This app is set to start at login, but macOS needs your approval."}
++           "startAtLoginCarriedOver": True, "reason": LOGIN}
+ 
+     # H1: engine down, B opened, reloadDelay 300: only the reloaded page posts B
+     p = r.open(A, "/", cfg(reloadDelay=300))
+@@ -1478,7 +1479,9 @@ def s_r3_facts(r: Run):
+     p.get_by_role("button", name="Remove the old launcher").click()
+     after_reload(p, 1400)
+     t = text(p)
+-    check(X in t and "Old menu bar icon: still running" in t and "Launcher: removed" in t, "B2: the checklist card shows the bridge's reason X")
++    check(LOGIN in t and "Cleanup didn't finish: the old menu bar icon" not in t and "Old menu bar icon: still running" in t and "Launcher: removed" in t
++          and t.index("Log out and back in to stop it, or try again.") < t.index(LOGIN),
++          "B2, K1: the checklist card shows what the bridge adds, below the advice, without repeating its opening sentence", t[:400])
+     r.shot(p, "r3-partial-reason")
+     p.context.close()
+ 
+@@ -1524,6 +1527,38 @@ def s_r3_facts(r: Run):
+     r.shot(p, "r3-completed-waiting")
+     p.context.close()
+ 
++    # K3 (lead): Up next under a running job, and under an error, while the engine is down
++    p = r.open(A, "/", cfg())
++    route_transcribe(p, {"https://www.youtube.com/watch?v=bad"})
++    p.fill("input[type=text]", "https://www.youtube.com/watch?v=run")
++    p.get_by_role("button", name="Transcribe").click()
++    p.wait_for_timeout(600)
++    p.evaluate(f"window.__openFile('{B_}')")
++    p.wait_for_timeout(400)
++    up = "Up next: b.m4a. It starts when this one finishes." in text(p)
++    p.evaluate("window.__emit({state: 'stopped', stoppedRestarting: false, lastExit: {code: 1, signal: null, reason: null}})")
++    p.wait_for_timeout(400)
++    t = text(p)
++    check(up and p.get_by_role("button", name="Stop").count() == 1 and "Up next: b.m4a. It starts once anyscribe's engine is running again." in t,
++          "K3: under a running job, Up next says it waits for the engine while the engine is down", (up, t[:300]))
++    r.shot(p, "r4-running-waiting")
++    p.context.close()
++    p = r.open(A, "/", cfg())
++    route_transcribe(p, {"https://www.youtube.com/watch?v=bad"})
++    p.fill("input[type=text]", "https://www.youtube.com/watch?v=bad")
++    p.get_by_role("button", name="Transcribe").click()
++    p.wait_for_timeout(600)
++    p.evaluate(f"window.__openFile('{B_}')")
++    p.wait_for_timeout(400)
++    up = "Up next: b.m4a. It waits until you try this one again or choose New." in text(p)
++    p.evaluate("window.__emit({state: 'stopped', stoppedRestarting: false, lastExit: {code: 1, signal: null, reason: null}})")
++    p.wait_for_timeout(400)
++    t = text(p)
++    check(up and "Up next: b.m4a. It starts once anyscribe's engine is running again." in t and [u for u, _ in p.tagged] == ["https://www.youtube.com/watch?v=bad"],
++          "K3: under an error, Up next says it waits for the engine while the engine is down; nothing posted for B", (up, p.tagged, t[:300]))
++    r.shot(p, "r4-error-waiting")
++    p.context.close()
++
+ 
+ def s_first_launch_marked(r: Run):
+     p = r.open(A, "/", cfg(launcher=LAUNCHER, firstLaunch={"oldLauncherAsked": True, "terminalAsked": True}, terminal=OFF))
+diff --git a/docs/reviews/2026-11-20-mac-app-2c-ui/checks/stub.js b/docs/reviews/2026-11-20-mac-app-2c-ui/checks/stub.js
+index 5faf945..9d46801 100644
+--- a/docs/reviews/2026-11-20-mac-app-2c-ui/checks/stub.js
++++ b/docs/reviews/2026-11-20-mac-app-2c-ui/checks/stub.js
+@@ -145,7 +145,7 @@
+       status: async () => {
+         rec("oldLauncher.status", []);
+         statusCalls += 1; // per page: cfg.slowStatus {"<call number>": ms} makes that call's answer slow
+-        // the answer is what the app knew when asked (as the real IPC handler), delivered later
++        // the answer is what the stub knew when asked, delivered later (the real handler, main.js, reads lastRemoval after its pieces read; no check depends on the difference)
+         const last = JSON.parse(sessionStorage.getItem("__stub_lastRemoval") || "null");
+         const answer = { lastRemoval: cfg.lastRemoval || null, ...take("oldLauncher.status", launcher), ...(last ? { lastRemoval: last } : {}) };
+         const slow = cfg.slowStatus || {}; // "<call>" on every page, or "<page>:<call>" on one page

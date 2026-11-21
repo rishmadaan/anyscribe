@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const logic = require('./logic');
+const { recordedPorts } = require('./old-launcher');
 
 const LOG_MAX = 5 * 1024 * 1024;
 const LOG_KEEP = 1024 * 1024;
@@ -92,16 +93,10 @@ function portTaken(port, host = '127.0.0.1') {
   });
 }
 
-function readManifestPort(home) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(home, '.anyscribe', 'desktop.json'), 'utf8')).port;
-  } catch {
-    return null; // no desktop mode installed (or an unreadable manifest)
-  }
-}
-
-async function pickPort(home) {
-  const port = logic.choosePort(readManifestPort(home));
+// saved: the port the app last ran on. Never one the old launcher's uninstall could target.
+// note(message): written to the app log.
+async function pickPort(home, saved = null, note = () => {}) {
+  const port = logic.choosePort({ saved, avoid: await recordedPorts(home, { note }) });
   return { port, taken: await portTaken(port) };
 }
 
@@ -161,13 +156,14 @@ class Engine extends EventEmitter {
     stopWaitMs = 10_000,
     pythonError = null,
     packaged = false,
+    savedPort = () => null, // the port the app last ran on (main.js keeps it in its settings)
     spawn = childProcess.spawn,
     health: healthSeam = health,
     jobs: jobsSeam = jobs,
     killGroup: killSeam = killGroup,
   }) {
     super();
-    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged });
+    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged, savedPort });
     Object.assign(this, { spawn, health: healthSeam, readJobs: jobsSeam, killGroup: killSeam });
     this.state = 'stopped';
     this.port = null;
@@ -177,6 +173,7 @@ class Engine extends EventEmitter {
     this.run = null;
     this.restartPending = false;
     this.quitting = false; // set at quit: never spawn again
+    this.stepRunning = false; // a restart's step (removing the old launcher) is running: no start until it ends
     this.crashes = new logic.CrashWindow();
   }
 
@@ -196,19 +193,20 @@ class Engine extends EventEmitter {
 
   // User-initiated start: launch, Try again. Clears the crash count.
   start() {
-    if (this.run || this.quitting) return Promise.resolve(false);
+    if (this.run || this.quitting || this.stepRunning) return Promise.resolve(false);
     this.crashes.reset();
     this.stoppedRestarting = false;
     return this._launch('starting', false);
   }
 
-  // Resolves true once this run is ready, false when it ends first.
-  _launch(state, auto) {
+  // Resolves true once this run is ready, false when it ends first. before: a step to run before
+  // anything else (a restart's step between the old engine's exit and the new spawn).
+  _launch(state, auto, before = null) {
     let settle;
     const done = new Promise((resolve) => (settle = resolve));
     let exited;
     const exitedPromise = new Promise((resolve) => (exited = resolve));
-    const run = { child: null, cancelled: false, restartRequested: false, ready: false, failure: null, auto, stdout: '', stderr: '', settle, exited, exitedPromise, next: null };
+    const run = { child: null, cancelled: false, restartRequested: false, ready: false, failure: null, auto, stdout: '', stderr: '', settle, exited, exitedPromise, next: null, before };
     this.run = run;
     this.failure = null;
     if (this.state !== state) this._set(state);
@@ -217,10 +215,25 @@ class Engine extends EventEmitter {
   }
 
   async _start(run) {
+    if (run.before) {
+      // The old engine and its group are gone and nothing is spawned yet. A stop or quit meanwhile
+      // cancels this run, and the one gate after the port check below spawns nothing (a gate
+      // here as well was an equivalent mutant: no test could tell it apart, so it is not kept).
+      // The flag lives as long as the step, not the run: a stop discards the run while the
+      // uninstaller still runs, and no start may begin until it has ended (B1).
+      this.stepRunning = true;
+      try {
+        await run.before();
+      } catch (err) {
+        this.log.shell(`the step before the restart failed: ${err.message}`);
+      } finally {
+        this.stepRunning = false;
+      }
+    }
     if (this.pythonError) return this._failBeforeSpawn(run, 'python', { reason: this.pythonError });
     const logError = this.log.probe(); // every launch, so Try again sees a repaired log
     if (logError) return this._failBeforeSpawn(run, 'log', { reason: `Can't write the log file: ${logError}` });
-    const { port, taken } = await pickPort(this.home);
+    const { port, taken } = await pickPort(this.home, this.savedPort(), (m) => this.log.shell(m));
     if (!this._current(run)) return;
     this.port = port;
     // Never attach to, or stop, whatever already holds the port.
@@ -315,7 +328,7 @@ class Engine extends EventEmitter {
     } else if (run.cancelled) {
       this.log.shell(`engine stopped (pid ${pid})`);
       if (run.restartRequested && !this.quitting) {
-        run.next = this._launch('restarting', false);
+        run.next = this._launch('restarting', false, run.relaunchBefore);
       } else {
         this.lastExit = null;
         this._set('stopped');
@@ -398,8 +411,11 @@ class Engine extends EventEmitter {
 
   // Refused while any job is pending or running, or while that cannot be known, and while
   // another restart is pending (not queued).
-  async restart() {
+  // between: an optional step run after the old engine has exited and before the new one is
+  // spawned (removing the old launcher, whose uninstall could otherwise reach this engine).
+  async restart({ between = null } = {}) {
     if (this.restartPending) return { ok: false, reason: 'A restart is already under way.' };
+    if (this.stepRunning) return { ok: false, reason: 'The old launcher is still being removed.' };
     if (this.state === 'starting' || this.state === 'restarting') {
       return { ok: false, reason: 'The engine is already starting.' };
     }
@@ -420,12 +436,15 @@ class Engine extends EventEmitter {
       let ready;
       if (run) {
         run.restartRequested = true;
+        run.relaunchBefore = between;
         await this._cancel(run, 'stopping the engine');
         ready = await (run.next ?? false);
       } else {
-        ready = await this._launch('restarting', false);
+        ready = await this._launch('restarting', false, between);
       }
-      return ready ? { ok: true, reason: null } : { ok: false, reason: this.lastExit?.reason ?? "The engine didn't start." };
+      if (ready) return { ok: true, reason: null };
+      // A failed start always records lastExit; only a stop (stop() or quitting) leaves it null.
+      return { ok: false, reason: this.lastExit ? (this.lastExit.reason ?? "The engine didn't start.") : 'The engine was stopped.' };
     } finally {
       this.restartPending = false;
     }
@@ -437,10 +456,9 @@ class Engine extends EventEmitter {
     return this.readJobs(this.port);
   }
 
-
   _tilde(p) {
     return p.startsWith(this.home) ? `~${p.slice(this.home.length)}` : p;
   }
 }
 
-module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, readManifestPort, killGroup, health, jobs };
+module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, killGroup, health, jobs };

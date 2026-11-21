@@ -1,0 +1,18 @@
+[
+ {
+  "mutant": "r1/removal-note-consumed",
+  "file": "src/components/MacCards.tsx",
+  "scenario": "removal_reload",
+  "killed": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": true
+  },
+  "mutant_details": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": "{\"at\":1795231130526,\"before\":{\"launcher\":\"present\",\"loginItem\":\"present\",\"menuBarIcon\":\"running\"}}"
+  },
+  "crash": null,
+  "restored_pass": {
+   "[component] C7: the note is kept while the result card is open, gone once it is closed": true
+  },
+  "restored_scenario_all_pass": true
+ }
+]

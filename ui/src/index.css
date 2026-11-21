@@ -124,3 +124,14 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }
+
+/* Mac app: the strip that moves the window (macOS title bar is hidden) */
+.app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.app-drag a,
+.app-drag button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}

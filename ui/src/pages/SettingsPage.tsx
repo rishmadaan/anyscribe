@@ -32,6 +32,9 @@ import { defaultModelFor, extraModelsFor, tierSummary } from "../api/models";
 import LocalSetupModal from "../components/LocalSetupModal";
 import LocalModelPicker from "../components/LocalModelPicker";
 import { RestartBanner } from "../components/LocalSetupNotes";
+import Toggle from "../components/Toggle";
+import ThisMac from "../components/ThisMac";
+import { desktop } from "../desktop";
 import { TailnetLink } from "../components/TailnetShare";
 import { REMOTE, useTailnet } from "../hooks/useTailnet";
 import {
@@ -360,8 +363,10 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Startup — hidden only where the API says unsupported. */}
-      {autostart?.supported && (
+      {/* Mac app: This Mac replaces Startup. Browser: Startup, hidden only where the API says unsupported. */}
+      {desktop ? (
+        <ThisMac workspace={config._resolved_workspace} />
+      ) : autostart?.supported && (
         <section className="mb-10">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-4">
             Startup
@@ -1643,34 +1648,6 @@ function SettingRow({
       <label className="text-sm text-text-secondary">{label}</label>
       {children}
     </div>
-  );
-}
-
-function Toggle({
-  value,
-  onChange,
-  label,
-}: {
-  value: boolean;
-  onChange: (v: boolean) => void;
-  label?: string;
-}) {
-  return (
-    <button
-      role="switch"
-      aria-checked={value}
-      aria-label={label}
-      onClick={() => onChange(!value)}
-      className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${
-        value ? "bg-amber" : "bg-border"
-      }`}
-    >
-      <div
-        className={`w-3.5 h-3.5 rounded-full bg-white transition-transform mx-0.5 ${
-          value ? "translate-x-4" : "translate-x-0"
-        }`}
-      />
-    </button>
   );
 }
 

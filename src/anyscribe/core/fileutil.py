@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import locale
 import os
-import tempfile
+import secrets
+import stat
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -30,23 +32,45 @@ def _thread_lock_for(path: Path) -> threading.Lock:
         return _THREAD_LOCKS[resolved]
 
 
-def atomic_write(path: Path, content: str) -> None:
-    """Write content atomically via temp file + os.replace().
+def atomic_write(
+    path: Path, content: str, encoding: str | None = "utf-8", new_mode: int = 0o600
+) -> None:
+    """Write content atomically: a hidden temp file in the same folder, then os.replace().
 
-    os.replace() is atomic on POSIX and Windows. On crash mid-write, the
-    original file is preserved.
+    The contract:
+    1. The final path only ever holds the whole new content or the whole old content.
+    2. The temp file is never more readable than the final file, at any moment: it is
+       created with its final mode in os.open itself.
+    3. An existing file keeps its exact permission bits.
+    4. A new file is created with ``new_mode`` (narrowed by the umask): private 0600 by
+       default, as mkstemp made them; transcripts pass 0o666, as write_text gave them.
+    5. Buffered write, flush, fsync, then os.replace; the temp is removed on any failure.
+
+    ``encoding=None`` means the platform default, the one ``write_text`` and ``read_text``
+    use without an encoding.
     """
+    data = content.encode(encoding or locale.getpreferredencoding(False))
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
-        os.write(fd, content.encode())
-        os.close(fd)
-        os.replace(tmp, str(path))
+        existing = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        existing = None
+    mode = new_mode if existing is None else existing
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    fd = os.open(tmp, flags, mode)  # outside the try: a name we did not create is never unlinked
+    try:
+        if existing is not None:
+            os.chmod(tmp, mode)  # undo the umask's narrowing, before any byte; never wider
+        with os.fdopen(fd, "wb") as f:
+            fd = None  # the file object owns it now
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
     except BaseException:
-        try:
+        if fd is not None:
             os.close(fd)
-        except OSError:
-            pass
         try:
             os.unlink(tmp)
         except OSError:

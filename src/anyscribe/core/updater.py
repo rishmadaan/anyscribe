@@ -1,11 +1,12 @@
 """Version checking and self-update system.
 
-Supports two install types:
+Supports three install types:
+  - app: the engine inside the Mac app (ANYSCRIBE_APP=1); the app updates it, never this module
   - git: editable install from cloned repo (developer workflow)
   - pip: standard pip install from PyPI or git+https:// (user workflow)
 
-Detection is automatic — if the package lives inside a git repo, it's a git install.
-Otherwise, it's a pip install.
+Detection is automatic — app mode first; then if the package lives inside a git repo,
+it's a git install. Otherwise, it's a pip install.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 from rich.console import Console
 
 from anyscribe import __version__
+from anyscribe.core.appmode import APP_UPDATE_MESSAGE, is_app
 
 console = Console()
 
@@ -28,8 +30,10 @@ PYPI_PACKAGE = "anyscribe"
 def get_install_type() -> str:
     """Detect how anyscribe was installed.
 
-    Returns 'git' (editable, from cloned repo) or 'pip' (standard package install).
+    Returns 'app' (inside the Mac app), 'git' (editable, from cloned repo) or 'pip'.
     """
+    if is_app():
+        return "app"
     repo = _find_git_repo()
     return "git" if repo else "pip"
 
@@ -233,6 +237,10 @@ def check_for_updates(quiet: bool = False) -> bool:
     current = get_current_version()
     install_type = get_install_type()
 
+    if install_type == "app":
+        if not quiet:
+            console.print(APP_UPDATE_MESSAGE)
+        return False
     if install_type == "git":
         repo_path = _find_git_repo()
         if not repo_path:
@@ -264,6 +272,9 @@ def update(force: bool = False) -> bool:
     current = get_current_version()
     install_type = get_install_type()
 
+    if install_type == "app":
+        console.print(APP_UPDATE_MESSAGE)
+        return True
     console.print(f"  Current version: v{current}")
 
     if install_type == "git":

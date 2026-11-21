@@ -35,6 +35,7 @@ from anyscribe.config.settings import (
     save_config,
     save_env,
 )
+from anyscribe.core.appmode import is_app
 from anyscribe.core.config_set import ENUMS
 from anyscribe.providers import (
     OPEN_MODEL_PROVIDERS,
@@ -263,9 +264,10 @@ def run_headless_onboard(
     _emit(on_progress, {"event": "vault_created", "path": str(vault_path)})
 
     # Optional: install the Claude Code skill. Silent best-effort — skill
-    # install failures should never break onboarding.
+    # install failures should never break onboarding. Never in the Mac app's
+    # engine, whatever the caller asked: only the app's Terminal switch installs it.
     skill_installed = False
-    if install_skill and CLAUDE_HOME.exists():
+    if install_skill and CLAUDE_HOME.exists() and not is_app():
         try:
             from anyscribe.cli.skill_cmd import copy_skill_files
 

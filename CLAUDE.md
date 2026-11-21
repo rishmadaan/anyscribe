@@ -14,7 +14,7 @@ src/anyscribe/
 ├── downloaders/   # Input handlers (base.py, local_file.py, youtube.py, instagram.py, registry.py)
 ├── providers/     # Transcription APIs (base.py, openai.py, groq.py, openrouter.py, elevenlabs.py, sargam.py, deepgram.py, local.py, local_models.py, languages.py)
 ├── vault/         # Obsidian vault management (scaffold.py, writer.py, index.py)
-├── core/          # Pipeline + routing + setup (orchestrator.py, resolve.py, quality.py, config_set.py, preflight.py, dedup.py, checkpoint.py, errors.py, fileutil.py, audio.py, deps.py, updater.py, migrate.py, local_setup.py, onboard_headless.py, tray.py, service.py, tailnet.py)
+├── core/          # Pipeline + routing + setup (orchestrator.py, resolve.py, quality.py, config_set.py, preflight.py, dedup.py, checkpoint.py, errors.py, fileutil.py, audio.py, deps.py, updater.py, migrate.py, local_setup.py, onboard_headless.py, tray.py, service.py, tailnet.py, appmode.py)
 ├── mcp/           # MCP server, stdio (server.py): 10 tools, 3 resources
 ├── skill/         # Bundled Claude Code skill (SKILL.md, references/, LICENSE)
 ├── assets/        # tray-icon.png

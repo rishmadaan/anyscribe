@@ -103,6 +103,12 @@ async def start_transcribe(req: TranscribeRequest) -> dict:
     }
 
 
+@router.get("/jobs")
+async def list_jobs() -> list[dict]:
+    """Every job this engine run knows, newest first (the Mac app's menu bar reads this)."""
+    return job_manager.summaries()
+
+
 @router.get("/jobs/{job_id}")
 async def get_job_status(job_id: str) -> JobStatusResponse:
     """Poll job status (fallback for when WebSocket isn't available)."""

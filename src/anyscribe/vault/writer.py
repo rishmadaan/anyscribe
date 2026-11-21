@@ -10,6 +10,7 @@ from pathlib import Path
 
 from anyscribe.config.paths import get_workspace_dir, AUDIO_DIR
 from anyscribe.config.settings import Settings
+from anyscribe.core.fileutil import atomic_write
 from anyscribe.downloaders.base import DownloadResult
 from anyscribe.providers.base import TranscriptResult, TranscriptSegment
 
@@ -135,7 +136,11 @@ def write_transcript(
         body_parts.append(f"\n## Transcript\n\n{transcript.text}\n")
 
     content = frontmatter + "\n" + "\n".join(body_parts)
-    out_path.write_text(content)
+    # Atomic: a process killed mid-write (the Mac app's hard exit) leaves no partial
+    # transcript for duplicate detection to mistake for a finished one. encoding=None keeps
+    # the platform default that write_text used and every transcript reader still uses;
+    # new_mode=0o666 gives a new transcript write_text's permissions (umask applies).
+    atomic_write(out_path, content, encoding=None, new_mode=0o666)
 
     # Handle media file retention
     if download.platform == "local":

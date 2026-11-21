@@ -1,0 +1,566 @@
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 9fdead9..b36a05a 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -200,11 +200,26 @@ menu bar. The engine side is four small hooks:
+   before that cleanup, so a slow Tailscale call or a failing print cannot delay
+   or skip it. If the process is still alive when it runs out (a running job or
+   open socket holding the graceful stop), it exits hard. On POSIX the engine
+-  makes itself a process group leader at startup (`os.setpgrp()`), so its
+-  children (pip, yt-dlp, ffmpeg) share its group, and the hard exit SIGKILLs that
+-  group, only when the engine leads it (never the app's group); elsewhere it
+-  calls `os._exit(1)`. A thread, not a signal, so it is meant to work on
+-  Windows; not yet run there.
++  leads its own process group (`os.setpgrp()` at startup; when the app starts it
++  detached it is already a session leader, the call fails harmlessly and it still
++  leads its group), so its children (pip, yt-dlp, ffmpeg) share its group.
++  **One exit door.** With `--watch-stdin` every way the engine ends goes through
++  `_exit_hard()`: stdin ending, SIGTERM or SIGINT (handlers installed before
++  `server.run()`; uvicorn captures the signal while serving, stops gracefully so
++  the tailnet rule is removed, then re-raises it into these handlers), the server
++  stopping by itself (`try/finally` around `server.run()`), and the deadline.
++  `_exit_hard()` SIGKILLs the engine's group, itself included, only when the
++  engine leads it (never the app's group); elsewhere it calls `os._exit(1)`. So a
++  watched engine always ends by signal 9 (exit 1 where there are no groups).
++  Invariant: when the app's engine ends, by any route, nothing it started is
++  still running. The one route the engine cannot see is a SIGKILL of its own pid;
++  the app covers that by killing the group. The stdin watch is a thread, not a
++  signal, so it is meant to work on Windows; not yet run there.
++  **Jobs: in app mode a stop is final.** The app asks before quitting while jobs
++  run; once it stops the engine, running jobs (a download, a transcription, a pip
++  install) end with it, mid-step. A transcript is either written whole or not at
++  all (`core/fileutil.atomic_write`), so a stopped job leaves nothing half-done
++  for duplicate detection to mistake for finished.
+ - **`GET /api/jobs`**: newest first, every pending and running job always (even
+   past 50), then the newest finished jobs up to 50 rows in all, as `{job_id, url,
+   status, stage, title, error, file_path, created_at, completed_at}`. The job
+diff --git a/docs/building/journal/2026-11-20-mac-app-engine-hooks.md b/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
+index cfe8581..b31dbb5 100644
+--- a/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
++++ b/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
+@@ -47,7 +47,13 @@ Python only, testable on Linux. The Electron shell is built separately in
+    the hard exit SIGKILLs that group, so pip, yt-dlp or ffmpeg children die with
+    it; it never signals a group it does not lead. Elsewhere it calls
+    `os._exit(1)`. A thread rather than a signal handler, so it is meant to work
+-   on Windows; not yet run there.
++   on Windows; not yet run there. Review round 3 made that hard exit the one
++   exit door: SIGTERM and SIGINT handlers (run after uvicorn's graceful stop)
++   and a `try/finally` around `server.run()` send every ending through it, so a
++   watched engine never leaves pip, yt-dlp or ffmpeg running. In app mode a stop
++   is final: running jobs end with the engine. Transcripts are written whole or
++   not at all (`core/fileutil.atomic_write`: buffered write, flush, fsync,
++   rename), so a stopped job never leaves a cut-off file.
+ 3. **`GET /api/jobs`**: newest first, every pending and running job (even past
+    50), then the newest finished jobs up to 50 rows in all, `{job_id, url, status,
+    stage, title, error, file_path, created_at, completed_at}`. Clean-up and the
+diff --git a/src/anyscribe/core/fileutil.py b/src/anyscribe/core/fileutil.py
+index c164b6b..092952b 100644
+--- a/src/anyscribe/core/fileutil.py
++++ b/src/anyscribe/core/fileutil.py
+@@ -4,7 +4,8 @@ from __future__ import annotations
+ 
+ import locale
+ import os
+-import tempfile
++import secrets
++import stat
+ import threading
+ from contextlib import contextmanager
+ from pathlib import Path
+@@ -32,24 +33,30 @@ def _thread_lock_for(path: Path) -> threading.Lock:
+ 
+ 
+ def atomic_write(path: Path, content: str, encoding: str | None = "utf-8") -> None:
+-    """Write content atomically via temp file + os.replace().
++    """Write content atomically: a hidden temp file in the same folder, then os.replace().
+ 
+-    os.replace() is atomic on POSIX and Windows. On crash mid-write, the
+-    original file is preserved. ``encoding=None`` means the platform default,
+-    the same one ``Path.write_text`` and ``read_text`` use without an encoding.
++    The final path only ever holds the whole new content or the previous content: the
++    buffered file object writes every byte or raises (a short write included), and the
++    data is flushed and fsynced before the rename. A new file gets the user's normal
++    permissions (umask applies, as with ``Path.write_text``); an existing file keeps its own.
++    ``encoding=None`` means the platform default, the one ``write_text`` and ``read_text``
++    use without an encoding.
+     """
+     data = content.encode(encoding or locale.getpreferredencoding(False))
+     path.parent.mkdir(parents=True, exist_ok=True)
+-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
++    tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
++    f = open(tmp, "xb")  # outside the try: a name we did not create is never unlinked
+     try:
+-        os.write(fd, data)
+-        os.close(fd)
+-        os.replace(tmp, str(path))
+-    except BaseException:
+-        try:
+-            os.close(fd)
+-        except OSError:
++        with f:
++            f.write(data)
++            f.flush()
++            os.fsync(f.fileno())
++        try:  # never widen an existing file's permissions (an owner-only config stays so)
++            os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode))
++        except FileNotFoundError:
+             pass
++        os.replace(tmp, path)
++    except BaseException:
+         try:
+             os.unlink(tmp)
+         except OSError:
+diff --git a/src/anyscribe/web/app.py b/src/anyscribe/web/app.py
+index 78f31a4..d18e0d8 100644
+--- a/src/anyscribe/web/app.py
++++ b/src/anyscribe/web/app.py
+@@ -41,14 +41,17 @@ def _host_name(host: str) -> str:
+ 
+ 
+ # A serialized origin and nothing else: scheme, host, optional port. No userinfo, path,
+-# query, fragment or spaces; "null" does not match.
+-SERIALIZED_ORIGIN = re.compile(r"https?://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(:[0-9]{1,5})?", re.I)
++# query, fragment or spaces; "null" does not match. The port is range-checked below.
++SERIALIZED_ORIGIN = re.compile(r"https?://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::([0-9]{1,5}))?", re.I)
+ 
+ 
+ def _origin_host(origin: bytes) -> str:
+-    """The host an Origin header names; "" for "null" or anything but a serialized origin."""
++    """The host an Origin header names; "" for "null" or anything but a serialized origin
++    (a port above 65535 included)."""
+     match = SERIALIZED_ORIGIN.fullmatch(origin.decode("latin-1"))
+-    return match.group(1).lower() if match else ""
++    if not match or int(match.group(2) or 0) > 65535:
++        return ""
++    return match.group(1).lower()
+ 
+ 
+ class HostCheck:
+@@ -148,11 +151,12 @@ STDIN_EXIT_GRACE_SECONDS = 10.0
+ 
+ def _lead_own_process_group() -> None:
+     """Make this engine its own process group's leader, so its children (pip, yt-dlp, ffmpeg)
+-    share its group and the hard exit can take them along. POSIX only."""
++    share its group and the hard exit can take them along. POSIX only. A session leader (the
++    app starts it detached) already leads its group; setpgrp raises there, which is fine."""
+     if hasattr(os, "setpgrp"):
+         try:
+             os.setpgrp()
+-        except OSError:  # already a session leader: stay put, _exit_hard checks leadership
++        except OSError:  # _exit_hard checks leadership, so failing here only loses the group
+             pass
+ 
+ 
+@@ -238,7 +242,13 @@ def run(
+             print(tailnet.CLEANUP_FAILED.format(error=error, port=port), flush=True)
+ 
+     if watch_stdin:
++        # One exit door: stdin end, SIGTERM, SIGINT, the server stopping by itself or the
++        # deadline all end in _exit_hard, which takes the engine's children with it.
++        # uvicorn captures SIGTERM/SIGINT while serving (graceful stop, tailnet rule removed),
++        # then restores these handlers and re-raises the signal into them.
+         _lead_own_process_group()
++        for sig in (signal.SIGTERM, signal.SIGINT):
++            signal.signal(sig, lambda *_: _exit_hard())
+         threading.Thread(target=_stop_when_stdin_closes, args=(server, share), daemon=True).start()
+ 
+     if open_browser:
+@@ -247,4 +257,10 @@ def run(
+         async def _open_browser() -> None:
+             webbrowser.open(f"http://{host}:{port}")
+ 
+-    server.run()
++    if not watch_stdin:
++        server.run()
++        return
++    try:
++        server.run()
++    finally:
++        _exit_hard()
+diff --git a/tests/test_engine_process.py b/tests/test_engine_process.py
+index 91111db..50948fe 100644
+--- a/tests/test_engine_process.py
++++ b/tests/test_engine_process.py
+@@ -8,6 +8,7 @@ Tests run in file order against one engine; the last one closes its stdin.
+ from __future__ import annotations
+ 
+ import os
++import signal
+ import socket
+ import subprocess
+ import sys
+@@ -102,7 +103,9 @@ def test_closing_stdin_stops_the_engine(engine):
+         code = proc.wait(timeout=20)
+     except subprocess.TimeoutExpired:
+         pytest.fail("engine still running 20 s after its stdin closed:\n" + log.read_text())
+-    assert code == 0, log.read_text()  # the graceful path finished, no hard exit needed
++    # The graceful stop runs, then the one exit door: on POSIX the engine kills its own group
++    # (itself included), elsewhere os._exit(1).
++    assert code == (-signal.SIGKILL if hasattr(os, "killpg") else 1), log.read_text()
+     assert not _listening(port)
+ 
+ 
+@@ -175,57 +178,102 @@ def test_a_failing_print_cannot_skip_the_hard_exit(monkeypatch):
+     assert order == ["tailnet closed", "should_exit=True", "raised OSError", "exit"]
+ 
+ 
+-_HELD_ENGINE = """
+-import sys, subprocess, time
++_WATCHED_ENGINE = """
++import asyncio, subprocess, sys, threading
++
+ from anyscribe.web import app as web_app
+ 
+-web_app.STDIN_EXIT_GRACE_SECONDS = 0.5
+-web_app._lead_own_process_group()  # what run() does with --watch-stdin
+-child = subprocess.Popen(["sleep", "300"])
+-print(child.pid, flush=True)
++port, grace, held = int(sys.argv[1]), float(sys.argv[2]), sys.argv[3] == "held"
++web_app.STDIN_EXIT_GRACE_SECONDS = grace
++create_app = web_app.create_app
++
++
++def create_engine_app():
++    app = create_app()
++
++    @app.on_event("startup")
++    async def _start_child():  # stands in for pip, yt-dlp or ffmpeg, held by a worker thread
++        def hold():
++            child = subprocess.Popen(["sleep", "300"])
++            print(child.pid, flush=True)
++            child.wait()
++
++        threading.Thread(target=hold, daemon=True).start()
++
++    if held:  # a server that cannot finish stopping (a job holding it): only the deadline ends it
++
++        @app.on_event("shutdown")
++        async def _hold():
++            await asyncio.sleep(300)
+ 
+-class Server:
+-    should_exit = False  # a server that never finishes stopping (a job holding it)
++    return app
+ 
+-class Share:
+-    port = 0
+-    def close(self):
+-        return None
+ 
+-web_app._stop_when_stdin_closes(Server(), Share())
+-time.sleep(300)
++web_app.create_app = create_engine_app
++web_app.run(port=port, open_browser=False, watch_stdin=True)
+ """
+ 
+ 
+-def _alive(pid: int) -> bool:
+-    stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+-    return stat.stdout.strip() not in ("", "Z")  # gone, or a zombie waiting to be reaped
++def _group_gone(pgid: int) -> bool:
++    try:
++        os.killpg(pgid, 0)
++    except ProcessLookupError:
++        return True
++    return False
+ 
+ 
+ @pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX only")
+-def test_the_hard_exit_takes_the_engines_children_with_it():
+-    """A real engine process, held up so the hard exit fires, with a real child (`sleep 300`,
+-    standing in for pip, yt-dlp or ffmpeg): after the deadline both are gone."""
++@pytest.mark.parametrize(
++    "stop", ["stdin closes", "SIGTERM", "stdin closes and SIGTERM", "held", "detached, SIGTERM"]
++)
++def test_the_engine_never_outlives_its_watch_by_any_route(tmp_path, stop):
++    """Invariant: when the app's engine ends, by any route, nothing it started is still running.
++    The real run(watch_stdin=True), with a `sleep 300` child held by a worker thread, stopped
++    as the app stops it: its stdin closing, SIGTERM, both (the app's quit), or with the server
++    held past the deadline; and started detached, a session leader, as the app's shell starts
++    it. Afterwards the engine's whole process group is gone."""
++    port = _free_port()
++    grace = "1" if stop == "held" else "5"
++    env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
++    env["ANYSCRIBE_APP"] = "1"
+     proc = subprocess.Popen(
+-        [sys.executable, "-c", _HELD_ENGINE],
++        [sys.executable, "-c", _WATCHED_ENGINE, str(port), grace, stop],
+         stdin=subprocess.PIPE,
+         stdout=subprocess.PIPE,
++        stderr=subprocess.DEVNULL,
+         text=True,
++        env=env,
++        start_new_session=stop.startswith("detached"),
+     )
+-    child = int(proc.stdout.readline())
++    child = pgid = None
+     try:
+-        assert _alive(child)
+-        proc.stdin.close()
+-        proc.wait(timeout=10)
+-        deadline = time.monotonic() + 5
+-        while _alive(child) and time.monotonic() < deadline:
++        child = int(proc.stdout.readline())  # printed once the server started
++        pgid = os.getpgid(proc.pid)
++        deadline = time.monotonic() + 30
++        while not _listening(port):
++            assert proc.poll() is None and time.monotonic() < deadline, "engine never listened"
+             time.sleep(0.1)
+-        assert not _alive(child), "the engine's child outlived its hard exit"
+-    finally:
+-        if proc.poll() is None:  # stop exactly the processes this test started
++        assert (pgid, os.getpgid(child)) == (proc.pid, proc.pid)  # it leads; its child is in it
++        if "stdin" in stop or stop == "held":
++            proc.stdin.close()
++        if "SIGTERM" in stop:
++            proc.send_signal(signal.SIGTERM)
++        proc.wait(timeout=20)  # reaped, so the engine is not a zombie still in its group
++        gone_by = time.monotonic() + 5
++        while not _group_gone(pgid) and time.monotonic() < gone_by:
++            time.sleep(0.1)
++        assert _group_gone(pgid), f"the engine's group outlived it ({stop}); child {child}"
++    finally:  # stop exactly what this test started: the engine, and its child only while it
++        # is still in the engine's group (a pid alone may have been reused by then)
++        if proc.poll() is None:
+             proc.kill()
+-        if _alive(child):
+-            os.kill(child, 9)
++            proc.wait()
++        if child is not None and pgid is not None:
++            try:
++                if os.getpgid(child) == pgid:
++                    os.kill(child, signal.SIGKILL)
++            except ProcessLookupError:
++                pass
+ 
+ 
+ _APP_HOLDING_AN_ENGINE = """
+diff --git a/tests/test_fileutil.py b/tests/test_fileutil.py
+index 6292546..801bef2 100644
+--- a/tests/test_fileutil.py
++++ b/tests/test_fileutil.py
+@@ -1,7 +1,12 @@
+ """Tests for atomic writes and file locking."""
+ 
++import os
++import stat
++import sys
+ import threading
+ 
++import pytest
++
+ from anyscribe.core.fileutil import atomic_write, file_lock
+ 
+ 
+@@ -29,6 +34,27 @@ class TestAtomicWrite:
+         assert len(files) == 1
+         assert files[0].name == "test.txt"
+ 
++    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
++    def test_an_existing_files_permissions_are_kept(self, tmp_path):
++        p = tmp_path / "config.yaml"
++        p.write_text("old")
++        p.chmod(0o600)
++        old = os.umask(0o022)
++        try:
++            atomic_write(p, "new")
++        finally:
++            os.umask(old)
++        assert (p.read_text(), oct(stat.S_IMODE(p.stat().st_mode))) == ("new", "0o600")
++
++    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
++    def test_a_new_file_gets_the_umask_default(self, tmp_path):
++        old = os.umask(0o022)
++        try:
++            atomic_write(tmp_path / "new.md", "x")
++        finally:
++            os.umask(old)
++        assert oct(stat.S_IMODE((tmp_path / "new.md").stat().st_mode)) == "0o644"
++
+ 
+ class TestFileLock:
+     def test_lock_allows_sequential_access(self, tmp_path):
+diff --git a/tests/test_tailnet.py b/tests/test_tailnet.py
+index 2dfdfba..b021489 100644
+--- a/tests/test_tailnet.py
++++ b/tests/test_tailnet.py
+@@ -874,6 +874,28 @@ def test_no_origin_or_a_local_origin_on_any_port_is_answered(served_app, origin)
+     assert r.status_code == 200 and r.json()["enabled"] is False
+ 
+ 
++@pytest.mark.parametrize(
++    "port, answered", [("0", True), ("65535", True), ("65536", False), ("99999", False)]
++)
++def test_an_origin_port_must_be_a_real_port(served_app, port, answered):
++    """0 to 65535 pass, anything above is not a serialized origin: on HTTP and WebSocket."""
++    from starlette.websockets import WebSocketDisconnect
++
++    origin = {"origin": f"http://localhost:{port}"}
++    c = TestClient(served_app, base_url="http://127.0.0.1:8467")
++    http = c.get("/api/tailnet", headers=origin).status_code
++    try:
++        with c.websocket_connect(
++            "/api/ws/jobs/x", headers={"host": "127.0.0.1:8467", **origin}
++        ) as ws:
++            ws.receive_json()  # the route answered
++            websocket = "answered"
++    except WebSocketDisconnect as refused:
++        websocket = refused.code
++    expected = (200, "answered") if answered else (403, 1008)
++    assert (http, websocket) == expected
++
++
+ def test_another_websites_origin_cannot_open_the_progress_websocket(served_app):
+     from starlette.websockets import WebSocketDisconnect
+ 
+diff --git a/tests/test_vault_writer.py b/tests/test_vault_writer.py
+index fb09778..3bcac7b 100644
+--- a/tests/test_vault_writer.py
++++ b/tests/test_vault_writer.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++import os
++import sys
+ from pathlib import Path
+ 
+ import pytest
+@@ -170,47 +172,84 @@ def test_write_transcript_diarized_format_without_speakers_falls_back_to_timesta
+     assert "**[0:00]** no speaker data" in content
+ 
+ 
+-def test_a_write_cut_off_part_way_leaves_no_partial_transcript(tmp_path: Path, monkeypatch) -> None:
+-    """A process killed mid-write (the Mac app's hard exit) must not leave a cut-off .md that
+-    duplicate detection then reports as already transcribed. The interruption is simulated
+-    at both write paths: half the bytes land on disk, then the write raises."""
+-    import os
+-    import types
+-
+-    from anyscribe.core import dedup, fileutil
+-
+-    class Cut(Exception):
+-        pass
+-
+-    def half_then_fail(fd, data):
+-        os.write(fd, data[: len(data) // 2])
+-        raise Cut
+-
+-    def half_text_then_fail(self, data, *a, **k):
+-        Path.write_bytes(self, data.encode()[: len(data) // 2])
+-        raise Cut
++_SHORT_WRITE = """
++import errno, json, resource, sys
++from pathlib import Path
+ 
+-    clean = write_transcript(
+-        make_download(), make_transcript(), Settings(), workspace=tmp_path / "a"
++from anyscribe.config.settings import Settings
++from anyscribe.core.fileutil import atomic_write
++from anyscribe.downloaders.base import DownloadResult
++from anyscribe.providers.base import TranscriptResult
++from anyscribe.vault.writer import write_transcript
++
++folder = Path(sys.argv[1])
++# The kernel accepts the first 64 KB of a write past this size, then refuses: a real short write.
++resource.setrlimit(resource.RLIMIT_FSIZE, (64 * 1024, resource.getrlimit(resource.RLIMIT_FSIZE)[1]))
++seen = {}
++for name, write in [
++    ("file", lambda: atomic_write(folder / "file" / "t.md", "x" * 1024 * 1024)),
++    ("transcript", lambda: write_transcript(
++        DownloadResult(audio_path=Path("/nonexistent.mp3"), title="Big Talk", duration=90.0,
++                       platform="youtube", original_url="https://www.youtube.com/watch?v=big"),
++        TranscriptResult(text="word " * 250_000, language="en"),
++        Settings(), workspace=folder / "vault")),
++]:
++    try:
++        write()
++        seen[name] = "no error"
++    except OSError as e:
++        seen[name] = errno.errorcode.get(e.errno, str(e.errno))
++print(json.dumps(seen))
++"""
++
++
++@pytest.mark.skipif(sys.platform == "win32", reason="RLIMIT_FSIZE is POSIX only")
++def test_a_short_write_never_reaches_the_final_path(tmp_path: Path, monkeypatch) -> None:
++    """Invariant: a transcript's final path only ever holds the whole content (or what it held
++    before). A real short write, from the kernel's file-size limit, must raise and publish
++    nothing: not a cut-off file, which duplicate detection would take as already done."""
++    import json
++    import subprocess
++
++    from anyscribe.core import dedup
++
++    (tmp_path / "file").mkdir()
++    (tmp_path / "file" / "t.md").write_text("old")
++    done = subprocess.run(
++        [sys.executable, "-c", _SHORT_WRITE, str(tmp_path)],
++        capture_output=True,
++        text=True,
++        timeout=60,
+     )
+-    expected = clean.read_text()
+-
+-    ws = tmp_path / "b"
+-    with monkeypatch.context() as m:
+-        m.setattr(fileutil, "os", types.SimpleNamespace(**{**vars(os), "write": half_then_fail}))
+-        m.setattr(Path, "write_text", half_text_then_fail)
+-        with pytest.raises(Cut):
+-            write_transcript(make_download(), make_transcript(), Settings(), workspace=ws)
+-
++    assert done.returncode == 0, done.stderr
++    errors = json.loads(done.stdout)
++    # Over a file holding "old": the error, what the file holds, every name in its folder.
++    file_dir = tmp_path / "file"
++    assert (errors["file"], (file_dir / "t.md").read_text(), sorted(os.listdir(file_dir))) == (
++        "EFBIG",
++        "old",
++        ["t.md"],
++    )
++    # A new transcript: the error, and nothing at all in its folder.
++    ws = tmp_path / "vault"
+     out_dir = ws / "sources" / "youtube"
+-    left = {p.name: p.read_text() for p in out_dir.iterdir()}
+-    assert left == {}  # neither a cut-off .md nor a stray temp file
++    assert (errors["transcript"], sorted(os.listdir(out_dir))) == ("EFBIG", [])
+     monkeypatch.setattr(dedup, "get_workspace_dir", lambda: ws)
+-    assert dedup.find_existing_transcript(make_download().original_url) is None  # a retry runs
++    assert dedup.find_existing_transcript("https://www.youtube.com/watch?v=big") is None
++
+ 
+-    retried = write_transcript(make_download(), make_transcript(), Settings(), workspace=ws)
+-    assert retried == out_dir / "my-test-video.md"
+-    assert retried.read_text() == expected
++@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
++@pytest.mark.parametrize("umask", [0o022, 0o002])
++def test_a_transcript_gets_the_same_permissions_as_write_text(tmp_path: Path, umask) -> None:
++    """The atomic write must not make transcripts owner-only: same bits as write_text."""
++    old = os.umask(umask)
++    try:
++        out = write_transcript(make_download(), make_transcript(), Settings(), workspace=tmp_path)
++        plain = tmp_path / "plain.md"
++        plain.write_text("x")
++    finally:
++        os.umask(old)
++    assert oct(out.stat().st_mode & 0o777) == oct(plain.stat().st_mode & 0o777)
+ 
+ 
+ def test_transcript_keeps_the_platform_encoding(tmp_path: Path, monkeypatch) -> None:
+@@ -226,7 +265,8 @@ def test_transcript_keeps_the_platform_encoding(tmp_path: Path, monkeypatch) ->
+     ref = tmp_path / "ref.md"
+     # What write_text produces under the current locale. newline="\n": write_text wrote \r\n on
+     # Windows; every reader opens in text mode, which reads both the same.
+-    ref.write_text(out.read_text(), newline="\n")
++    text = out.read_text()  # the transcript as text, kept before the encoding changes below
++    ref.write_text(text, newline="\n")
+     assert out.read_bytes() == ref.read_bytes()
+ 
+     # A Windows code page: the writer must follow it, not force UTF-8.
+@@ -234,5 +274,5 @@ def test_transcript_keeps_the_platform_encoding(tmp_path: Path, monkeypatch) ->
+     cp = write_transcript(
+         make_download(title=title), make_transcript(), Settings(), workspace=tmp_path / "b"
+     )
+-    assert cp.read_bytes() == out.read_bytes().decode("utf-8").encode("cp1252")
++    assert cp.read_bytes() == text.encode("cp1252")
+     assert b"Caf\xe9 Cr\xe8me" in cp.read_bytes()

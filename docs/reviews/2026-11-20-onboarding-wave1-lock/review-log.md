@@ -40,3 +40,5 @@ Cap reached (round 2 of 2 at M) with one UPHELD should-fix (R2LF1, a display-onl
 | 2 | 1 | 152,487 | 3.8 | 1 | 126,478 | 2.9 |
 
 A round run on the other machine is added by running this there. Claude usage counted once per message id; Codex tokens are the last figure Codex prints. A duration shown as ? could not be measured (no rollout file or no timestamps): unknown, not zero. Codex children in T3 and anything on the other machine are not counted here. The lead's own tokens are not separable and are not counted.
+
+Owner check closed 2026-11-21: the final S11 wording is kept as shipped ("Close setup? The download keeps going in the background while anyscribe stays open. Your choices on these screens are saved only when you click Finish. To come back: Settings, then Run setup wizard."); owner: "go with your recommendation".

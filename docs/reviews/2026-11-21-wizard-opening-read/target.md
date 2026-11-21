@@ -1,0 +1,39 @@
+# Target
+
+- **Repo:** `rishmadaan/anyscribe` (public). The live checkout `~/labs/projects/anyscribe` stays on `main`. Do not edit, build or commit there. Reading it and using its `.venv` and `ui/node_modules` (below) is fine.
+- **Worktree:** `~/labs/projects/anyscribe-wt/wizard-l1`, branch `fix/wizard-opening-read`, from `main` @ `5fb5d1e` plus the packet commit. The prompt names the exact SHA. Check `git rev-parse HEAD` and the branch before editing, and stop if they differ.
+- **Dependencies:** the worktree has no `ui/node_modules` and no venv.
+  - Node: link `ui/node_modules` to `~/labs/projects/anyscribe/ui/node_modules`. The link is a file to git: `ui/node_modules/` in .gitignore matches directories only. Never stage it; check `git status` before each commit.
+  - Python: run the main checkout's `~/labs/projects/anyscribe/.venv/bin/python` with `PYTHONPATH=<worktree>/src`, so the worktree's code and its rebuilt `src/anyscribe/web/static` win. Confirm with `python -c "import anyscribe,sys; print(anyscribe.__file__)"`.
+- **In scope:**
+  - `ui/src/components/OnboardingWizard.tsx`.
+  - `src/anyscribe/web/static/**`, rebuilt only.
+  - `BACKLOG.md`.
+  - `docs/building/journal/2026-11-20-onboarding-wave1.md`.
+  - `CHANGELOG.md`, only if a line overclaims; see spec.md.
+  - This packet's `proof.md`.
+- **Must not change:**
+  - Anything else under `ui/src` and `src/anyscribe/`.
+  - The installers, `landing/`, `desktop/`.
+  - `tests/`; the proof uses the tab harness.
+  - The version, `.github/`.
+  - The other review packets under `docs/reviews/`.
+- **Test folders:** `tests/` (pytest), `desktop/test*`. Leave them alone.
+- **CI checks to match:**
+  - `ruff check src tests scripts`
+  - `cd ui && npm run lint && npm run build`, then `git diff --exit-code -- src/anyscribe/web/static` must be clean after you commit the rebuilt bundle.
+  - `python scripts/build-docs.py && python scripts/check-docs.py`, only if docs change.
+  - `pytest -q`
+- **Owner data:**
+  - Never read `~/.anyscribe/.env` or any key. Never run against the owner's real `~/.anyscribe` or `~/anyscribe`.
+  - Real runs use `HOME=<a new empty folder under ~/.review-runs/2026-11-21-wizard-opening-read/>` and ports 8471 to 8479 with `--local-only`.
+  - Never stop or touch the owner's anyscribe server (8457 and up), Docker containers, or another session's processes (the Mac app work uses other ports and worktrees). Stop only your own processes, by a pid whose command line you have read.
+- **Disk:** 30 GB free.
+  - A real local-engine setup downloads engines and a model into the throwaway HOME. Use the smallest model, delete that HOME's caches when done, and report `df -h ~` before and after.
+  - Stop and report if free space drops under 15 GB.
+- **The tab harness:**
+  - Yesterday's harness is copied to `~/.review-runs/2026-11-21-wizard-opening-read/instruments-from-lock/` (`harness.js`, `cases.js`, `lead-r2.js`, `serve.py`, `mutate.py`, `slowproxy.py`). Older copies are `*.r0`/`*.r1`.
+  - Work in a copy at `~/.review-runs/2026-11-21-wizard-opening-read/instruments/`, add the new cases there, and never commit it.
+  - Results go to its `results/`, screenshots to `~/.review-runs/2026-11-21-wizard-opening-read/screens/`.
+  - Read `harness.js`'s header for how it fakes the status, setup and log endpoints, and how a preview tab loads it.
+- **Commits:** commit on your branch only, after each step (code, bundle, records). Messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push, open a PR or merge.

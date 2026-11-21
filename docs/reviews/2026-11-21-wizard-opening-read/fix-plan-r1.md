@@ -9,13 +9,13 @@ Close it in code. Do not record it as residue. Replace "left: drop" with "heard:
 1. **The shell keeps `heardRef`.** It turns true, and stays true for the rest of this wizard, once the local step has accepted a status read of its own or sent a start request, on any visit. The step reports this through one new stable callback, for example `onHeard()`. Call it in three places:
    - where the step accepts a status (the tick's accepted branch, and `checkFfmpeg`'s `setStatus`);
    - in `handleStartSetup`, before the request is sent.
-   
+
    It never touches `watched` or `confirmClose`. The step stays the one writer of those (spec rule 3).
 2. **The opening reply, when it says `setup_running`:**
    - **heard:** drop it.
    - **The local step has never been shown:** as today. Write the form, hand over the reply, route to `offline_opt_in`.
    - **Otherwise** (showing now, or shown and left): `setAdopt(reply)` only, with neither the form nor the route touched. A mounted step takes it now. If the person is elsewhere, the reply is held, and their next visit to the step takes it at mount.
-   
+
    The three-state ref can shrink to "ever shown" if nothing else needs it.
 3. **The step keeps its `status === null` guard.** It covers a different ordering from `heardRef`: the hand-off and the step's own newer read being accepted in the same render batch. Mutation-test it. If no harness ordering can tell it apart (try both replies resolving at the same moment), trace whether it is equivalent and report it. Do not remove it: the lead decides.
 4. **The "no start sent" half stays out of the step.** `heardRef` now covers starts on every visit. Show by trace why a start cannot come between a hand-off and its take within one mount.

@@ -169,3 +169,49 @@ is allowed after a warning.
   button, now "Incomplete: download again", and the same claim in the
   configuration page and the skill's command reference). `anyscribe model
   info`'s "Resume the download" line is server-side code and a wave 2 item.
+
+## Follow-up 2 (2026-11-21): the opening read lands in order (review L1)
+
+When the wizard opens it reads the local setup's status once, so a reload
+during a download opens on it. That reply was applied whenever it landed. Two
+orderings went wrong (lock review, L1):
+
+- **Late reply, step already showing, its reads failing.** The step had
+  mounted idle and only took the "running" knowledge at mount, so the late
+  reply changed nothing: Escape, a click outside and Skip closed at once (Skip
+  also set the dismissed flag) and Back stayed on while a download ran.
+- **Stale reply after a newer setup.** A "running" reply sent before anything
+  else, landing after a newer setup had finished and the wizard was on
+  Workspace, routed back to the local step and watched from that old reply.
+  The same path also overwrote the person's pick with the old reply's model.
+
+The rule chosen: what the wizard has heard when the reply lands decides what
+the reply may do. Once the local step, on any visit, has accepted a status
+read of its own, that read is newer than the reply, so it is dropped (a
+start needs such a read first, because the pick comes from it). Otherwise, if the local step was never shown: as before (set the
+form, route, watch from the first render). If it was shown, the reply is
+handed to the step without touching the form or the route: a step on screen
+takes it now, and a step the person left takes it at their next visit. The
+step takes it only if it has no accepted read of its own yet, which covers a
+read accepted in the same moment as the hand-off, and then does what its own
+running read does. Both facts are refs set when they happen, never what the
+read's closure saw when it was sent. The step stays the one writer of "a
+setup is watched". The opening read is also cancelled when the wizard closes.
+
+Round 1 of the review found that the first version's rule, "the person left
+the local step: drop", also dropped a reply nothing newer had contradicted
+(every read of the first visit failed, then Back and return), so it became
+"heard: drop".
+
+Round 2 (the cap) found that a reply held for the local step while another
+screen showed (Provider, API key, Workspace, All set) did not make closing
+ask. As the owner chose, the lead fixed it after the cap: closing also asks
+while a running reply is held for the step, and Finish forgets a held reply so
+the Mac app's Terminal step closes as before. These two changes are proven by
+cases that fail on the previous build but were not re-reviewed.
+
+Proof: tab-harness cases for each ordering above, for Back and return, and for
+two replies landing in the same moment, with the existing cases still
+passing; each guard was removed in turn and a named case failed, and a real
+reload during a real download opened on it and asked before closing
+(`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).

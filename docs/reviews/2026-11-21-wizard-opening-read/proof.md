@@ -197,7 +197,7 @@ Old build for "fails before": `8d53ebc` (`index-CJbYAiX1.js`), from `git archive
 - The three-state ref is now two refs:
   - `localShownRef`: the local step was ever asked for. It is set inside the `setStep` wrapper, as before.
   - `heardRef`: the step heard something newer than the reply.
-- `heardRef` is set by one stable callback, `onHeard`, which the step calls in three places:
+- `heardRef` is set by one stable callback, `onHeard`. As first built, the step called it in three places (the lead later removed the last two as equivalent; see "Lead's removal of the three equivalent spots"):
   - in the tick's accepted branch, right after `setStatus(s)`;
   - in `checkFfmpeg`, after `setStatus(s)`;
   - in `handleStartSetup`, before the start is sent (after `if (!selected) return`).
@@ -236,13 +236,13 @@ The plan asked for each new case to fail on 8d53ebc. L1G and L1H cannot: 8d53ebc
 | **Mii_status**: the step's `status === null` | `if (adopt && adopt !== taken)` | **L1S** (`results/r1-Mii_status.json`) | With both replies landing in the same moment: S13 line, Back `disabled`, "Setting up… [disabled]", `small` picked. Escape asked first instead of closing. Every other case passes, so this guard is not equivalent: L1S is the ordering only it covers. |
 | **Mhold**: hold for the next mount | the reply is handed over only if the step is on screen; otherwise dropped | **L1F** (`results/r1-Mhold.json`) | On return: no S13 line, Back `enabled`, "Install now [disabled]". Escape closed at once. Every other case passes. |
 | **Mshown**: the whole hand-off after the step was shown | `if (localShownRef.current) return;` | **L1A**, **L1E**, **L1F** (`results/r1-Mshown.json`) | Each: not watched after the reply or the return, and Escape closed at once. |
-| **Mheard_start**: the start no longer reports heard | `onHeard()` removed from `handleStartSetup` | **survives**: L1B, L1D, L1H, R3C2 pass (`results/r1-Mheard_start.json`) | **Equivalent, not a weak test** (traced below). Kept; the lead decides. |
+| **Mheard_start**: the start no longer reports heard | `onHeard()` removed from `handleStartSetup` | **survives**: L1B, L1D, L1H, R3C2 pass (`results/r1-Mheard_start.json`) | **Equivalent, not a weak test** (traced below). **Removed by the lead's decision** (`aaf76f8`). |
 
 Why Mheard_start is equivalent: a start needs `selected`. `selected` gets a value in one of two ways:
 - From an accepted read on some visit: the recommendation, a card click or `onPresetSize`, all of which need `status`. That read already called `onHeard`.
 - From a hand-off the step took: the never-shown branch, or a held reply taken at mount. The step then watches, the start button stays disabled, and Back is off until an accepted read ends watching. That read calls `onHeard`.
 
-So `heardRef` is always true before any start, and the start's own call is never the one that sets it. The same trace covers `checkFfmpeg`'s call: "Check again" exists only when `status` shows ffmpeg missing, so a read was already accepted. I did not build that mutant.
+So `heardRef` is always true before any start, and the start's own call is never the one that sets it. The same trace covers `checkFfmpeg`'s call: "Check again" exists only when `status` shows ffmpeg missing, so a read was already accepted. I did not build that mutant. **Both calls were removed by the lead's decision** (`aaf76f8`). The lead checked the trace against the code: a pick without an accepted read comes only from the opening reply's form write or a taken hand-off, and both leave the step watching; the ffmpeg notice renders only once `status` is set.
 
 ### F2: a real walk on the bundle that ships. DONE
 
@@ -275,7 +275,7 @@ So `heardRef` is always true before any start, and the start's own call is never
 - **Mutant Mlive** (only `live = false` removed, the abort kept): **survives** L1X, L1A and R3C1 (`results/r1-Mlive.json`).
   - It is equivalent in practice. Once the cleanup aborts, `limited`'s promise rejects and the `.then` never runs. `live` matters only if the request had already settled but its `.then` had not yet run when the cleanup ran, which is a window of a few microtasks.
   - StrictMode's replay runs mount, cleanup and mount within one commit, before any reply can arrive. A wizard closed by a click unmounts in that click's task.
-  - Kept, as the plan names it; the lead decides.
+  - **Removed by the lead's decision** (`aaf76f8`). The `AbortController` and `ctl.abort()` in the cleanup stay.
 - **proof.md corrected:** "What I could not prove" no longer says the bundle has no StrictMode. `main.tsx` wraps the root in it; production React runs each effect once.
 
 ### F3 and the records. DONE (`1fbc25b`)
@@ -296,8 +296,8 @@ T1, T1_500, T2, T3, T4, T4_notRunning, T4_refused, T5, T5_late, T6, T7, T8, T9, 
 ### Where the plan is wrong, or worth a second look
 
 1. "Each failing on 8d53ebc" cannot hold for the heard-on-first-visit and refused-start cases (L1G, L1H). 8d53ebc drops those replies too, by its "left" rule. They pass there and serve as the kill cases for the new `heardRef` guard (Mh).
-2. The refused-start case cannot isolate "a start" as what was heard. A start needs a pick, and on a first visit the pick needs an accepted read, which has already set heard. The start's own `onHeard()` call is an equivalent mutant (Mheard_start), kept as the plan names it.
-3. The `live` flag is equivalent in practice once the abort is there (Mlive). Kept as the plan names it.
+2. The refused-start case cannot isolate "a start" as what was heard. A start needs a pick, and on a first visit the pick needs an accepted read, which has already set heard. The start's own `onHeard()` call is an equivalent mutant (Mheard_start). **Removed by the lead**, together with `checkFfmpeg`'s call.
+3. The `live` flag is equivalent in practice once the abort is there (Mlive). **Removed by the lead.**
 
 ### Cleanup
 
@@ -308,3 +308,33 @@ T1, T1_500, T2, T3, T4, T4_notRunning, T4_refused, T5, T5_late, T6, T7, T8, T9, 
 - No listener is left on 8470 to 8479. My preview tab is closed.
 - Deleted the throwaway homes (`home-r1new`, `home-r1old`, `home-r1mut`, `home-r1real`).
 - Left in the run folder: the instruments, results, screenshots, `old-8d53ebc/`, `mut-src/` (the last mutant's build), `devcfg/` (config plus a node_modules symlink) and `wizard-with-c2.tsx` (a working copy).
+
+### Lead's removal of the three equivalent spots (round 1, after the fix)
+
+The lead's decision follows the house rule that a guard no test can tell apart is removed. It is recorded in fix-plan-r1.md's C1/F1 section.
+
+**Commits:**
+- `aaf76f8` removes the opening effect's `live` flag; the `AbortController` and the cleanup `() => ctl.abort()` stay. It also removes `onHeard()` from `handleStartSetup` and from `checkFfmpeg`. The shell's comment, the `onHeard` prop's doc comment and the step's comment now say "heard" means the step accepted a status read of its own on any visit, since a start needs one first. `onHeard()` has one call site left, the tick's accepted branch.
+- `9449ff8` updates the records: a line in fix-plan-r1.md, spec.md's round 1 line, the journal's Follow-up 2 and the BACKLOG L1 line. None of them says "a read or a start" any more; I checked with `grep`.
+- `e17d174` is the rebuilt bundle, **`index-CDPOZTVX.js`**. Lint and build ran first, and the static diff was clean after.
+- This section's commit.
+
+**Full harness on `index-CDPOZTVX.js`: 37 of 37 pass** (`results/r1b-final-all.json`). The server had a new empty HOME, port 8471, and nothing else running.
+
+**Mutants on the final code** (built into the separate copy of the package on 8473; the worktree source was restored with `git checkout` after each build). The mutation strings for Mh and Mc2 were updated to the new code shape.
+
+| Mutant | Killed by | What the failing case saw |
+|---|---|---|
+| **Mh** (heardRef's drop) | **L1B**, **L1G**, **L1H** (`results/r1b-Mh.json`) | L1G and L1H: the second visit watched a stale reply (S13 line, Back `disabled`). When reads came back, it showed S14 with `small` picked. L1B: after Back from Workspace, S14 with `small` picked. |
+| **Mii_status** (the step's `status === null`) | **L1S** only (`results/r1b-Mii_status.json`) | Both replies released in the same moment: S13 line, Back `disabled`, "Setting up…"; Escape asked instead of closing. |
+| **Mhold** (holding for the next mount) | **L1F** (`results/r1b-Mhold.json`) | On return: not watched, Back `enabled`; Escape closed at once. |
+| **Mshown** (no hand-off at all once shown) | **L1A**, **L1E**, **L1F** (`results/r1b-Mshown.json`) | Not watched after the reply or the return; Escape closed at once. |
+| **Mc2** (no cleanup) | **L1X** (`results/r1b-Mc2.json`) | The opening request was `answered 200` at 3220 ms after the wizard had closed, where it should have ended `AbortError`. |
+
+**Checks:** `npm run lint` found nothing. `npm run build` produced `index-CDPOZTVX.js`, the committed name. `git diff --exit-code -- src/anyscribe/web/static` was clean. `git diff --check 13944d6..HEAD` was clean.
+
+**Not re-run after this removal:**
+- The real walk (F2). It ran on `index-DdNfqDJq.js`. This change only drops the `live` flag and two `onHeard()` calls; the reload path itself is unchanged.
+- The development-mode StrictMode cases (SM1, SM2). With the `live` flag gone, the first request is still aborted by the cleanup, which is what those cases asserted.
+
+**Cleanup:** I stopped 8471 (pid 1912019), `serve.py` on 8477 (1912020) and the mutant server on 8473 (1928842) by pid after reading each command line. No listener is left on 8470 to 8479. My preview tab is closed, and `home-r1bnew` and `home-r1bmut` are deleted. `df -h ~` shows 30 GB free.

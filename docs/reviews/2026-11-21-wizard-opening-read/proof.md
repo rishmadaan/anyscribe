@@ -411,3 +411,60 @@ The old bundle never reached Skip in the four "must ask" cases, because Escape h
 - Deleted `home-r2new`, `home-r2old` and `home-r2mut`.
 - `df -h ~` shows 30 GB free.
 - Only proof.md is committed.
+
+### Follow-on: Finish forgets a held reply (the Terminal step)
+
+**The lead's change**, made in response to the Terminal-step concern above:
+- `1395710`: `setAdopt(null)` on a successful save, before `setStep("terminal")`.
+- `cd988eb`: bundle `index-CsnycLZe.js`.
+
+Test only. The branch was checked at `cd988eb` before starting, and no code under `ui/src` or `src/` changed.
+
+**How it was run.**
+- The script is `~/.review-runs/2026-11-21-wizard-opening-read/instruments/mac_terminal.py` (not committed), run with `/usr/bin/python3` and Playwright.
+- Before the page loads, it injects the 2c-ui review's `checks/stub.js` (`window.anyscribeDesktop`: Mac, Terminal not yet asked, no old launcher) and this run's fetch `harness.js`.
+- The harness holds the opening read for 7 s and then answers "running Whisper Small". Every other local status read fails. The harness records the onboarding save without sending it.
+- Each bundle ran on its own engine, with a new empty HOME and `--local-only`:
+  - new: the worktree at `cd988eb`, `index-CsnycLZe.js`, on port 8471;
+  - old: `a184b18`, from `git archive`, `index-B5rC99Gz.js`, on port 8472.
+
+**Sequence.**
+1. Cloud path (OpenAI, test key), the optional local step with local left off, then "Skip, next" before any accepted local read (checked: 0 accepted status reads).
+2. The held running reply lands on Workspace.
+3. Next to All set, where Escape is pressed: it must ask first.
+4. Keep setting up, then Finish: the save is recorded and the Terminal step ("One last thing") shows.
+5. Escape on the Terminal step.
+
+| Check | `index-B5rC99Gz.js` (a184b18) | `index-CsnycLZe.js` (cd988eb) |
+|---|---|---|
+| All set, before Finish: Escape asks first (focus on Keep setting up, flag `null`) | pass | **PASS** |
+| Finish: the save is recorded (provider `openai`); the Terminal step shows | pass | **PASS** |
+| Terminal step: Escape opens no "Close setup?" | **FAIL**: `{"open":true,"title":"One last thing","s11":true,"focus":"Keep setting up","flag":null}` | **PASS** |
+| offerTerminal is answered once: the stub recorded exactly `firstLaunch.mark("terminalAsked")` | pass | **PASS** |
+| The wizard closes with the flag `"1"` (`dismiss(true)`, as before R2C1) | **FAIL**: still open, flag `null` | **PASS** |
+
+Results: `results/mac-terminal-CsnycLZe.json` and `results/mac-terminal-B5rC99Gz.json`.
+
+**Full harness on `index-CsnycLZe.js`: 43 of 43 pass** (`results/r2b-final-all.json`). This includes R2P, R2K, R2W, R2D, R2N1 and R2N2.
+
+**The 2c-ui check kit's wizard last-step checks.**
+- I ran a copy of `checks/check_ui.py` from the run folder, `checkui/check_ui.py` (not committed), against this worktree's code and bundle: `--only wizard,wizard_escape,wizard_browser --no-shots`.
+- The copy differs from the original in three lines only:
+  - `WORKTREE` is pinned to this worktree;
+  - engine ports come from 8475, 8476, 8478 and 8479 instead of any free port;
+  - engines start with `--local-only`.
+- Its temporary homes went under the run folder, and it removed them itself.
+- **5 passed, 0 failed:**
+  - "new person: the wizard, not the separate card";
+  - "Terminal is the wizard's last step, titled One last thing (F13)";
+  - "Skip for now marks and closes the wizard, no second card";
+  - "C6: Escape on the wizard's Terminal step is Skip for now: marked, nothing turned on";
+  - "browser: Finish closes the wizard (no Terminal step)".
+- These checks walk with a real "not running" status, so they cover the Terminal step's normal path. The held-reply path is the `mac_terminal.py` run above.
+
+**Cleanup.**
+- Stopped by pid after reading each command line: 8471 (2000249), 8472 (2000250) and `serve.py` on 8477 (2000887). `check_ui.py` stopped its own four engines by pid.
+- No listener is left on 8470 to 8479, and my preview tab is closed.
+- Deleted `home-r2bnew` and `home-r2bold`.
+- `df -h ~` shows 30 GB free.
+- Only proof.md is committed.

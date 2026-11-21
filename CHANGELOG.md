@@ -11,13 +11,13 @@ SemVer; while we're on `0.x`, a minor bump can carry a breaking change.
 
 ---
 
-## Unreleased
+## 0.20.0 — 2026-11-21
 
 Getting in: fixes for the places a first-time user got stuck during install
 and setup, from the 2026-11-20 onboarding audit. The installer and website
-changes reach you as soon as they are merged (the install line always fetches
-the latest installer); the dashboard and transcription changes arrive with
-the next release.
+changes went live when they were merged (the install line always fetches the
+latest installer); the dashboard and transcription changes arrive with this
+release.
 
 **Installing**
 - **Mac without Homebrew:** the one-line installer now lets Homebrew ask for
@@ -75,6 +75,22 @@ the next release.
   the transcript page shows it formatted (headings, quotes, bold, links)
   instead of raw markdown. The "already transcribed" link now also works with
   Windows file paths.
+
+**Security and reliability**
+- **Other websites can no longer send commands to your anyscribe.** The
+  local server now refuses any request your browser marks as coming from
+  another website. Before, a page open in your browser could ask a running
+  anyscribe to shut down or to take an upload.
+- **No half-written files.** Transcripts and settings are written to a
+  temporary file and then swapped into place, so a crash or a forced quit
+  never leaves a partly written file. File permissions are unchanged.
+
+**For the coming Mac app**
+- The code for a Mac app is in the repo (`desktop/`), with the engine support
+  it needs: `GET /api/jobs`, the engine's `pid` in `/api/health`, and
+  app-only behaviour that switches on only inside the app. Nothing changes
+  when you use anyscribe from a browser or the terminal, and the Mac app
+  itself isn't released yet.
 
 ---
 

@@ -252,6 +252,7 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
             ? form.localModel || undefined
             : undefined,
       });
+      setAdopt(null); // saved: a held reply has nothing left to warn about (R2C1)
       if (offerTerminal) setStep("terminal");
       else dismiss(true);
     } catch (e) {

@@ -169,3 +169,37 @@ is allowed after a warning.
   button, now "Incomplete: download again", and the same claim in the
   configuration page and the skill's command reference). `anyscribe model
   info`'s "Resume the download" line is server-side code and a wave 2 item.
+
+## Follow-up 2 (2026-11-21): the opening read lands in order (review L1)
+
+When the wizard opens it reads the local setup's status once, so a reload
+during a download opens on it. That reply was applied whenever it landed. Two
+orderings went wrong (lock review, L1):
+
+- **Late reply, step already showing, its reads failing.** The step had
+  mounted idle and only took the "running" knowledge at mount, so the late
+  reply changed nothing: Escape, a click outside and Skip closed at once (Skip
+  also set the dismissed flag) and Back stayed on while a download ran.
+- **Stale reply after a newer setup.** A "running" reply sent before anything
+  else, landing after a newer setup had finished and the wizard was on
+  Workspace, routed back to the local step and watched from that old reply.
+  The same path also overwrote the person's pick with the old reply's model.
+
+The rule chosen: where the wizard is when the reply lands decides what the
+reply may do. The local step never shown: as before (set the form, route,
+watch from the first render). Showing now: the reply is handed to the step,
+and the step watches it only if nothing newer has spoken (no accepted status
+read of its own and no start sent), doing what its own running read does.
+Shown and since left: dropped, because the step's own reads and any start it
+sent are newer. "Left" stays left for the rest of that wizard, so a second
+visit does not take a reply older than the first. Where the wizard is comes
+from a ref set together with the step, never from what the read's closure
+saw when it was sent. The step stays the one writer of "a setup is watched".
+
+Proof: three new tab-harness cases, one per ordering above plus "the step
+already read not running", each failing on the previous build and passing on
+the new one, and the existing cases still pass. Each new guard was removed in
+turn and a named case failed; one half of the step's check (no start sent) is
+unreachable while the other half and the "left stays left" rule hold, and is
+kept as the decision wrote it
+(`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).

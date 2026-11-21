@@ -21,7 +21,7 @@ Raw evidence lives outside the repo in `~/.review-runs/2026-11-21-wizard-opening
   - running and `showing`: `setAdopt(reply)` only; the form and the route are untouched;
   - running and `never`: as before (form set to local, on, the running model; reply handed over; route to `offline_opt_in`).
 - **The step decides (rule 2).** `adopt` is now the reply itself (`LocalStatusResponse | null`), not a boolean. At mount, `useState(adopt !== null)` as before, so watching is true on the first render. A new effect accepts a reply handed after mount only if `status === null` and `startGenRef.current === 0`; accepting does what the step's own running read does: `onSetEnabled(true)`, `onSelectSize(setup_last_model)` when set, `setWatching(true)`. Otherwise nothing happens, and the form is never written for an ignored reply.
-- **Kept (rules 3 and 4).** `onRunning` still has one call site (`git grep -n "onRunning(" -- ':!docs/reviews'` gives `OnboardingWizard.tsx:774` only); `watched` and `confirmClose` are still set only through it and the existing buttons. `goWorkspace` and the step's Back still clear the handed reply (now `setAdopt(null)`). Nothing else in `ui/src` or `src/anyscribe` changed except the rebuilt bundle.
+- **Kept (rules 3 and 4).** `onRunning` still has one call site (`git grep -n "onRunning(" -- ':!docs/reviews'` gives `OnboardingWizard.tsx:775` only); `watched` and `confirmClose` are still set only through it and the existing buttons. `goWorkspace` and the step's Back still clear the handed reply (now `setAdopt(null)`). Nothing else in `ui/src` or `src/anyscribe` changed except the rebuilt bundle.
 
 ## Proof bar
 

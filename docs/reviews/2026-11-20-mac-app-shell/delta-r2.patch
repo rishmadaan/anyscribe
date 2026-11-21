@@ -1,0 +1,1688 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index 7b37c88..0f6f3ab 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -11,27 +11,35 @@ later phase; today this runs in dev only.
+ ```bash
+ cd desktop
+ npm install                     # Electron downloads its binary on first run
+-ANYSCRIBE_DEV_PYTHON=../.venv/bin/python npm start
++ANYSCRIBE_DEV_PYTHON=$(pwd)/../.venv/bin/python npm start
+ ```
+ 
+ `ANYSCRIBE_DEV_PYTHON` is any Python with anyscribe installed (the repo's
+-`.venv/bin/python` after `pip install -e .`). Without it the start window says
++`.venv/bin/python` after `pip install -e .`). A relative path is taken from
++the directory you start the app in; an absolute one is safest. Without it the start window says
+ the engine couldn't be found. Packaged, the app uses
+ `<resources>/python/bin/python3` instead.
+ 
+ The engine's output and one `[app]` line per start, stop, crash and restart go
+ to `~/.anyscribe/logs/app.log` (over 5 MB at launch: the last 1 MB is kept).
+-Settings (`dockMode`, `startAtLogin`) are in Electron's userData folder,
+-`settings.json` (macOS: `~/Library/Application Support/anyscribe/`).
++If that file cannot be written, the start window says "Can't write the log
++file: <error>" and the engine is not started; Copy details still has the
++lines kept in memory.
++The Dock mode is saved in Electron's userData folder, `settings.json` (macOS:
++`~/Library/Application Support/anyscribe/`). Start at login is not saved
++there: the system's Login Items are the source of truth.
+ 
+ ## Tests
+ 
+ ```bash
+ npm test     # unit tests (node --test): pure logic, plus the supervisor against test/fake-engine.js
+-ANYSCRIBE_DEV_PYTHON=../.venv/bin/python npm run e2e   # the real app against the real engine
++ANYSCRIBE_DEV_PYTHON=$(pwd)/../.venv/bin/python npm run e2e   # the real app against the real engine
+ ```
+ 
+-`npm test` uses ports 8470 and 8471, so both must be free. `npm run e2e`
++`npm test` uses ports 8470 and 8471, so both must be free. The e2e needs an
++engine with slice 2a's hooks (`--watch-stdin`, `pid` in `/api/health`); its
++last phase swaps in `test/fake-engine.js` to check frames, redirects and
++popups, with a stand-in `xdg-open` that records instead of opening a browser. `npm run e2e`
+ starts Electron with no display (`--ozone-platform=headless`), a throwaway
+ HOME under `test/.tmp/`, and "dock" mode (a Linux tray icon would need the
+ desktop session); it stops every process by the pid it started or read from
+@@ -53,28 +61,40 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+ 
+ - **Port**: 8470, or 8471 when `~/.anyscribe/desktop.json` (the older desktop
+   mode) records 8470. If the port answers or cannot be bound, the app shows
+-  "couldn't start" and never connects to or stops whatever holds it. It also
+-  refuses an engine that announces a different port (`anyscribe ui` rolls
+-  forward past a busy port).
++  "couldn't start" and never connects to or stops whatever holds it. The
++  engine is ready only when `/api/health` reports the pid the app spawned;
++  any other answer is treated as another program on the port, and nothing
++  is sent to it.
+ - **Environment**: built from scratch, never inherited (see `buildEnv` in
+   `logic.js`): HOME, a fixed PATH, `ANYSCRIBE_APP=1`, `PYTHONUSERBASE`
+   `~/.anyscribe/runtime` with `PIP_USER=1`, LANG, PYTHONUNBUFFERED, TMPDIR, and
+-  packaged only `ANYSCRIBE_ELECTRON` and `<resources>/bin`.
++  packaged only `ANYSCRIBE_ELECTRON` and `<resources>/bin`. The add-ons folder
++  `~/.anyscribe/runtime/lib/python3.13/site-packages` is created only for the
++  packaged Python (a dev venv ignores it).
+ - **Start**: `<python> -m anyscribe ui --port N --no-open --watch-stdin` with
+-  stdin a pipe the app holds, so the engine stops when the app dies. An engine
+-  without `--watch-stdin` (before slice 2a) exits with a usage error; the app
+-  then starts it without the flag and logs that it did.
++  stdin a pipe the app holds, so the engine stops when the app dies. The flag
++  comes from slice 2a; an engine without it does not start.
+ - **Ready**: `GET /api/health` every 100 ms for up to 60 s.
++- **Links**: inside the app only the engine's origin and the start page load.
++  An outside link, popup or redirect opens in the browser; an outside frame is
++  blocked.
+ - **Crash**: an exit after ready restarts the engine and reloads the dashboard;
+   the third exit within 60 s stops retrying ("Engine stopped · couldn't restart").
+ - **Stop**: close stdin, `POST /api/shutdown`, wait up to 10 s, then kill the
+   child by the pid the app started.
+ - **Windows**: closing hides; a second launch or reopening shows the window;
+-  launched at login (or with `--hidden`) opens no window.
+-- **Quit** (Cmd Q, the menus, logout, shutdown): with jobs pending or running,
+-  the question "Transcriptions are still running" with Quit When Done (default),
+-  Stop and Quit, Cancel.
+-- **Menu bar**: polls `GET /api/jobs` every 2 s (404 means no jobs) and shows
++  a launch with `--hidden`, or one macOS reports as a login launch
++  (`wasOpenedAtLogin`), opens no window. Not yet checked on macOS 13 and later.
++- **Quit** (Cmd Q, the menus, logout, shutdown) is decided at once from the
++  last job poll (at most 2 s old), so an idle logout is never held up. No job
++  pending or running: the app quits, closing the engine's stdin and sending it
++  SIGTERM. Jobs pending or running: the question "Transcriptions are still
++  running" with Quit When Done (default), Stop and Quit, Cancel. Job list
++  unknown (the last read timed out, failed or had the wrong shape): "anyscribe
++  couldn't check for running transcriptions" with Quit Anyway and Cancel
++  (default). Quit When Done quits only on a known list with nothing left.
++  A job started in the 2 s before quitting may not be asked about.
++- **Menu bar**: polls `GET /api/jobs` every 2 s (a failed read keeps the last list) and shows
+   Ready, Transcribing with each job's stage, Finished while the window was
+   closed, or Engine stopped. Dock mode: `menubar` (default), `both`, `dock`.
+ 
+@@ -90,10 +110,10 @@ dashboard's Mac screens build on.
+ | `platform` | `process.platform` (`"darwin"` on a Mac) |
+ | `getSettings()` | `Promise<{dockMode: "menubar" \| "both" \| "dock", startAtLogin: boolean}>` |
+ | `setDockMode(mode)` | Applies immediately and saves. Rejects an unknown mode |
+-| `setStartAtLogin(on)` | Registers or removes the login item (launched hidden) and saves |
++| `setStartAtLogin(on)` | Registers or removes the login item (`app.setLoginItemSettings`). `getSettings().startAtLogin` reads it back from the system, so it is false while macOS waits for approval in Login Items |
+ | `engineStatus()` | `Promise<{state, port, lastExit, stoppedRestarting}>`: `state` is `"starting" \| "running" \| "restarting" \| "stopped"`; `lastExit` is `{code, signal, reason} \| null` (`reason`: a sentence, or the engine's last stderr line, or null when none was reported); `stoppedRestarting` is true after three exits in a minute |
+ | `onEngineStatus(callback)` | Calls `callback(status)` on every change; returns an unsubscribe function |
+-| `restartEngine()` | `Promise<{ok, reason}>`. Refused while any job is pending or running: `{ok: false, reason: "Wait for transcriptions to finish before restarting the engine."}` |
++| `restartEngine()` | `Promise<{ok, reason}>`. Refused while any job is pending or running (`reason: "Wait for transcriptions to finish before restarting the engine."`) or while the job list cannot be read (`reason: "anyscribe couldn't check for running transcriptions; try again in a moment"`) |
+ | `openLogFolder()` | Opens `~/.anyscribe/logs` in Finder |
+ | `revealInFinder(path)` | Shows that file in Finder. Needs an absolute path |
+ | `pathForFile(file)` | The local path of a dropped or picked `File` (`webUtils.getPathForFile`), so it is read in place instead of uploaded |
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index e90138c..f05da08 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -35,16 +35,28 @@ function trimLog(file, max = LOG_MAX, keep = LOG_KEEP) {
+ }
+ 
+ // ~/.anyscribe/logs/app.log: the engine's output plus one [app] line per start, stop, crash, restart.
++// Never throws: if the file cannot be written, `error` says why and the in-memory tail
++// (Copy details) still works.
+ class AppLog {
+   constructor(file) {
+     this.file = file;
+-    fs.mkdirSync(path.dirname(file), { recursive: true });
+-    trimLog(file);
+     this.recent = '';
++    this.error = null;
++    try {
++      fs.mkdirSync(path.dirname(file), { recursive: true });
++      trimLog(file);
++    } catch (err) {
++      this.error = err.message;
++    }
+   }
+   write(text) {
+-    fs.appendFileSync(this.file, text);
+     this.recent = (this.recent + text).slice(-32_768);
++    if (this.error) return;
++    try {
++      fs.appendFileSync(this.file, text);
++    } catch (err) {
++      this.error = err.message;
++    }
+   }
+   shell(message) {
+     this.write(`${new Date().toISOString()} [app] ${message}\n`);
+@@ -98,6 +110,20 @@ function waitExit(child, ms) {
+   });
+ }
+ 
++// Signal the engine's process group (its pid, negated), so its helpers go with it; if that
++// fails, the engine's own pid.
++function killGroup(child, signal) {
++  try {
++    process.kill(-child.pid, signal);
++  } catch {
++    try {
++      child.kill(signal);
++    } catch {
++      // already gone
++    }
++  }
++}
++
+ const lastLine = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean).pop() || null;
+ 
+ class Engine extends EventEmitter {
+@@ -111,18 +137,22 @@ class Engine extends EventEmitter {
+     readyTimeoutMs = 60_000,
+     stopWaitMs = 10_000,
+     pythonError = null,
++    packaged = false,
+   }) {
+     super();
+-    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError });
++    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged });
+     this.state = 'stopped';
+     this.port = null;
+     this.lastExit = null;
+     this.stoppedRestarting = false;
+     this.failure = null; // {kind: 'exited'|'port'|'timeout'|'crashes'|'python', reason, lines} for the start window
+     this.child = null;
+-    this.stopping = false;
+-    this.watchStdin = true;
++    this.verified = null; // the child whose pid /api/health reported
+     this.crashes = new logic.CrashWindow();
++    // Start, stop and restart run one at a time, in call order. A stop bumps `gen` the moment it
++    // is called, so a launch already under way (or a crash restart not yet run) stands down.
++    this.queue = Promise.resolve();
++    this.gen = 0;
+   }
+ 
+   status() {
+@@ -135,6 +165,16 @@ class Engine extends EventEmitter {
+     this.emit('status', this.status());
+   }
+ 
++  _enqueue(operation) {
++    const run = this.queue.then(operation);
++    this.queue = run.catch(() => {});
++    return run;
++  }
++
++  _stale(gen) {
++    return gen !== this.gen;
++  }
++
+   _fail(kind, { code = null, signal = null, reason = null, lines = [] } = {}) {
+     this.child = null;
+     this.lastExit = { code, signal, reason };
+@@ -146,24 +186,38 @@ class Engine extends EventEmitter {
+ 
+   // User-initiated start: launch, Try again. Clears the crash count.
+   start() {
+-    this.crashes.reset();
+-    this.stoppedRestarting = false;
+-    return this._launch('starting', false);
++    const gen = this.gen;
++    return this._enqueue(() => {
++      if (this._stale(gen)) return false;
++      this.crashes.reset();
++      this.stoppedRestarting = false;
++      return this._launch('starting', false, gen);
++    });
+   }
+ 
+-  async _launch(state, auto) {
++  async _launch(state, auto, gen) {
++    if (this._stale(gen)) return false;
+     this.failure = null;
+-    this._set(state);
++    if (this.state !== state) this._set(state);
+     if (this.pythonError) return this._fail('python', { reason: this.pythonError });
++    if (this.log.error) return this._fail('log', { reason: `Can't write the log file: ${this.log.error}` });
+     const { port, taken } = await pickPort(this.home);
++    if (this._stale(gen)) return false; // stopped during the port check: spawn nothing
+     this.port = port;
+     // Never attach to, or stop, whatever already holds the port.
+     if (taken) return this._fail('port', { reason: `another program is using port ${port}` });
+-    fs.mkdirSync(logic.userSitePackages(this.home), { recursive: true });
+-
+-    const args = [...this.prefixArgs, ...logic.engineArgs(port, this.watchStdin).slice(2)];
+-    const child = spawn(this.python, args, { env: this.env, cwd: this.home, stdio: 'pipe' });
+-    const attempt = { child, ready: false, exit: null, stdout: '', stderr: '', startedAt: Date.now() };
++    let child;
++    try {
++      // The packaged Python's add-ons folder; a dev venv ignores user site-packages.
++      if (this.packaged) fs.mkdirSync(logic.userSitePackages(this.home), { recursive: true });
++      const args = [...this.prefixArgs, ...logic.engineArgs(port).slice(2)];
++      // detached: the engine leads its own process group from birth (not unref'd: the app still
++      // holds it and its stdin), so stopping the group also stops its helpers (pip, yt-dlp, ffmpeg).
++      child = spawn(this.python, args, { env: this.env, cwd: this.home, stdio: 'pipe', detached: true });
++    } catch (err) {
++      return this._fail('exited', { reason: err.message, lines: [`engine couldn't run: ${err.message}`] });
++    }
++    const attempt = { child, gen, ready: false, exit: null, stdout: '', stderr: '', startedAt: Date.now() };
+     this.child = child;
+     child.stdin.on('error', () => {}); // EPIPE once the engine is gone
+     child.stdout.on('data', (d) => {
+@@ -181,24 +235,25 @@ class Engine extends EventEmitter {
+       attempt.exit ??= { code, signal };
+       if (attempt.ready) this._onExit(attempt);
+     });
+-    this.log.shell(`engine started (pid ${child.pid}, port ${port}${this.watchStdin ? '' : ', without --watch-stdin'})`);
++    this.log.shell(`engine started (pid ${child.pid}, port ${port})`);
+     return this._waitReady(attempt, port, state, auto);
+   }
+ 
+   async _waitReady(attempt, port, state, auto) {
+     const deadline = Date.now() + this.readyTimeoutMs;
+     for (;;) {
+-      if (this.child !== attempt.child) return false; // stopped while starting (quit, restart)
++      if (this._stale(attempt.gen)) return false; // a stop was asked for; it stops this child
+       if (attempt.exit) return this._exitedEarly(attempt, state, auto);
+-      // `anyscribe ui` rolls forward past a busy port; if it did, that port's owner is not ours.
+-      const announced = attempt.stdout.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+-      if (announced && Number(announced[1]) !== port) {
++      const health = await this._health(port, attempt.child.pid);
++      if (this._stale(attempt.gen)) return false;
++      // anyscribe answered, but not our child: another program holds the port. Send it nothing.
++      if (health === 'other') {
+         await this._kill(attempt.child);
+         return this._fail('port', { reason: `another program is using port ${port}` });
+       }
+-      if (await this._healthy(port)) {
+-        if (attempt.exit) continue; // something else answered while ours died
++      if (health === 'ours') {
+         attempt.ready = true;
++        this.verified = attempt.child;
+         this.log.shell(`engine ready (pid ${attempt.child.pid}, port ${port})`);
+         this.lastExit = null;
+         this._set('running');
+@@ -214,14 +269,8 @@ class Engine extends EventEmitter {
+ 
+   _exitedEarly(attempt, state, auto) {
+     const { code, signal, error } = attempt.exit;
+-    // shortcut: engines before slice 2a lack --watch-stdin; remove this retry once 2a has merged.
+-    if (this.watchStdin && code === 2 && attempt.stderr.includes('--watch-stdin')) {
+-      this.watchStdin = false;
+-      this.log.shell('this engine has no --watch-stdin; running without it (a force-quit app would leave it running)');
+-      return this._launch(state, auto);
+-    }
+     const reason = error ? error.message : lastLine(attempt.stderr);
+-    if (auto) return this._crashed({ code, signal, reason });
++    if (auto) return this._crashed({ code, signal, reason, child: attempt.child });
+     const secs = ((Date.now() - attempt.startedAt) / 1000).toFixed(1);
+     const head = error ? `engine couldn't run: ${error.message}` : `engine exited with ${signal ? `signal ${signal}` : `code ${code}`} after ${secs} s`;
+     const lines = [head, ...attempt.stderr.split('\n').filter((l) => l.trim()).slice(-8), `log: ${this._tilde(this.log.file)}`];
+@@ -230,12 +279,18 @@ class Engine extends EventEmitter {
+ 
+   // An exit nobody asked for, after the engine was ready.
+   _onExit(attempt) {
+-    if (this.child !== attempt.child || this.stopping) return;
++    if (this._stale(attempt.gen) || this.child !== attempt.child) return;
+     const { code, signal } = attempt.exit;
+-    this._crashed({ code, signal, reason: lastLine(attempt.stderr) });
++    this._crashed({ code, signal, reason: lastLine(attempt.stderr), child: attempt.child });
+   }
+ 
+-  _crashed({ code, signal, reason }) {
++  _crashed({ code, signal, reason, child }) {
++    // Whatever the dead engine left in its group (pip, yt-dlp, ffmpeg) goes with it, once.
++    try {
++      process.kill(-child.pid, 'SIGKILL');
++    } catch (err) {
++      if (err.code !== 'ESRCH') this.log.shell(`couldn't stop the engine's helpers: ${err.message}`);
++    }
+     this.child = null;
+     this.lastExit = { code, signal, reason };
+     this.log.shell(`engine stopped unexpectedly (code ${code}, signal ${signal})`);
+@@ -251,21 +306,29 @@ class Engine extends EventEmitter {
+       return false;
+     }
+     this.log.shell('restarting the engine');
+-    return this._launch('restarting', true);
++    this._set('restarting');
++    const gen = this.gen;
++    this._enqueue(() => this._launch('restarting', true, gen));
++    return false;
+   }
+ 
+-  async _healthy(port) {
++  // 'ours' when anyscribe answers with our child's pid (slice 2a's /api/health "pid"), 'other'
++  // when it answers with any other pid or none, null while nothing answers as anyscribe.
++  async _health(port, pid) {
+     try {
+       const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
+-      return res.ok && (await res.json()).app === 'anyscribe';
++      if (!res.ok) return null;
++      const body = await res.json();
++      if (body?.app !== 'anyscribe') return null;
++      return body.pid === pid ? 'ours' : 'other';
+     } catch {
+-      return false;
++      return null;
+     }
+   }
+ 
+   async _kill(child) {
+     if (exited(child)) return;
+-    child.kill('SIGKILL'); // the pid this shell started, never a name match
++    killGroup(child, 'SIGKILL'); // the group this shell started, never a name match
+     await waitExit(child, 2000);
+   }
+ 
+@@ -274,62 +337,84 @@ class Engine extends EventEmitter {
+   }
+ 
+   // Close stdin, ask politely, wait up to 10 s, then kill the child by its pid.
+-  async stop() {
++  stop() {
++    this.gen++; // claimed now: anything already under way stands down
++    return this._enqueue(() => this._stopNow());
++  }
++
++  async _stopNow() {
++    this.gen++;
+     const child = this.child;
+     if (!child) {
+       if (this.state !== 'stopped') this._set('stopped');
+       return;
+     }
+-    this.stopping = true;
+     this.log.shell(`stopping the engine (pid ${child.pid})`);
+     child.stdin.end();
+-    try {
+-      await fetch(this._url('/api/shutdown'), { method: 'POST', signal: AbortSignal.timeout(2000) });
+-    } catch {
+-      // already gone, or not answering: the wait below decides
++    // Only a server proven to be this child is asked to shut down; anything else on the port is
++    // not ours to stop. The child is stopped by its pid regardless.
++    if (this.verified === child) {
++      try {
++        await fetch(this._url('/api/shutdown'), { method: 'POST', signal: AbortSignal.timeout(2000) });
++      } catch {
++        // already gone, or not answering: the wait below decides
++      }
+     }
+     if (!(await waitExit(child, this.stopWaitMs))) {
+       this.log.shell(`engine still running after ${this.stopWaitMs / 1000} s; killing pid ${child.pid}`);
+       await this._kill(child);
+     }
+     this.log.shell(`engine stopped (pid ${child.pid})`);
+-    this.child = null;
+-    this.stopping = false;
++    this.child = null; // the queue lets nothing else set it while this stop runs
+     this.lastExit = null;
+     this._set('stopped');
+   }
+ 
+-  // Refused while any job is pending or running.
+-  async restart() {
++  // Refused while any job is pending or running, or while that cannot be known.
++  // Queued like start and stop, so two restarts run one after the other.
++  restart() {
+     if (this.state === 'starting' || this.state === 'restarting') {
+-      return { ok: false, reason: 'The engine is already starting.' };
++      return Promise.resolve({ ok: false, reason: 'The engine is already starting.' });
+     }
+-    const refusal = logic.restartRefusal(await this.jobs());
+-    if (refusal) return { ok: false, reason: refusal };
+-    await this.stop();
+-    this.crashes.reset();
+-    this.stoppedRestarting = false;
+-    this.log.shell('restarting the engine (asked for)');
+-    await this._launch('restarting', false);
+-    return this.state === 'running'
+-      ? { ok: true, reason: null }
+-      : { ok: false, reason: this.lastExit?.reason ?? "The engine didn't start." };
++    return this._enqueue(async () => {
++      const refusal = logic.restartRefusal(await this.jobs());
++      if (refusal) return { ok: false, reason: refusal };
++      await this._stopNow();
++      this.crashes.reset();
++      this.stoppedRestarting = false;
++      this.log.shell('restarting the engine (asked for)');
++      await this._launch('restarting', false, this.gen);
++      return this.state === 'running'
++        ? { ok: true, reason: null }
++        : { ok: false, reason: this.lastExit?.reason ?? "The engine didn't start." };
++    });
+   }
+ 
+-  // GET /api/jobs; [] when the engine is not running or predates the endpoint (404).
+-  // An unreachable engine also reads as []: it cannot be running jobs we could keep.
++  // GET /api/jobs, validated. [] when no engine is running (nothing can be transcribing);
++  // null when the list cannot be known (timeout, error status, bad JSON, wrong shape):
++  // a slow engine may still be transcribing.
+   async jobs() {
+     if (this.state !== 'running') return [];
+     try {
+       const res = await fetch(this._url('/api/jobs'), { signal: AbortSignal.timeout(2000) });
+-      if (!res.ok) return [];
+-      const body = await res.json();
+-      return Array.isArray(body) ? body : body.jobs || [];
++      if (!res.ok) return null;
++      return logic.validJobs(await res.json());
+     } catch {
+-      return [];
++      return null;
+     }
+   }
+ 
++  // At quit, without waiting (a logout will not wait): close stdin and SIGTERM our own child.
++  // The engine shuts down on either (slice 2a) and exits hard if that takes over 10 s.
++  stopForQuit() {
++    this.gen++;
++    const child = this.child;
++    if (!child || exited(child)) return;
++    this.log.shell(`quitting: stopping the engine (pid ${child.pid})`);
++    child.stdin.end();
++    killGroup(child, 'SIGTERM');
++  }
++
+   async cancelJob(jobId) {
+     try {
+       await fetch(this._url(`/api/jobs/${encodeURIComponent(jobId)}/cancel`), {
+diff --git a/desktop/src/logic.js b/desktop/src/logic.js
+index 7cd1715..9e7088e 100644
+--- a/desktop/src/logic.js
++++ b/desktop/src/logic.js
+@@ -11,8 +11,9 @@ function choosePort(manifestPort) {
+   return manifestPort === DEFAULT_PORT ? ALT_PORT : DEFAULT_PORT;
+ }
+ 
+-// Packaged: the Python inside the app. Dev: ANYSCRIBE_DEV_PYTHON.
+-function resolvePython({ packaged, resourcesPath, env }) {
++// Packaged: the Python inside the app. Dev: ANYSCRIBE_DEV_PYTHON, made absolute against the
++// directory the app was started from (the engine itself runs in HOME).
++function resolvePython({ packaged, resourcesPath, env, cwd }) {
+   if (packaged) return path.join(resourcesPath, 'python', 'bin', 'python3');
+   if (!env.ANYSCRIBE_DEV_PYTHON) {
+     throw new Error(
+@@ -20,7 +21,8 @@ function resolvePython({ packaged, resourcesPath, env }) {
+         "for example the repo's .venv/bin/python."
+     );
+   }
+-  return env.ANYSCRIBE_DEV_PYTHON;
++  const dev = env.ANYSCRIBE_DEV_PYTHON;
++  return dev.includes(path.sep) ? path.resolve(cwd, dev) : dev; // a bare name is looked up on PATH
+ }
+ 
+ const SYSTEM_PATH = ['/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+@@ -51,10 +53,9 @@ function userSitePackages(home) {
+   return path.join(home, '.anyscribe', 'runtime', 'lib', 'python3.13', 'site-packages');
+ }
+ 
+-function engineArgs(port, watchStdin) {
+-  const args = ['-m', 'anyscribe', 'ui', '--port', String(port), '--no-open'];
+-  if (watchStdin) args.push('--watch-stdin');
+-  return args;
++// --watch-stdin: the engine stops when the app's end of its stdin closes (slice 2a).
++function engineArgs(port) {
++  return ['-m', 'anyscribe', 'ui', '--port', String(port), '--no-open', '--watch-stdin'];
+ }
+ 
+ // ---- jobs → menu ----
+@@ -101,9 +102,23 @@ function countWords(running, waiting) {
+   return parts.join(', ');
+ }
+ 
++// Jobs that finished (saved or failed) while the window was hidden, kept by id until it is
++// shown again, so the engine's 50-row list cannot drop them from the menu. hiddenSince: ms
++// since the window was closed (or the app launched hidden), null while it is shown.
++function rememberFinished(memory, jobs, hiddenSince) {
++  if (hiddenSince == null) return new Map();
++  for (const j of jobs) {
++    const done = j.status === 'completed' || j.status === 'failed';
++    if (done && (toMillis(j.completed_at) ?? 0) >= hiddenSince) memory.set(j.job_id, j);
++  }
++  return memory;
++}
++
++const FINISHED_ROWS = 5;
++
+ // What the menu (tray or Dock) says. `actions` are ids main.js turns into menu items.
+-// hiddenSince: ms since the window was closed (or the app launched hidden), null while shown.
+-function menuModel({ engineState, stoppedRestarting, jobs = [], hiddenSince = null, quitWhenDone = false }) {
++// finished: rememberFinished's jobs.
++function menuModel({ engineState, stoppedRestarting, jobs = [], finished = [], quitWhenDone = false }) {
+   const active = jobs.filter(isActive);
+   const running = active.filter((j) => j.status === 'running').length;
+   const waiting = active.length - running;
+@@ -133,18 +148,13 @@ function menuModel({ engineState, stoppedRestarting, jobs = [], hiddenSince = nu
+     return { icon: 'plain', header, rows: [], actions: ['open', 'startAtLogin', 'quit'] };
+   }
+ 
+-  const finished =
+-    hiddenSince == null
+-      ? []
+-      : jobs.filter(
+-          (j) =>
+-            (j.status === 'completed' || j.status === 'failed') &&
+-            (toMillis(j.completed_at) ?? 0) >= hiddenSince
+-        );
+-  const finishedRows = finished.map((j) => ({
++  // The 5 newest, then one "and N more" line; the header still counts them all.
++  const newest = [...finished].sort((a, b) => (toMillis(b.completed_at) ?? 0) - (toMillis(a.completed_at) ?? 0));
++  const finishedRows = newest.slice(0, FINISHED_ROWS).map((j) => ({
+     label: jobName(j),
+     stage: j.status === 'completed' ? 'Saved' : 'Failed',
+   }));
++  if (newest.length > FINISHED_ROWS) finishedRows.push({ label: `and ${newest.length - FINISHED_ROWS} more`, stage: null });
+   const failed = finished.some((j) => j.status === 'failed');
+   const actions = ['open', 'startAtLogin', 'quit'];
+ 
+@@ -166,6 +176,19 @@ function menuModel({ engineState, stoppedRestarting, jobs = [], hiddenSince = nu
+   return { icon: 'plain', header: 'anyscribe · Ready', rows: [], actions };
+ }
+ 
++// The menu's lines in order, as mockup section 6 draws them: the header, the job rows, then the
++// actions; a separator before "Open anyscribe" only when job rows are shown, none before
++// "Restart engine" or "Stop and quit now", one before every other action.
++function menuLayout(model) {
++  const layout = ['header', ...model.rows.map(() => 'row')];
++  for (const id of model.actions) {
++    const separate = id === 'open' ? model.rows.length > 0 : id !== 'restartEngine' && id !== 'stopAndQuit';
++    if (separate) layout.push('separator');
++    layout.push(id);
++  }
++  return layout;
++}
++
+ // ---- quitting ----
+ 
+ function isAre(n) {
+@@ -192,21 +215,58 @@ function quitQuestion(jobs) {
+   };
+ }
+ 
+-// Every quit path ends here. Never quits silently while a job is pending or running.
+-// ask(question) resolves to the chosen button index.
+-async function decideQuit(jobs, ask) {
+-  const question = quitQuestion(jobs);
+-  if (!question) return 'quit';
+-  return ['whenDone', 'stopAndQuit', 'cancel'][await ask(question)] ?? 'cancel';
++const UNKNOWN_QUIT = {
++  type: 'warning',
++  message: "anyscribe couldn't check for running transcriptions",
++  detail: 'Quitting now stops any transcription that is still running.',
++  buttons: ['Quit Anyway', 'Cancel'],
++  defaultId: 1,
++  cancelId: 1,
++};
++
++// Every quit path (Cmd Q, the menus, logout, shutdown), decided at once from the last poll so
++// an idle logout is never held up. null: quit now. Otherwise the question to ask and what each
++// button means. An unknown job list is never read as "no jobs".
++function quitDecision({ running, known, jobs }) {
++  if (!running) return null;
++  if (!known) return { box: UNKNOWN_QUIT, choices: ['quit', 'cancel'] };
++  const box = quitQuestion(jobs);
++  return box && { box, choices: ['whenDone', 'stopAndQuit', 'cancel'] };
++}
++
++// Quit When Done quits only on a known list with nothing pending or running.
++function quitWhenDoneReady({ known, jobs }) {
++  return known && !jobs.some(isActive);
++}
++
++// The engine's job list if it has the expected shape, else null (unknown).
++function validJobs(body) {
++  const ok =
++    Array.isArray(body) &&
++    body.every((j) => j !== null && typeof j === 'object' && typeof j.job_id === 'string' && typeof j.status === 'string');
++  return ok ? body : null;
+ }
+ 
+-const RESTART_REFUSED ='Wait for transcriptions to finish before restarting the engine.';
++const RESTART_REFUSED = 'Wait for transcriptions to finish before restarting the engine.';
++const RESTART_UNKNOWN = "anyscribe couldn't check for running transcriptions; try again in a moment";
+ 
+-// Restart engine is unavailable while any job is pending or running.
++// Restart engine is unavailable while any job is pending or running, or while that is unknown (null).
+ function restartRefusal(jobs) {
++  if (jobs === null) return RESTART_UNKNOWN;
+   return jobs.some(isActive) ? RESTART_REFUSED : null;
+ }
+ 
++// ---- links ----
++
++// Where a navigation may go: 'allow' inside the app (the engine's origin, the start page, and a
++// frame's blank document); else 'outside' for a top-level http(s) page, which opens in the
++// browser; else 'block' (another origin in a frame, other schemes).
++function navigation(url, prefixes, startUrl, isMainFrame) {
++  if (url === startUrl || prefixes.some((p) => url.startsWith(p))) return 'allow';
++  if (!isMainFrame && (url === 'about:blank' || url === 'about:srcdoc')) return 'allow';
++  return isMainFrame && /^https?:\/\//i.test(url) ? 'outside' : 'block';
++}
++
+ // ---- the start window's "couldn't start" sentence (mockup section 2) ----
+ 
+ const SAFE = 'Your transcripts and settings are safe.';
+@@ -221,6 +281,8 @@ function failureMessage(failure) {
+       return `Its engine stopped 3 times in a minute, so anyscribe stopped restarting it. ${SAFE}`;
+     case 'python':
+       return `Its engine couldn't be found. ${failure.reason} ${SAFE}`;
++    case 'log':
++      return `${failure.reason}. ${SAFE}`;
+     default:
+       return `Its engine stopped before it was ready. ${SAFE}`;
+   }
+@@ -258,10 +320,17 @@ module.exports = {
+   stageWord,
+   jobName,
+   menuModel,
++  rememberFinished,
++  menuLayout,
+   quitQuestion,
+-  decideQuit,
++  quitDecision,
++  quitWhenDoneReady,
++  UNKNOWN_QUIT,
++  validJobs,
+   restartRefusal,
+   RESTART_REFUSED,
++  RESTART_UNKNOWN,
+   failureMessage,
++  navigation,
+   CrashWindow,
+ };
+diff --git a/desktop/src/main.js b/desktop/src/main.js
+index ec04eba..7c8bdf2 100644
+--- a/desktop/src/main.js
++++ b/desktop/src/main.js
+@@ -28,13 +28,19 @@ function run() {
+   let python = null;
+   let pythonError = null;
+   try {
+-    python = logic.resolvePython({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, env: process.env });
++    python = logic.resolvePython({
++      packaged: app.isPackaged,
++      resourcesPath: process.resourcesPath,
++      env: process.env,
++      cwd: process.cwd(),
++    });
+   } catch (err) {
+     pythonError = err.message;
+   }
+   const engine = new Engine({
+     python,
+     pythonError,
++    packaged: app.isPackaged,
+     home,
+     log,
+     env: logic.buildEnv({
+@@ -46,12 +52,14 @@ function run() {
+     }),
+   });
+ 
+-  let settings = { dockMode: 'menubar', startAtLogin: false };
++  let settings = { dockMode: 'menubar' };
+   let mainWin = null;
+   let startWin = null;
+   let tray = null;
+-  let latestJobs = [];
++  let latestJobs = []; // the last job list read; kept when a read fails
++  let jobsKnown = true; // false while the last read failed
+   let hiddenSince = null; // when the dashboard window was last closed; null while it is shown
++  let finished = new Map(); // jobs that finished while it was hidden, by id
+   let quitWhenDone = false;
+   let quitting = false; // a quit question or engine stop is under way
+   let allowQuit = false;
+@@ -66,19 +74,28 @@ function run() {
+   function loadSettings() {
+     try {
+       const s = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
+-      return { dockMode: DOCK_MODES.includes(s.dockMode) ? s.dockMode : 'menubar', startAtLogin: s.startAtLogin === true };
++      return { dockMode: DOCK_MODES.includes(s.dockMode) ? s.dockMode : 'menubar' };
+     } catch {
+-      return { dockMode: 'menubar', startAtLogin: false };
++      return { dockMode: 'menubar' };
+     }
+   }
+   function saveSettings() {
+-    fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+-    fs.writeFileSync(settingsFile(), `${JSON.stringify(settings, null, 2)}\n`);
++    try {
++      fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
++      fs.writeFileSync(settingsFile(), `${JSON.stringify(settings, null, 2)}\n`);
++    } catch (err) {
++      log.shell(`couldn't save settings: ${err.message}`); // the choice still applies until quit
++    }
+   }
++  // The system's Login Items are the source of truth (he can turn it off in System Settings,
++  // or it can wait for approval there); nothing is stored for it here.
++  function startsAtLogin() {
++    const s = app.getLoginItemSettings();
++    return s.status ? s.status === 'enabled' : s.openAtLogin === true;
++  }
++
+   function setStartAtLogin(on) {
+-    settings.startAtLogin = on === true;
+-    saveSettings();
+-    app.setLoginItemSettings({ openAtLogin: settings.startAtLogin, openAsHidden: true });
++    app.setLoginItemSettings({ openAtLogin: on === true });
+     refreshMenu();
+   }
+   function setDockMode(mode) {
+@@ -114,6 +131,7 @@ function run() {
+   function onVisibility() {
+     if (visible(mainWin)) hiddenSince = null;
+     else if (hiddenSince == null && mainWin) hiddenSince = Date.now();
++    finished = logic.rememberFinished(finished, latestJobs, hiddenSince);
+     updateDock();
+     refreshMenu();
+   }
+@@ -145,7 +163,7 @@ function run() {
+       show: false,
+       title: 'anyscribe',
+       backgroundColor: '#0B0A0F',
+-      ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
++      // Default title bar until the dashboard has a drag area (slice 2c), then hiddenInset.
+       webPreferences: { ...secure('preload.js'), additionalArguments: [`--anyscribe-version=${app.getVersion()}`] },
+     });
+     hideOnClose(mainWin);
+@@ -185,23 +203,33 @@ function run() {
+     return nativeImage.createFromPath(path.join(ASSETS, `tray-${icon}-${theme}.png`));
+   }
+ 
++  // macOS 14 (Darwin 23) and later draw a section header; older systems get a greyed item.
++  const headerItem = (label) =>
++    isMac && Number(os.release().split('.')[0]) >= 23 ? { type: 'header', label } : { label, enabled: false };
++
+   function menuTemplate(model, forDock) {
+-    const items = [{ label: model.header, enabled: false }];
+-    for (const row of model.rows) items.push({ label: `${row.label} · ${row.stage}`, enabled: false });
+     const action = {
+       restartEngine: { label: 'Restart engine', click: () => engine.restart() },
+       open: { label: 'Open anyscribe', accelerator: 'CmdOrCtrl+O', click: showUI },
+-      startAtLogin: { label: 'Start at login', type: 'checkbox', checked: settings.startAtLogin, click: (item) => setStartAtLogin(item.checked) },
++      startAtLogin: { label: 'Start at login', type: 'checkbox', checked: startsAtLogin(), click: (item) => setStartAtLogin(item.checked) },
+       quit: { label: 'Quit anyscribe', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
+       dontQuit: { label: "Don't quit", click: () => ((quitWhenDone = false), refreshMenu()) },
+       stopAndQuit: { label: 'Stop and quit now', click: () => stopAndQuit() },
+     };
+-    for (const id of model.actions) {
+-      if (forDock && (id === 'open' || id === 'quit')) continue; // the Dock has its own
+-      if (id !== 'restartEngine' && id !== 'stopAndQuit') items.push({ type: 'separator' });
+-      items.push(action[id]);
+-    }
+-    return items;
++    const rows = [...model.rows];
++    return logic
++      .menuLayout(model)
++      .filter((id) => !(forDock && (id === 'open' || id === 'quit'))) // the Dock has its own
++      .map((id) => {
++        if (id === 'header') return headerItem(model.header);
++        if (id === 'separator') return { type: 'separator' };
++        if (id === 'row') {
++          const row = rows.shift();
++          return { label: row.stage ? `${row.label} · ${row.stage}` : row.label, enabled: false };
++        }
++        return action[id];
++      })
++      .filter((item, i, all) => !(item.type === 'separator' && (i === all.length - 1 || all[i - 1].type === 'separator')));
+   }
+ 
+   function refreshMenu() {
+@@ -209,10 +237,10 @@ function run() {
+       engineState: engine.state,
+       stoppedRestarting: engine.stoppedRestarting,
+       jobs: latestJobs,
+-      hiddenSince,
++      finished: [...finished.values()],
+       quitWhenDone,
+     });
+-    const key = JSON.stringify([model, settings, nativeTheme.shouldUseDarkColors, Boolean(tray)]);
++    const key = JSON.stringify([model, settings, startsAtLogin(), nativeTheme.shouldUseDarkColors, Boolean(tray)]);
+     if (key === lastMenuKey) return;
+     lastMenuKey = key;
+     if (tray) {
+@@ -247,29 +275,27 @@ function run() {
+ 
+   // ---- quitting (mockup section 7) ----
+ 
+-  async function finalQuit() {
++  function finalQuit() {
+     quitting = true;
+-    try {
+-      await engine.stop();
+-    } finally {
+-      allowQuit = true;
+-      // Never inside the before-quit that started this: Electron would reset its quitting
+-      // state when that handler returns, close every window and keep running.
+-      setImmediate(() => app.quit());
+-    }
++    allowQuit = true;
++    // Never inside the before-quit that started this: Electron would reset its quitting
++    // state when that handler returns, close every window and keep running.
++    setImmediate(() => app.quit());
+   }
+ 
+   async function stopAndQuit() {
+-    for (const job of await engine.jobs()) if (logic.isActive(job)) await engine.cancelJob(job.job_id);
+-    await finalQuit();
++    const jobs = (await engine.jobs()) ?? latestJobs;
++    for (const job of jobs) if (logic.isActive(job)) await engine.cancelJob(job.job_id);
++    finalQuit();
+   }
+ 
+-  async function requestQuit() {
++  async function askQuit({ box, choices }) {
+     quitting = true;
+     try {
+-      const ask = (q) => dialog.showMessageBox(q).then((r) => r.response);
+-      const choice = await logic.decideQuit(await engine.jobs(), ask);
+-      if (choice === 'quit') return await finalQuit();
++      app.focus({ steal: true }); // the question must not open behind the front app
++      const { response } = visible(mainWin) ? await dialog.showMessageBox(mainWin, box) : await dialog.showMessageBox(box);
++      const choice = choices[response] ?? 'cancel';
++      if (choice === 'quit') return finalQuit();
+       if (choice === 'stopAndQuit') return await stopAndQuit();
+       if (choice === 'whenDone') {
+         quitWhenDone = true;
+@@ -281,12 +307,19 @@ function run() {
+     }
+   }
+ 
+-  // Every quit path (Cmd Q, the menus, logout, shutdown) arrives here first.
++  // Every quit path (Cmd Q, the menus, logout, shutdown) arrives here first. Idle: the quit goes
++  // ahead untouched, so a logout or shutdown is not interrupted; the engine stops in will-quit.
+   app.on('before-quit', (e) => {
+     if (allowQuit) return;
++    const decision = logic.quitDecision({ running: engine.state === 'running', known: jobsKnown, jobs: latestJobs });
++    if (!decision) {
++      allowQuit = true;
++      return;
++    }
+     e.preventDefault();
+-    if (!quitting) requestQuit();
++    if (!quitting) setImmediate(() => askQuit(decision));
+   });
++  app.on('will-quit', () => engine.stopForQuit());
+   app.on('window-all-closed', () => {}); // keep running in the menu bar
+ 
+   // ---- engine events and the job poll ----
+@@ -303,26 +336,34 @@ function run() {
+   });
+ 
+   async function poll() {
+-    latestJobs = await engine.jobs();
+-    if (quitWhenDone && !quitting && !latestJobs.some(logic.isActive)) return finalQuit();
++    const jobs = await engine.jobs();
++    jobsKnown = jobs !== null;
++    if (jobsKnown) latestJobs = jobs;
++    finished = logic.rememberFinished(finished, latestJobs, hiddenSince);
++    if (quitWhenDone && !quitting && logic.quitWhenDoneReady({ known: jobsKnown, jobs: latestJobs })) return finalQuit();
+     refreshMenu();
+   }
+ 
+   // ---- links: anything that leaves 127.0.0.1 opens in the default browser ----
+ 
+   const ours = (url) => url.startsWith(`${engineOrigin()}/`) || url === START_URL;
+-  const openOutside = (url) => /^https?:\/\//i.test(url) && shell.openExternal(url);
++  const where = (url, isMainFrame) => logic.navigation(url, [`${engineOrigin()}/`], START_URL, isMainFrame);
++  // Every page, popup and frame: navigations (main frame and subframes) and server redirects.
+   app.on('web-contents-created', (_e, contents) => {
+     contents.setWindowOpenHandler(({ url }) => {
+-      if (ours(url)) return { action: 'allow' };
+-      openOutside(url);
++      const decision = where(url, true);
++      if (decision === 'allow') return { action: 'allow' };
++      if (decision === 'outside') shell.openExternal(url);
+       return { action: 'deny' };
+     });
+-    contents.on('will-navigate', (e, url) => {
+-      if (ours(url)) return;
++    const guard = (e) => {
++      const decision = where(e.url, e.isMainFrame);
++      if (decision === 'allow') return;
+       e.preventDefault();
+-      openOutside(url);
+-    });
++      if (decision === 'outside') shell.openExternal(e.url);
++    };
++    contents.on('will-frame-navigate', guard);
++    contents.on('will-redirect', guard);
+   });
+ 
+   // ---- the bridges ----
+@@ -333,7 +374,7 @@ function run() {
+       return fn(...args);
+     });
+   }
+-  handle('settings:get', () => ({ ...settings }));
++  handle('settings:get', () => ({ ...settings, startAtLogin: startsAtLogin() }));
+   handle('settings:dockMode', (mode) => setDockMode(mode));
+   handle('settings:startAtLogin', (on) => setStartAtLogin(on));
+   handle('engine:status', () => engine.status());
+diff --git a/desktop/test/e2e.js b/desktop/test/e2e.js
+index 56a0092..6048b66 100644
+--- a/desktop/test/e2e.js
++++ b/desktop/test/e2e.js
+@@ -49,9 +49,14 @@ async function health(port = 8470) {
+   }
+ }
+ 
++// A stand-in xdg-open first on the app's PATH: "open in the browser" is recorded, never shown.
++const BIN = path.join(HOME, 'bin');
++const OPENED = path.join(HOME, 'opened.txt');
++const opened = () => (fs.existsSync(OPENED) ? fs.readFileSync(OPENED, 'utf8').split('\n').filter(Boolean) : []);
++
+ const launched = [];
+-function launch(extra = []) {
+-  const env = { HOME, PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', ANYSCRIBE_DEV_PYTHON: python };
++function launch(extra = [], enginePython = python) {
++  const env = { HOME, PATH: `${BIN}:/usr/bin:/bin`, LANG: 'en_US.UTF-8', ANYSCRIBE_DEV_PYTHON: enginePython };
+   const child = spawn(ELECTRON, [`--inspect=${INSPECT_PORT}`, APP, '--ozone-platform=headless', `--remote-debugging-port=${DEBUG_PORT}`, ...extra], {
+     env,
+     stdio: ['ignore', 'pipe', 'pipe'],
+@@ -109,13 +114,14 @@ const step = (name, detail = '') => {
+ };
+ 
+ async function main() {
+-  fs.mkdirSync(HOME, { recursive: true });
++  fs.mkdirSync(BIN, { recursive: true });
++  fs.writeFileSync(path.join(BIN, 'xdg-open'), `#!/bin/sh\necho "$1" >> '${OPENED}'\n`, { mode: 0o755 });
+   // No menu bar icon here: on Linux a tray icon needs the desktop session (it would appear in the
+   // owner's panel) or a display. "dock" mode is the app's own no-tray setting; the menu's content
+   // is covered by the unit tests.
+   const userData = path.join(HOME, '.config', 'anyscribe');
+   fs.mkdirSync(userData, { recursive: true });
+-  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ dockMode: 'dock', startAtLogin: false }));
++  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ dockMode: 'dock' }));
+   for (const p of [8470, 8471, DEBUG_PORT]) assert.equal(await health(p), false, `port ${p} must be free`);
+ 
+   // 1. Starts the engine and loads the dashboard.
+@@ -169,30 +175,23 @@ async function main() {
+   await inMain("require('electron').app.quit()").catch(() => {});
+   await waitFor(() => !alive(restartedPid), 20_000, 'engine to stop after quit');
+   await exitOf(app);
+-  assert.match(logText(), new RegExp(`stopping the engine \\(pid ${restartedPid}\\)[\\s\\S]*engine stopped \\(pid ${restartedPid}\\)`));
++  assert.match(logText(), new RegExp(`quitting: stopping the engine \\(pid ${restartedPid}\\)`));
+   step('quitting the app stops the engine', `pid ${restartedPid} gone, app exit ${app.exitCode ?? app.signalCode}`);
+ 
+-  // 6. Launched at login: no window at all, engine still starts.
++  // 6. A --hidden launch (what a login launch should look like): no window, engine still starts.
+   app = launch(['--hidden']);
+-  await waitFor(() => readyPids().length >= 3, 60_000, 'engine ready (hidden launch)');
++  await waitFor(() => readyPids().length >= 3, 60_000, 'engine ready (--hidden launch)');
+   await sleep(1000);
+   const hiddenPages = await pages();
+   assert.deepEqual(hiddenPages, [], 'no window created');
+   const hiddenPid = readyPids()[2];
+-  step('a login launch starts the engine with no window', `engine pid ${hiddenPid}`);
++  step('a --hidden launch starts the engine with no window', `engine pid ${hiddenPid}`);
+ 
+-  // 7. Force-killed app: does the engine follow?
++  // 7. Force-killed app: the engine follows (--watch-stdin). Cleanup in finally stops it if not.
+   app.kill('SIGKILL');
+   await exitOf(app);
+-  const withFlag = !logText().includes('without --watch-stdin');
+-  const followed = await waitFor(() => !alive(hiddenPid), 15_000, 'engine to follow').catch(() => false);
+-  if (followed) step('a force-killed app takes its engine with it', `--watch-stdin in use: ${withFlag}`);
+-  else {
+-    results.push(`GAP force-killed app left engine pid ${hiddenPid} running (--watch-stdin in use: ${withFlag}); stopped it by that pid`);
+-    console.log(results.at(-1));
+-    process.kill(hiddenPid, 'SIGTERM');
+-    await waitFor(() => !alive(hiddenPid), 10_000, 'engine to stop');
+-  }
++  await waitFor(() => !alive(hiddenPid), 15_000, `engine pid ${hiddenPid} to follow the force-killed app`);
++  step('a force-killed app takes its engine with it', `pid ${hiddenPid} gone`);
+ 
+   // 8. Port taken: "couldn't start", and the program holding it is left alone.
+   const holder = net.createServer((s) => s.on('error', () => {}).end('HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nno'));
+@@ -212,6 +211,31 @@ async function main() {
+   assert.notEqual(app.exitCode ?? app.signalCode, null, 'the app quits with its engine never started');
+   step('quitting from "couldn\'t start" exits the app', `exit ${app.exitCode}`);
+   holder.close();
++
++  // 9. Links, frames and redirects (C3). The fake engine (test/fake-engine.js) serves a page and
++  // a redirect out of 127.0.0.1, which the real engine has no route for.
++  const fakePython = path.join(BIN, 'fake-python');
++  fs.writeFileSync(fakePython, `#!/bin/sh\nexec '${process.execPath}' '${path.join(__dirname, 'fake-engine.js')}' "$@"\n`, { mode: 0o755 });
++  app = launch([], fakePython);
++  const fake = await waitFor(async () => (await pages())?.find((p) => p.url === 'http://127.0.0.1:8470/'), 30_000, 'fake dashboard');
++  await waitFor(() => evaluate(fake, "document.readyState === 'complete'").catch(() => false), 10_000, 'fake page loaded');
++  const frameAt = (src) =>
++    evaluate(fake, `new Promise((done) => { const f = document.createElement('iframe'); f.src = ${JSON.stringify(src)}; document.body.append(f); setTimeout(() => { try { done(f.contentWindow.location.href); } catch (e) { done('cross-origin: ' + e.name); } }, 1500); })`);
++  assert.equal(await frameAt('http://example.invalid/framed'), 'about:blank', 'an outside iframe never loads');
++  assert.equal(await frameAt('/redirect-out'), 'about:blank', 'a frame redirected out never loads');
++  assert.deepEqual(opened(), [], 'frames are blocked, not opened in the browser');
++  await evaluate(fake, "location.href = '/redirect-out'").catch(() => {});
++  await waitFor(() => opened().includes('http://example.invalid/away'), 5000, 'the redirect to open outside');
++  assert.ok((await pages()).some((p) => p.url === 'http://127.0.0.1:8470/'), 'the window stayed on the app');
++  const pagesBefore = (await pages()).length;
++  await evaluate(fake, "window.open('http://example.invalid/popup'), true");
++  await waitFor(() => opened().includes('http://example.invalid/popup'), 5000, 'the outside popup to open outside');
++  assert.equal((await pages()).length, pagesBefore, 'no window for an outside popup');
++  await evaluate(fake, "window.open('/'), true");
++  await waitFor(async () => (await pages()).length === pagesBefore + 1, 5000, 'a popup inside the app');
++  step('outside frames and redirects never load in the app; outside pages and popups open in the browser', `opened: ${opened().join(', ')}`);
++  app.kill('SIGTERM');
++  await exitOf(app);
+ }
+ 
+ main()
+diff --git a/desktop/test/engine.test.js b/desktop/test/engine.test.js
+index 05aeb1b..4c0edf2 100644
+--- a/desktop/test/engine.test.js
++++ b/desktop/test/engine.test.js
+@@ -5,10 +5,11 @@
+ const test = require('node:test');
+ const assert = require('node:assert/strict');
+ const fs = require('node:fs');
++const http = require('node:http');
+ const net = require('node:net');
+ const path = require('node:path');
+ const { Engine, AppLog, trimLog, pickPort } = require('../src/engine');
+-const { RESTART_REFUSED } = require('../src/logic');
++const { RESTART_REFUSED, RESTART_UNKNOWN } = require('../src/logic');
+ 
+ const FAKE = path.join(__dirname, 'fake-engine.js');
+ 
+@@ -52,6 +53,8 @@ const alive = (pid) => {
+   }
+ };
+ 
++const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
++
+ function waitFor(predicate, ms = 10_000) {
+   return new Promise((resolve, reject) => {
+     const start = Date.now();
+@@ -111,16 +114,6 @@ test('guard: a taken port is refused, nothing is started on it', async () => {
+   }
+ });
+ 
+-test('guard: an engine that rolled forward past a taken port is not attached to', async () => {
+-  const { engine } = makeEngine({ FAKE_MODE: 'rollforward' });
+-  const started = await engine.start();
+-  const status = engine.status();
+-  assert.equal(started, false);
+-  assert.equal(status.state, 'stopped');
+-  assert.equal(engine.failure.kind, 'port');
+-  assert.equal(engine.child, null);
+-});
+-
+ test('an engine that exits early: reason and log lines for the start window', async () => {
+   const { engine } = makeEngine({ FAKE_MODE: 'exit-early' });
+   assert.equal(await engine.start(), false);
+@@ -142,19 +135,11 @@ test('no answer within the time limit: stopped with no reason, child killed', as
+   await waitFor(() => !alive(pid), 3000);
+ });
+ 
+-test('an engine without --watch-stdin is retried without it', async () => {
+-  const { engine, log } = makeEngine({ FAKE_NO_WATCH: '1' });
+-  assert.equal(await engine.start(), true);
+-  assert.equal(engine.watchStdin, false);
+-  assert.ok(log.tail().some((l) => l.includes('without --watch-stdin')));
+-  await engine.stop();
+-});
+-
+ test('with --watch-stdin, closing stdin alone stops the engine', async () => {
+   const { engine } = makeEngine();
+   await engine.start();
+   const child = engine.child;
+-  engine.stopping = true; // not a crash
++  engine.gen++; // a stop: not a crash
+   child.stdin.end();
+   await waitFor(() => child.exitCode !== null, 3000);
+   engine.child = null;
+@@ -184,8 +169,8 @@ test('guard: Restart engine is refused while a job is pending or running', async
+   await engine.stop();
+ });
+ 
+-test('Restart engine with no jobs (and a 404 jobs list) restarts it', async () => {
+-  const { engine } = makeEngine();
++test('Restart engine with no jobs restarts it', async () => {
++  const { engine } = makeEngine({ FAKE_JOBS: '[]' });
+   await engine.start();
+   const pid = engine.child.pid;
+   assert.deepEqual(await engine.jobs(), []);
+@@ -217,3 +202,174 @@ test('log: over 5 MB at launch keeps the last 1 MB from a whole line', () => {
+   trimLog(file);
+   assert.equal(fs.readFileSync(file, 'utf8'), 'small\n');
+ });
++
++test('the add-ons folder is made for the packaged Python only (F10)', async () => {
++  const site = (home) => path.join(home, '.anyscribe', 'runtime', 'lib', 'python3.13', 'site-packages');
++  const dev = makeEngine();
++  await dev.engine.start();
++  assert.equal(fs.existsSync(site(dev.home)), false);
++  await dev.engine.stop();
++  const packaged = makeEngine({}, { packaged: true });
++  await packaged.engine.start();
++  assert.equal(fs.existsSync(site(packaged.home)), true);
++});
++
++test('jobs: a list that cannot be read is unknown (null), never empty (C1)', async () => {
++  const cases = [
++    ['timeout', { FAKE_JOBS: '[]', FAKE_JOBS_DELAY_MS: '3000' }],
++    ['HTTP 500', { FAKE_JOBS: '[]', FAKE_JOBS_STATUS: '500' }],
++    ['404', {}],
++    ['bad JSON', { FAKE_JOBS: 'not json' }],
++    ['{"jobs":{}}', { FAKE_JOBS: '{"jobs":{}}' }],
++    ['[null]', { FAKE_JOBS: '[null]' }],
++  ];
++  for (const [name, env] of cases) {
++    const { engine } = makeEngine(env);
++    await engine.start();
++    assert.equal(await engine.jobs(), null, name);
++    await engine.stop();
++  }
++  const { engine } = makeEngine({ FAKE_JOBS: '[]' });
++  await engine.start();
++  assert.deepEqual(await engine.jobs(), [], 'a real empty list is known');
++});
++
++test('Restart engine is refused while the job list is unknown', async () => {
++  const { engine } = makeEngine({ FAKE_JOBS: '[]', FAKE_JOBS_STATUS: '500' });
++  await engine.start();
++  const pid = engine.child.pid;
++  assert.deepEqual(await engine.restart(), { ok: false, reason: RESTART_UNKNOWN });
++  assert.equal(engine.child.pid, pid);
++});
++
++test('stopForQuit: closes stdin and SIGTERMs its own child at once', async () => {
++  const { engine } = makeEngine();
++  await engine.start();
++  const child = engine.child;
++  engine.stopForQuit();
++  await waitFor(() => child.exitCode !== null || child.signalCode !== null, 3000);
++});
++
++test('guard: a server answering with another pid is not ours (C2)', async () => {
++  const { engine, log } = makeEngine({ FAKE_MODE: 'impostor' });
++  const started = engine.start();
++  await waitFor(() => engine.child);
++  const pid = engine.child.pid;
++  assert.equal(await started, false);
++  assert.equal(engine.failure.kind, 'port');
++  assert.equal(engine.lastExit.reason, 'another program is using port 8470');
++  assert.equal(engine.child, null);
++  await waitFor(() => !alive(pid), 3000);
++  assert.ok(!log.tail().some((l) => l.includes('engine ready')));
++});
++
++test('guard: a stop during start sends nothing to a server that is not ours (C2)', async () => {
++  const { engine } = makeEngine({ FAKE_MODE: 'silent' });
++  const started = engine.start();
++  await waitFor(() => engine.child);
++  const requests = [];
++  const other = http.createServer((req, res) => {
++    requests.push(`${req.method} ${req.url}`);
++    res.statusCode = 404;
++    res.end();
++  });
++  await new Promise((r) => other.listen(8470, '127.0.0.1', r));
++  try {
++    await sleep(300);
++    await engine.stop();
++    await started;
++    assert.ok(!requests.includes('POST /api/shutdown'), requests.join(', '));
++  } finally {
++    other.close();
++  }
++});
++
++const startedPids = (log) => log.tail(400).flatMap((l) => [...l.matchAll(/engine started \(pid (\d+)/g)].map((m) => Number(m[1])));
++
++test('guard: two restarts at once leave exactly one engine, and it is ours (C4)', async () => {
++  const { engine, log } = makeEngine({ FAKE_JOBS: '[]' });
++  await engine.start();
++  const results = await Promise.all([engine.restart(), engine.restart()]);
++  assert.deepEqual(results, [{ ok: true, reason: null }, { ok: true, reason: null }]);
++  const pids = startedPids(log);
++  assert.equal(pids.length, 3);
++  assert.deepEqual(pids.filter(alive), [engine.child.pid], 'only the last engine is alive, and the shell holds it');
++});
++
++test('guard: a stop while restarting after a crash starts nothing new (F3)', async () => {
++  const { engine, log } = makeEngine({ FAKE_MODE: 'crash' });
++  let stopped;
++  engine.on('status', (s) => {
++    if (s.state === 'restarting' && !stopped) stopped = engine.stop();
++  });
++  await engine.start();
++  await waitFor(() => stopped, 5000);
++  await stopped;
++  await sleep(1000);
++  assert.equal(engine.status().state, 'stopped');
++  assert.equal(engine.child, null);
++  assert.deepEqual(startedPids(log).filter(alive), [], 'no engine left running');
++  assert.equal(startedPids(log).length, 1, 'no engine started after the stop');
++});
++
++test('guard: a stop during the port check spawns nothing (F3)', async () => {
++  const { engine, log } = makeEngine();
++  let stopped;
++  engine.on('status', (s) => {
++    if (s.state === 'starting' && !stopped) stopped = engine.stop();
++  });
++  assert.equal(await engine.start(), false);
++  await stopped;
++  await sleep(300);
++  assert.equal(engine.failure, null, 'the port was free: nothing but the stop kept the engine from starting');
++  assert.deepEqual(startedPids(log), []);
++  assert.equal(engine.status().state, 'stopped');
++});
++
++test("guard: an unwritable log folder shows couldn't start, never throws (C9)", async () => {
++  const home = tempHome();
++  fs.mkdirSync(path.join(home, '.anyscribe'), { recursive: true });
++  fs.writeFileSync(path.join(home, '.anyscribe', 'logs'), 'a file where the log folder should be');
++  const log = new AppLog(path.join(home, '.anyscribe', 'logs', 'app.log'));
++  assert.match(log.error, /EEXIST|ENOTDIR/);
++  log.shell('still kept in memory');
++  assert.match(log.tail().at(-1), /still kept in memory/);
++  const engine = new Engine({ python: process.execPath, prefixArgs: [FAKE], home, env: { HOME: home, PATH: process.env.PATH }, log });
++  made.push(engine);
++  assert.equal(await engine.start(), false);
++  assert.equal(engine.failure.kind, 'log');
++  assert.match(engine.lastExit.reason, /^Can't write the log file: /);
++  assert.equal(engine.child, null, 'no engine started without a log');
++});
++
++test('guard: stop takes the engine\'s helpers with it (its process group) (S-design-C)', async () => {
++  const { engine, log } = makeEngine({ FAKE_MODE: 'stubborn', FAKE_GRANDCHILD: '1' }, { stopWaitMs: 500 });
++  let grandchild;
++  try {
++    await engine.start();
++    await waitFor(() => /grandchild pid (\d+)/.test(log.tail().join('\n')), 3000);
++    grandchild = Number(log.tail().join('\n').match(/grandchild pid (\d+)/)[1]);
++    const pid = engine.child.pid;
++    assert.ok(alive(grandchild));
++    await engine.stop();
++    assert.equal(alive(pid), false, 'the engine is gone');
++    await waitFor(() => !alive(grandchild), 2000).catch(() => {});
++    assert.equal(alive(grandchild), false, `its helper (pid ${grandchild}) is gone too`);
++  } finally {
++    if (grandchild && alive(grandchild)) process.kill(grandchild, 'SIGKILL'); // the pid this test read
++  }
++});
++
++test("guard: a crashed engine's helpers are stopped with its group (S-open-3)", async () => {
++  const { engine, log } = makeEngine({ FAKE_MODE: 'crash', FAKE_GRANDCHILD: '1' });
++  const helpers = () => [...log.tail(400).join('\n').matchAll(/grandchild pid (\d+)/g)].map((m) => Number(m[1]));
++  try {
++    await engine.start();
++    await waitFor(() => engine.stoppedRestarting, 10_000);
++    assert.equal(helpers().length, 3, 'one helper per engine start');
++    await waitFor(() => !helpers().some(alive), 3000).catch(() => {});
++    assert.deepEqual(helpers().filter(alive), [], 'no helper outlives its crashed engine');
++  } finally {
++    for (const pid of helpers()) if (alive(pid)) process.kill(pid, 'SIGKILL'); // pids this test read
++  }
++});
+diff --git a/desktop/test/fake-engine.js b/desktop/test/fake-engine.js
+index 00cd9d5..c498164 100644
+--- a/desktop/test/fake-engine.js
++++ b/desktop/test/fake-engine.js
+@@ -1,6 +1,7 @@
+ // A stand-in for `python -m anyscribe ui --port N --no-open [--watch-stdin]`, for the tests.
+-// FAKE_MODE: ok | exit-early | crash | silent | stubborn | rollforward. FAKE_JOBS: JSON for /api/jobs
+-// (unset: 404, like an engine before slice 2a). FAKE_NO_WATCH=1: reject --watch-stdin like today's engine.
++// FAKE_MODE: ok | exit-early | crash | silent | stubborn | impostor (answers health with another pid). FAKE_JOBS: JSON for /api/jobs
++// (unset: 404). FAKE_GRANDCHILD=1: start a helper that ignores SIGTERM and print its pid.
++// FAKE_JOBS_STATUS: its HTTP status; FAKE_JOBS_DELAY_MS: answer that late.
+ 'use strict';
+ 
+ const http = require('node:http');
+@@ -10,10 +11,6 @@ const port = Number(args[args.indexOf('--port') + 1]);
+ const watch = args.includes('--watch-stdin');
+ const mode = process.env.FAKE_MODE || 'ok';
+ 
+-if (watch && process.env.FAKE_NO_WATCH) {
+-  process.stderr.write("Usage: python -m anyscribe ui [OPTIONS]\nError: No such option: --watch-stdin\n");
+-  process.exit(2);
+-}
+ if (mode === 'exit-early') {
+   process.stderr.write("Traceback (most recent call last):\nPermissionError: [Errno 13] Permission denied: '/home/x/.anyscribe/config.yaml'\n");
+   process.exit(1);
+@@ -23,11 +20,21 @@ function serve(listenPort) {
+   const server = http.createServer((req, res) => {
+     if (req.url === '/api/health') {
+       res.setHeader('content-type', 'application/json');
+-      return res.end(JSON.stringify({ app: 'anyscribe', ok: true }));
++      const pid = mode === 'impostor' ? process.pid + 1 : process.pid;
++      return res.end(JSON.stringify({ app: 'anyscribe', ok: true, pid }));
+     }
+     if (req.url === '/api/jobs' && process.env.FAKE_JOBS) {
++      res.statusCode = Number(process.env.FAKE_JOBS_STATUS || 200);
+       res.setHeader('content-type', 'application/json');
+-      return res.end(process.env.FAKE_JOBS);
++      return setTimeout(() => res.end(process.env.FAKE_JOBS), Number(process.env.FAKE_JOBS_DELAY_MS || 0));
++    }
++    if (req.url === '/') {
++      res.setHeader('content-type', 'text/html');
++      return res.end('<!doctype html><title>fake dashboard</title><div id="root"><p>fake</p></div>');
++    }
++    if (req.url === '/redirect-out') {
++      res.writeHead(302, { location: 'http://example.invalid/away' });
++      return res.end();
+     }
+     if (req.method === 'POST' && req.url === '/api/shutdown') {
+       res.end('{"ok":true}');
+@@ -41,15 +48,11 @@ function serve(listenPort) {
+   return server;
+ }
+ 
+-if (mode === 'rollforward') {
+-  // Simulates the race: another anyscribe grabbed our port after the shell checked it,
+-  // so this engine rolled forward to the next one (as `anyscribe ui` does).
+-  serve(port);
+-  console.log(`Port ${port} busy — using ${port + 1}.`);
+-  console.log(`anyscribe ui → http://127.0.0.1:${port + 1}`);
+-} else {
+-  console.log(`anyscribe ui → http://127.0.0.1:${port}`);
+-  if (mode !== 'silent') serve(port);
++console.log(`anyscribe ui → http://127.0.0.1:${port}`);
++if (mode !== 'silent') serve(port);
++if (process.env.FAKE_GRANDCHILD) {
++  const helper = require('node:child_process').spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1 << 30)"], { stdio: 'ignore' });
++  console.log(`grandchild pid ${helper.pid}`);
+ }
+ if (mode === 'crash') setTimeout(() => process.exit(1), 300);
+ if (watch && mode !== 'stubborn') process.stdin.on('end', () => process.exit(0)).resume();
+diff --git a/desktop/test/logic.test.js b/desktop/test/logic.test.js
+index 2196949..58d2f0b 100644
+--- a/desktop/test/logic.test.js
++++ b/desktop/test/logic.test.js
+@@ -14,7 +14,10 @@ test('port: 8470 unless the old desktop mode records 8470', () => {
+ 
+ test('python: packaged uses the bundled one, dev needs ANYSCRIBE_DEV_PYTHON', () => {
+   assert.equal(logic.resolvePython({ packaged: true, resourcesPath: '/A/Resources', env: {} }), '/A/Resources/python/bin/python3');
+-  assert.equal(logic.resolvePython({ packaged: false, env: { ANYSCRIBE_DEV_PYTHON: '/v/bin/python' } }), '/v/bin/python');
++  assert.equal(logic.resolvePython({ packaged: false, env: { ANYSCRIBE_DEV_PYTHON: '/v/bin/python' }, cwd: '/x' }), '/v/bin/python');
++  // C6: a relative path is resolved against where the app started, not the engine's HOME.
++  assert.equal(logic.resolvePython({ packaged: false, env: { ANYSCRIBE_DEV_PYTHON: '../.venv/bin/python' }, cwd: '/repo/desktop' }), '/repo/.venv/bin/python');
++  assert.equal(logic.resolvePython({ packaged: false, env: { ANYSCRIBE_DEV_PYTHON: 'python3' }, cwd: '/repo/desktop' }), 'python3');
+   assert.throws(() => logic.resolvePython({ packaged: false, env: {} }), /ANYSCRIBE_DEV_PYTHON/);
+ });
+ 
+@@ -44,9 +47,8 @@ test('environment: packaged PATH is the app bin plus system dirs, never the call
+   }
+ });
+ 
+-test('engine args carry --watch-stdin only when asked', () => {
+-  assert.deepEqual(logic.engineArgs(8470, true), ['-m', 'anyscribe', 'ui', '--port', '8470', '--no-open', '--watch-stdin']);
+-  assert.deepEqual(logic.engineArgs(8471, false), ['-m', 'anyscribe', 'ui', '--port', '8471', '--no-open']);
++test('engine args always carry --watch-stdin', () => {
++  assert.deepEqual(logic.engineArgs(8470), ['-m', 'anyscribe', 'ui', '--port', '8470', '--no-open', '--watch-stdin']);
+ });
+ 
+ test('menu: Ready', () => {
+@@ -87,17 +89,30 @@ test('menu: Finished while the window was closed (kept until shown)', () => {
+     job('completed', { title: 'Before closing', completed_at: hiddenSince / 1000 - 60 }),
+     job('cancelled', { completed_at: hiddenSince / 1000 + 5 }),
+   ];
+-  const m = logic.menuModel({ engineState: 'running', jobs, hiddenSince });
++  const finished = [...logic.rememberFinished(new Map(), jobs, hiddenSince).values()];
++  const m = logic.menuModel({ engineState: 'running', jobs, finished });
+   assert.equal(m.header, 'anyscribe · 1 saved, 1 failed');
+   assert.equal(m.icon, 'alert');
+   assert.deepEqual(m.rows, [
+-    { label: 'Founder interview, part 2', stage: 'Saved' },
+     { label: 'youtube.com/watch?v=jNQX…', stage: 'Failed' },
+-  ]);
+-  // Window shown again: back to Ready.
+-  assert.equal(logic.menuModel({ engineState: 'running', jobs, hiddenSince: null }).header, 'anyscribe · Ready');
++    { label: 'Founder interview, part 2', stage: 'Saved' },
++  ], 'newest first');
++  // Window shown again: forgotten, back to Ready.
++  assert.equal(logic.rememberFinished(new Map(finished.map((j) => [j.job_id, j])), jobs, null).size, 0);
++  assert.equal(logic.menuModel({ engineState: 'running', jobs, finished: [] }).header, 'anyscribe · Ready');
+   // Saved only: no red dot.
+-  assert.equal(logic.menuModel({ engineState: 'running', jobs: jobs.slice(0, 1), hiddenSince }).icon, 'plain');
++  assert.equal(logic.menuModel({ engineState: 'running', jobs, finished: finished.slice(0, 1) }).icon, 'plain');
++});
++
++test('guard: a failure stays in the menu after 50 later completions push it off the list (C7)', () => {
++  const hiddenSince = Date.parse('2026-11-20T14:00:00Z');
++  const failure = job('failed', { job_id: 'the-failure', completed_at: hiddenSince / 1000 + 1 });
++  let memory = logic.rememberFinished(new Map(), [failure], hiddenSince); // poll 1
++  const fifty = Array.from({ length: 50 }, (_, i) => job('completed', { title: `Saved ${i}`, completed_at: hiddenSince / 1000 + 10 + i }));
++  memory = logic.rememberFinished(memory, fifty, hiddenSince); // poll 2: the engine's 50 rows no longer hold it
++  const m = logic.menuModel({ engineState: 'running', jobs: fifty, finished: [...memory.values()] });
++  assert.equal(m.icon, 'alert');
++  assert.equal(m.header, 'anyscribe · 50 saved, 1 failed');
+ });
+ 
+ test("menu: Engine stopped · couldn't restart offers Restart engine", () => {
+@@ -130,24 +145,45 @@ test('quit question: wording and counts', () => {
+   assert.equal(logic.quitQuestion([job('completed'), job('failed'), job('cancelled')]), null);
+ });
+ 
+-test('quit: asks when jobs exist, quits straight away when none', async () => {
+-  const asked = [];
+-  const ask = (answer) => async (q) => {
+-    asked.push(q.detail);
+-    return answer;
+-  };
+-  assert.equal(await logic.decideQuit([job('running')], ask(0)), 'whenDone');
+-  assert.equal(await logic.decideQuit([job('pending')], ask(1)), 'stopAndQuit');
+-  assert.equal(await logic.decideQuit([job('running')], ask(2)), 'cancel');
+-  assert.equal(asked.length, 3);
+-  assert.equal(await logic.decideQuit([job('completed')], ask(0)), 'quit');
+-  assert.equal(asked.length, 3, 'no question when nothing is pending or running');
++test('quit: decided at once from the last poll (C1, F1, F2)', () => {
++  const idle = logic.quitDecision({ running: true, known: true, jobs: [job('completed')] });
++  assert.equal(idle, null, 'known and idle: the quit is not prevented');
++  assert.equal(logic.quitDecision({ running: false, known: false, jobs: [] }), null, 'no engine: quit');
++  const busy = logic.quitDecision({ running: true, known: true, jobs: [job('running')] });
++  assert.equal(busy.box.message, 'Transcriptions are still running');
++  assert.deepEqual(busy.choices, ['whenDone', 'stopAndQuit', 'cancel']);
++  const unknown = logic.quitDecision({ running: true, known: false, jobs: [] });
++  assert.deepEqual(unknown.box, {
++    type: 'warning',
++    message: "anyscribe couldn't check for running transcriptions",
++    detail: 'Quitting now stops any transcription that is still running.',
++    buttons: ['Quit Anyway', 'Cancel'],
++    defaultId: 1,
++    cancelId: 1,
++  });
++  assert.deepEqual(unknown.choices, ['quit', 'cancel']);
++});
++
++test('Quit When Done waits while the list is unknown', () => {
++  assert.equal(logic.quitWhenDoneReady({ known: false, jobs: [] }), false);
++  assert.equal(logic.quitWhenDoneReady({ known: true, jobs: [job('pending')] }), false);
++  assert.equal(logic.quitWhenDoneReady({ known: true, jobs: [job('completed')] }), true);
++});
++
++test('job list shape: anything else is unknown, never empty', () => {
++  const good = [job('running')];
++  assert.equal(logic.validJobs(good), good);
++  assert.deepEqual(logic.validJobs([]), []);
++  for (const bad of [{ jobs: {} }, { jobs: [] }, [null], [{ job_id: 1, status: 'running' }], [{ job_id: 'a' }], null, 'x']) {
++    assert.equal(logic.validJobs(bad), null, JSON.stringify(bad));
++  }
+ });
+ 
+ test('restart refusal while any job is pending or running', () => {
+   assert.equal(logic.restartRefusal([job('running')]), 'Wait for transcriptions to finish before restarting the engine.');
+   assert.equal(logic.restartRefusal([job('pending')]), logic.RESTART_REFUSED);
+   assert.equal(logic.restartRefusal([job('completed'), job('failed')]), null);
++  assert.equal(logic.restartRefusal(null), "anyscribe couldn't check for running transcriptions; try again in a moment");
+ });
+ 
+ test('crash window: the third exit within 60 s stops retrying', () => {
+@@ -167,5 +203,58 @@ test("start window: the couldn't-start sentence for each reason", () => {
+   assert.equal(logic.failureMessage({ kind: 'port', reason: 'another program is using port 8470' }), `Its engine couldn't start: another program is using port 8470. ${safe}`);
+   assert.equal(logic.failureMessage({ kind: 'timeout' }), `Its engine didn't answer within a minute. ${safe}`);
+   assert.equal(logic.failureMessage({ kind: 'exited', reason: 'PermissionError: x' }), `Its engine stopped before it was ready. ${safe}`);
++  assert.equal(logic.failureMessage({ kind: 'log', reason: "Can't write the log file: EACCES" }), `Can't write the log file: EACCES. ${safe}`);
+   assert.equal(logic.failureMessage({ kind: 'crashes' }), `Its engine stopped 3 times in a minute, so anyscribe stopped restarting it. ${safe}`);
+ });
++
++test('links: the app keeps its own pages; other origins never load inside it (C3)', () => {
++  const ours = ['http://127.0.0.1:8470/'];
++  const start = 'file:///app/src/start.html';
++  const nav = (url, main = true) => logic.navigation(url, ours, start, main);
++  assert.equal(nav('http://127.0.0.1:8470/history'), 'allow');
++  assert.equal(nav(start), 'allow');
++  assert.equal(nav('https://github.com/rishmadaan/anyscribe'), 'outside', 'a link or redirect out opens in the browser');
++  assert.equal(nav('http://127.0.0.1:8470.evil.example/'), 'outside');
++  assert.equal(nav('http://127.0.0.1:9999/'), 'outside', 'another local port is not ours');
++  assert.equal(nav('https://evil.example/', false), 'block', 'an outside iframe is blocked, not opened');
++  assert.equal(nav('about:blank', false), 'allow');
++  assert.equal(nav('about:blank', true), 'block');
++  assert.equal(nav('file:///etc/passwd'), 'block');
++  assert.equal(nav('javascript:alert(1)'), 'block');
++});
++
++test('menu layout matches mockup section 6: separators and header (F6)', () => {
++  const layout = (m) => logic.menuLayout(m).join(' ');
++  assert.equal(layout(logic.menuModel({ engineState: 'running', jobs: [] })), 'header open separator startAtLogin separator quit');
++  assert.equal(
++    layout(logic.menuModel({ engineState: 'running', jobs: [job('running'), job('pending')] })),
++    'header row row separator open separator startAtLogin separator quit'
++  );
++  assert.equal(
++    layout(logic.menuModel({ engineState: 'stopped', stoppedRestarting: true })),
++    'header restartEngine open separator startAtLogin separator quit'
++  );
++  assert.equal(
++    layout(logic.menuModel({ engineState: 'running', jobs: [job('running')], quitWhenDone: true })),
++    'header row separator dontQuit stopAndQuit'
++  );
++});
++
++test('menu: finished-while-closed shows the 5 newest, then "and N more" (S-open-4)', () => {
++  const hiddenSince = Date.parse('2026-11-20T14:00:00Z');
++  const done = Array.from({ length: 7 }, (_, i) =>
++    job(i === 0 ? 'failed' : 'completed', { title: `Job ${i}`, completed_at: hiddenSince / 1000 + 10 * (i + 1) })
++  );
++  const m = logic.menuModel({ engineState: 'running', jobs: [], finished: done });
++  assert.equal(m.header, 'anyscribe · 6 saved, 1 failed', 'the header counts all seven');
++  assert.equal(m.icon, 'alert');
++  assert.deepEqual(m.rows, [
++    { label: 'Job 6', stage: 'Saved' },
++    { label: 'Job 5', stage: 'Saved' },
++    { label: 'Job 4', stage: 'Saved' },
++    { label: 'Job 3', stage: 'Saved' },
++    { label: 'Job 2', stage: 'Saved' },
++    { label: 'and 2 more', stage: null },
++  ]);
++  assert.equal(logic.menuLayout(m).filter((x) => x === 'row').length, 6);
++});
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index a032f87..f2900f3 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -183,20 +183,29 @@ bridge contract.
+   `desktop.json` records 8470, so it never collides with desktop mode), the
+   engine environment (built from scratch; packaged PATH is `<resources>/bin`
+   plus the system directories, never the caller's), the job list to menu
+-  mapping, the quit question, the three-exits-in-60-s crash window.
++  mapping (jobs that finished while the window was hidden are kept by id until
++  it is shown), the menu layout, the quit decision, the navigation rule, the
++  three-exits-in-60-s crash window.
+ - `src/engine.js`: the supervisor (Node only, tested against
+-  `test/fake-engine.js`). Refuses a port something already answers on or holds,
+-  and an engine that announces a different port (`ui` rolls forward); polls
+-  `/api/health` every 100 ms for 60 s; restarts after an unexpected exit until
+-  the crash window says stop; stops by closing stdin, `POST /api/shutdown`,
+-  10 s, then a kill of its own child's pid. Output and `[app]` lines go to
+-  `~/.anyscribe/logs/app.log`. An engine without `--watch-stdin` is retried
+-  without it (until slice 2a is everywhere).
++  `test/fake-engine.js`). Start, stop and restart run one at a time through a
++  queue; a stop claims itself at once (a generation number) so a launch under
++  way stands down. Refuses a port something already answers on or holds; polls
++  `/api/health` every 100 ms for 60 s and is ready only when its `pid` is the
++  spawned child's (anything else is another program on the port, sent
++  nothing); restarts after an unexpected exit until the crash window says
++  stop; stops by closing stdin, `POST /api/shutdown` (only to its verified
++  child), 10 s, then a kill of its own child's pid; at quit, closes stdin and
++  sends SIGTERM without waiting. `jobs()` returns null when the list cannot be
++  read, never an empty list. Output and `[app]` lines go to
++  `~/.anyscribe/logs/app.log`; if it cannot be written the start window says so.
+ - `src/main.js`: windows (a local start window, never served by the engine;
+   the dashboard window, which hides on close), single instance, the menu bar
+-  (polls `GET /api/jobs` every 2 s; 404 reads as no jobs) and Dock modes,
+-  login item, the quit question on every quit path, links leaving 127.0.0.1
+-  opened in the browser, and the preload bridge `window.anyscribeDesktop`
++  (polls `GET /api/jobs` every 2 s; a failed read keeps the last list) and
++  Dock modes, the login item (read from the system), the quit decision on
++  every quit path (made at once from the last poll, so an idle logout goes
++  through; an unknown list asks Quit Anyway / Cancel), one navigation rule for
++  navigations, frames, redirects and popups (outside pages open in the
++  browser, outside frames are blocked), and the preload bridge `window.anyscribeDesktop`
+   (contextIsolation, sandbox, no Node; IPC accepted only from the dashboard's
+   origin and the start page).
+ - Tests: `npm test` (unit and supervisor), `npm run e2e` (the real app,
+diff --git a/docs/building/journal/2026-11-20-mac-app-shell.md b/docs/building/journal/2026-11-20-mac-app-shell.md
+index 520313f..523fda1 100644
+--- a/docs/building/journal/2026-11-20-mac-app-shell.md
++++ b/docs/building/journal/2026-11-20-mac-app-shell.md
+@@ -1,7 +1,7 @@
+ ---
+ type: decision
+ tags: [desktop, electron, mac-app, engine, menu-bar]
+-tldr: "desktop/ is the Mac app shell: Electron 44.9.3, plain JavaScript, no other dependencies. It starts its own engine on 8470 (8471 beside desktop mode), refuses a taken port, restarts after crashes until three in a minute, asks before quitting during jobs, and gives the dashboard a small preload bridge. Found and fixed a quit that hung invisibly when no engine was running."
++tldr: "desktop/ is the Mac app shell: Electron 44.9.3, plain JavaScript, no other dependencies. It starts its own engine on 8470 (8471 beside desktop mode), refuses a taken port and any server whose health pid is not its child, restarts after crashes until three in a minute, asks before quitting during jobs (never treating an unreadable job list as empty), and gives the dashboard a small preload bridge. Found and fixed a quit that hung invisibly when no engine was running."
+ ---
+ 
+ # Mac app shell (phase 2b)
+@@ -23,16 +23,11 @@ them `window.anyscribeDesktop` (contract in `desktop/README.md`).
+   shutdown or roll forward), `main.js` needs Electron (covered by the
+   end-to-end run). The quit decision (`decideQuit`) lives in `logic.js` so the
+   "never quit silently during jobs" guard is unit-tested.
+-- **Two port guards.** The app refuses a port that answers or cannot be bound,
+-  and also an engine that announces another port, because `anyscribe ui` rolls
+-  forward past a busy port and a race between the check and the bind would
+-  otherwise attach the window to someone else's server. Each is mutation-tested
+-  on its own.
+-- **`--watch-stdin` fallback.** The engine flag comes from slice 2a. An engine
+-  without it exits 2 with "No such option: --watch-stdin"; the app then starts
+-  it without the flag and logs that a force-quit app would leave it running.
+-  Remove once every engine the app can meet has the flag (a packaged app always
+-  does).
++- **Port guards.** The app refuses a port that answers or cannot be bound.
++  (Round 0 also refused an engine announcing another port; round 1 replaced
++  that with the pid check below.)
++- **`--watch-stdin`.** Round 0 retried an engine without the flag; round 1
++  removed that: the shell merges after slice 2a and always passes it.
+ - **Coloured dots are not template images.** macOS turns a template image
+   monochrome, so the plain glyph stays a template (`trayTemplate.png`) and the
+   amber and red dot variants come in a black-glyph and a white-glyph version,
+@@ -61,8 +56,42 @@ read-only): the dashboard rendered 0.3 to 0.6 s after the engine answered
+ health. With 2a's `--watch-stdin`, a SIGKILLed app took its engine with it;
+ without it the engine stayed up (expected, logged).
+ 
++## Round 1 review fixes
++
++Two reviewers (correctness and fit) raised 21 findings; 20 were upheld. The
++ones that changed the design:
++
++- **Unknown is not empty.** `jobs()` returned `[]` on a timeout, error or bad
++  body, so a slow engine read as idle and quitting or restarting went ahead
++  during a transcription. It now validates the list and returns null when it
++  cannot know; Quit When Done and Restart engine wait, and an unknown list at
++  quit asks "anyscribe couldn't check for running transcriptions" (Quit Anyway,
++  Cancel).
++- **Quit decided at once.** `before-quit` was always prevented and decided
++  later, which on a Mac would cancel every logout. It now decides from the last
++  poll (at most 2 s old): idle quits go ahead and `will-quit` closes stdin and
++  sends SIGTERM. Accepted limit: a job started in those 2 s is not asked about
++  (the engine has one submitter, its own window; declined C5).
++- **One lifecycle at a time.** Overlapping restarts or a stop during a crash
++  restart could orphan or double-start engines. Start, stop and restart now run
++  through a queue, with a generation number every continuation checks.
++- **Ownership by pid.** Readiness needs slice 2a's `/api/health` `pid` to
++  equal the spawned child; only that child is ever sent `/api/shutdown`.
++- **Frames and redirects.** `will-frame-navigate` and `will-redirect` now
++  apply the same origin rule as navigation and popups.
++- **Login item from the system**, finished jobs remembered by id while
++  hidden, logs that never throw, the default title bar for the dashboard
++  window until 2c, and the menu laid out as the mockup draws it.
++
+ ## Left for later
+ 
+-Packaging and the bundled Python (phase 3); the dashboard's Mac screens, banner
+-and the hidden-inset title bar's drag region (slice 2c); a check of logout and
+-the login-launch path on a real Mac.
++- Phase 3: packaging and the bundled Python; stamp the app version from
++  `pyproject.toml` at packaging so `desktop/package.json` and the engine
++  cannot drift (F8); a small application menu (anyscribe: About, Open Cmd O,
++  Quit Cmd Q; Edit; Window) in place of Electron's default (F12).
++- Slice 2c: the dashboard's Mac screens and banner, a drag area so the
++  dashboard window can use the hidden-inset title bar, and hiding the
++  dashboard's own Shutdown button in the app.
++- On a real Mac: logout with the app idle, the login launch
++  (`wasOpenedAtLogin` on macOS 13 and later), the tray menu and dots, Dock
++  modes, and the start window's look.

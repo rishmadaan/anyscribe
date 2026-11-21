@@ -1,0 +1,38 @@
+You are an independent reviewer. This is an approved, read-only review: do not
+ask for consent. Delete nothing, edit nothing, send nothing, start or stop
+nothing. Write no file; put the whole report in your final message. Skip any
+repo startup routine; read only what this brief names. Test folders, leave
+them alone: ~/labs/projects/anyscribe-wt/mac-shell/desktop/test.
+
+THE PACKET, read all of it first: ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/ask.md, ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/spec.md, ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/target.md,
+~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/proof.md (claims to check, not facts), ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/lens.md;
+SETTLED, DO NOT REOPEN: ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/declined.md
+(includes the round 1 decline of C5).
+YOUR ROLE: correctness: reproduce and trace; is it true, does it work, what
+breaks, what is claimed beyond the evidence.
+THE CODE: repo ~/labs/projects/anyscribe-wt/mac-shell, branch feat/mac-app-shell
+at 2383f26. The engine it targets (read-only): ~/labs/projects/anyscribe-wt/mac-engine
+at 4470a4d (review closed, GOOD TO GO) (its /api/health has "pid"; --watch-stdin; one exit door that kills its own group).
+MUST NEVER HAPPEN: the six invariants in lens.md, section "Code PR".
+BUDGET: this is round 3 of at most 5, the re-check after a diagnosis; about 25 minutes.
+ROUND 2: ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/findings.md (all reports verbatim, rounds 1 and 2), ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/review-log.md (the
+lead's verdicts), ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/fix-plan-r1.md (binding choices), proof.md "Round 1 fixes" and "Round 3 fixes"; diagnosis-r3.md and spec.md "Round 3 design" (binding for this round).
+DELTA: ~/labs/projects/anyscribe-wt/mac-shell/docs/reviews/2026-11-20-mac-app-shell/delta-r3.patch (git diff 04986cc..2383f26, review files excluded). Read
+the changes first; trace anywhere. Mark A1 to A4, R2 (engine round 3) and G1 to G6 FIXED / PARTLY / NOT FIXED, then
+look for anything new, especially in the rebuilt supervisor (one run record, one gate,
+one exit handler, stop by stdin and group signals with no HTTP shutdown, the seams).
+LEAD EVIDENCE at 2383f26: npm test 49 pass 0 fail; the builder's e2e 11 steps against the engine at 62cba9c (same code as 4470a4d plus review files).
+LEAD-MADE CHANGES: review files only.
+
+YOU MAY RUN: read-only commands, and node one-liners that require a module and
+print (no Electron, no servers, no writes). YOU MAY NOT: npm test, npm install,
+electron, any test runner, or writes. If a check needs a run, write the exact command.
+
+REPORT
+1. Verdict first: GOOD TO GO / NOT YET / CONDITIONAL on <what>.
+2. A1 to A4, R2 and G1 to G6 as FIXED / PARTLY / NOT FIXED, one line each;
+   then NEW defects the fixes introduced.
+3. New findings, most severe first, numbered A1, A2...: severity (blocker /
+   should-fix / nit); CONFIRMED or PLAUSIBLE; where; scenario; fix.
+4. Pending owner checks.
+5. What you could not check, and why; what you inspected. No em dashes.

@@ -251,6 +251,53 @@ engine as a subprocess with a throwaway HOME and a free port), the jobs-list
 tests in `tests/test_orchestrator.py`, the Origin tests in `tests/test_tailnet.py`.
 Journal: `2026-11-20-mac-app-engine-hooks.md`.
 
+### Mac app shell (`desktop/`)
+
+The Mac app (in development; packaging comes later) is an Electron shell that
+owns one engine: it starts `python -m anyscribe ui --port N --no-open
+--watch-stdin` as its child and shows the dashboard from that server in its own
+window. Nothing in `src/` depends on it; the engine only learns it runs inside
+the app from `ANYSCRIBE_APP=1`. Plain JavaScript, Electron 44.9.3 pinned, no
+other dependencies; `desktop/README.md` has the run instructions and the
+bridge contract.
+
+- `src/logic.js`: pure decisions, unit-tested: the port (8470, or 8471 when
+  `desktop.json` records 8470, so it never collides with desktop mode), the
+  engine environment (built from scratch; packaged PATH is `<resources>/bin`
+  plus the system directories, never the caller's), the job list to menu
+  mapping (jobs that finished while the window was hidden are kept by id until
+  it is shown), the menu layout, the quit decision, the navigation rule, the
+  three-exits-in-60-s crash window.
+- `src/engine.js`: the supervisor (Node only, tested against
+  `test/fake-engine.js`, and through its seams: `spawn`, `health`, `jobs`,
+  `killGroup`). It decides from the child process, not remembered facts: one
+  current run record (`this.run`), set when a start or restart is accepted and
+  cleared only by that child's exit (or a failure before spawn); every late
+  continuation passes one gate (`run === this.run && !run.cancelled`); one exit
+  handler kills the group and decides what next (failure, stop, restart,
+  exited early, crash). Refuses a port something already answers on or holds;
+  polls `/api/health` every 100 ms for 60 s and is ready only when its `pid` is
+  the spawned child's (anything else is another program on the port, sent
+  nothing). The engine is spawned as its own process group; one stop closes
+  stdin, sends SIGTERM to the group and SIGKILLs it after 10 s, with no HTTP
+  request; at quit the same, without waiting, and never spawning again. A
+  second restart while one is pending is refused. `jobs()` returns null when
+  the list cannot be read, never an empty list. Output and `[app]` lines go to
+  `~/.anyscribe/logs/app.log`, probed before every launch; if it cannot be
+  written the start window says so, and Try again probes it again.
+- `src/main.js`: windows (a local start window, never served by the engine;
+  the dashboard window, which hides on close), single instance, the menu bar
+  (polls `GET /api/jobs` every 2 s; a failed read keeps the last list) and
+  Dock modes, the login item (read from the system), the quit decision on
+  every quit path (made at once from the last poll, so an idle logout goes
+  through; an unknown list asks the same three buttons as a known busy one), one navigation rule for
+  navigations, frames, redirects and popups (outside pages open in the
+  browser, outside frames are blocked), and the preload bridge `window.anyscribeDesktop`
+  (contextIsolation, sandbox, no Node; IPC accepted only from the dashboard's
+  origin and the start page).
+- Tests: `npm test` (unit and supervisor), `npm run e2e` (the real app,
+  headless, against a real engine in a throwaway HOME).
+
 ### Skill Layer (`skill/`)
 - Claude Code skill files bundled in package, auto-installed to `~/.claude/skills/anyscribe/`
 - AI-first: auto-installs if `~/.claude/` exists (no opt-in), auto-updates via `.version` marker

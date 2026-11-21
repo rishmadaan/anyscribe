@@ -334,7 +334,21 @@ The lead's decision follows the house rule that a guard no test can tell apart i
 **Checks:** `npm run lint` found nothing. `npm run build` produced `index-CDPOZTVX.js`, the committed name. `git diff --exit-code -- src/anyscribe/web/static` was clean. `git diff --check 13944d6..HEAD` was clean.
 
 **Not re-run after this removal:**
-- The real walk (F2). It ran on `index-DdNfqDJq.js`. This change only drops the `live` flag and two `onHeard()` calls; the reload path itself is unchanged.
+- The real walk (F2) at first. It was then run at the lead's request; see "Real walk on the shipping bundle" below.
 - The development-mode StrictMode cases (SM1, SM2). With the `live` flag gone, the first request is still aborted by the cleanup, which is what those cases asserted.
 
 **Cleanup:** I stopped 8471 (pid 1912019), `serve.py` on 8477 (1912020) and the mutant server on 8473 (1928842) by pid after reading each command line. No listener is left on 8470 to 8479. My preview tab is closed, and `home-r1bnew` and `home-r1bmut` are deleted. `df -h ~` shows 30 GB free.
+
+**Real walk on the shipping bundle (F2's bar), at `25078b1`, bundle `index-CDPOZTVX.js`.** No harness and no fakes. No code changed for this walk.
+- **Server:** the worktree's code. `HOME` was a new empty folder. Port 8474, `--local-only`. The model download went through `slowproxy.py` at 200 kB/s per connection. The server ran in a uv overlay environment on the main venv, with the engines added; I warmed that environment first without the proxy. The main venv is untouched: `import faster_whisper` there still fails.
+- **The page loaded the shipping bundle:** its own script URL is `/assets/index-CDPOZTVX.js`.
+- **Real clicks:** Let's go, On this computer, More models, Whisper Tiny, "Download Whisper Tiny (75 MB)". The server then reported `setup_running: true`, `tiny`, 5.6%.
+- **Reload mid-setup:** the wizard opened on Local transcription. It showed "Back is off until setup finishes. Skip for now asks first.", "Downloading Whisper Tiny… 10%" and "Setting up…"; Back was disabled, Whisper Tiny was selected and the flag was `null`. Screenshot: `screens/r1c-real-reload-watched-CDPOZTVX.png` (10.9% at capture).
+- **A real Escape opens "Close setup?":** I clicked the dialog title to focus the page, then pressed the real Escape key. "Close setup?" opened, focus was on Keep setting up, the dialog stayed open and the flag was `null`.
+  - The screenshot of this first box came out blank: the capture caught the dialog before its text painted.
+  - I pressed Enter (Keep setting up) and a real Escape again; the state was the same (box open, focus on Keep setting up, flag `null`). After a forced repaint the capture was clean: `screens/r1c-real-escape-asks-CDPOZTVX.png`, at 30.8%.
+- **Keep setting up keeps it:** both real Enter presses on the focused Keep setting up hid the box. The wizard stayed open and watched: the S13 line, "Setting up…", the flag `null`, and progress at 20.6%, then 33%, 35.2% and 37.5% on later reads.
+  - No clean screenshot of this state exists. Captures after the box closed kept the dialog's top half unpainted (`screens/r1c-real-after-keep-unpainted-CDPOZTVX.png`, kept only as a record of the artifact). The evidence for this step is the DOM reads above.
+- The download finished (`setup_outcome: set_up`, `tiny` runnable), and the page moved on to Workspace by itself with the flag `null`.
+- **Cleanup:** I stopped the real server (pid 1935173, with its uv parent 1935160) and `slowproxy.py` (1935159) by pid after reading each command line. No listener is left on 8470 to 8479. My preview tab is closed. The throwaway home (75 MB model plus the uv cache) is deleted.
+- **Disk:** `df -h ~` showed 30 GB free before and after (219G total, 178G used).

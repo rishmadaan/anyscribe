@@ -1,0 +1,1028 @@
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index eb88b50..9fdead9 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -87,7 +87,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
+ - Launched via `anyscribe ui` — core dependency, not optional
+ - REST API (`web/routes/*.py`):
+   - Config/keys: GET/PUT `/api/config`, GET `/api/providers`, GET `/api/providers/{name}/languages`, POST `/api/providers/{name}/test`, GET `/api/keys/status`, PUT `/api/keys`, DELETE `/api/keys/{provider_name}`
+-  - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs` (this run's jobs, newest first, at most 50), GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
++  - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs` (every active job, then the newest finished, 50 rows in all), GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
+   - History: GET `/api/transcripts`, GET/DELETE `/api/transcripts/{transcript_id}`, GET `/api/workspace/info`
+   - System: GET `/api/health`, GET/PUT `/api/autostart`, GET/PUT `/api/tailnet`, POST `/api/shutdown`
+   - Local: GET `/api/local/status`, GET `/api/local/setup/log`, POST `/api/local/setup` (`{model, also}`: the background setup queues `also` itself), POST `/api/local/choose` (`{model, also}`: one server-side pending default; the download queue's worker switches `local_model` only once the model is `runnable()`, a failure keeps the old default; a later call replaces it; reported as `pending_default` in status), POST `/api/local/teardown`. Readiness everywhere is `providers/local_models.runnable()` (engine imports, weights complete, Parakeet's Tiny + VAD too); `cached` means weights only (sizes, disk maths). `config_set.set_value('local_model', X)` refuses a change to a model that isn't runnable: the one guarded switch for CLI, Web and MCP
+@@ -178,34 +178,54 @@ menu bar. The engine side is four small hooks:
+ 
+ - **`ANYSCRIBE_APP=1`** means "this engine belongs to the Mac app". Only
+   `core/appmode.py::is_app()` reads it (exactly `"1"`). In app mode the CLI
+-  callback skips `_auto_update_skill()` and `run_headless_onboard()` never
++  callback skips `_auto_update_skill()`, `run_headless_onboard()` never
+   installs the skill whatever `install_skill` says (web wizard and agent path
+-  alike; `skill_installed` reads false), since only the app's Terminal switch
+-  installs it; `core/updater.py` reports install type `app`, and `update` /
++  alike; `skill_installed` reads false), and the interactive `anyscribe onboard`
++  skips it too (`cli/onboard.py::_install_skill_step()`; its summary says "not
++  installed"), since only the app's Terminal switch installs it; `core/updater.py` reports install type `app`, and `update` /
+   `update --check` print "This anyscribe came with the Mac app, which updates
+   itself." and exit 0 without running pip or git; `core/local_setup.py`'s
+   `detect_install_method()` returns `app` first and installs or removes the local
+   engines with `[sys.executable, "-m", "pip", ...]`, never uv. The app's
+   environment sets `PIP_USER=1` and `PYTHONUSERBASE`, so pip writes to the
+   add-ons folder, not into the app bundle. `doctor` shows "Install type: Mac app".
++  `anyscribe ui --port N` never moves to another port in app mode (the app
++  connects to the port it chose): if N is taken it prints "Port N is already in
++  use." and exits 1.
+ - **`anyscribe ui --watch-stdin`** (hidden from `--help`): a daemon thread reads
+   stdin until end of file. The app holds the other end of that pipe, so when the
+   app dies, even force-killed, the pipe closes and the engine stops the way
+   `POST /api/shutdown` does (removes this run's tailnet rule, then
+-  `server.should_exit = True`). If the process is still alive 10 s later (a
+-  running job or open socket holding the graceful stop), it exits hard with
+-  `os._exit(1)`. A thread, not a signal, so it also works on Windows.
+-- **`GET /api/jobs`**: every job this engine run knows, newest first, at most 50,
+-  as `{job_id, url, status, stage, title, error, file_path, created_at,
+-  completed_at}`. `stage` is the step of the last pipeline progress event;
++  `server.should_exit = True`). The 10 s clock starts the moment stdin ends,
++  before that cleanup, so a slow Tailscale call or a failing print cannot delay
++  or skip it. If the process is still alive when it runs out (a running job or
++  open socket holding the graceful stop), it exits hard. On POSIX the engine
++  makes itself a process group leader at startup (`os.setpgrp()`), so its
++  children (pip, yt-dlp, ffmpeg) share its group, and the hard exit SIGKILLs that
++  group, only when the engine leads it (never the app's group); elsewhere it
++  calls `os._exit(1)`. A thread, not a signal, so it is meant to work on
++  Windows; not yet run there.
++- **`GET /api/jobs`**: newest first, every pending and running job always (even
++  past 50), then the newest finished jobs up to 50 rows in all, as `{job_id, url,
++  status, stage, title, error, file_path, created_at, completed_at}`. The job
++  manager never drops an active job: finished jobs expire one hour after they
++  finish (not in app mode, where the menu keeps "finished while the window was
++  closed" rows until the window opens), and the 500-job memory cap evicts the
++  oldest finished jobs only. `stage` is the step of the last pipeline progress event;
+   `title` arrives as data on the orchestrator's "download completed" event
+   (`data={"title": ...}`, never parsed from the message) and from the result on
+   completion; `error` and `file_path` are null unless failed or completed. The
+   menu bar, the quit question, Settings and the update restart read this list.
++- **`GET /api/health` carries `pid`**, the engine process's own `os.getpid()`.
++  The app checks it matches the engine it spawned before it loads the page on
++  its port or sends `/api/shutdown`, so it never trusts or stops another
++  process that happens to answer there.
+ - **The Origin check** in `HostCheck` (see the Web UI layer): an `Origin` header,
+-  when present, must name a local host (any port; the Vite dev server proxies
+-  with the browser's Origin) or the tailnet name this server holds; anything
+-  else, `Origin: null` included, gets 403 (WebSocket: close 1008). No Origin
++  when present, must be exactly one header holding one serialized origin
++  (`http` or `https`, a host, an optional port; no userinfo, path or spaces) and
++  name a local host (any port; the Vite dev server proxies with the browser's
++  Origin) or the tailnet name this server holds; anything else, `Origin: null`
++  and two Origin headers included, gets 403 (WebSocket: close 1008). No Origin
+   (curl, the CLI, the tray) passes. This closes a hole older than the app: any
+   web page the user visited could send a no-preflight POST to `/api/shutdown` or
+   `/api/upload`. The app's window must load the dashboard from
+diff --git a/docs/building/journal/2026-11-20-mac-app-engine-hooks.md b/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
+index 690025c..cfe8581 100644
+--- a/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
++++ b/docs/building/journal/2026-11-20-mac-app-engine-hooks.md
+@@ -26,6 +26,9 @@ Python only, testable on Linux. The Electron shell is built separately in
+    - `core/onboard_headless.py`: `run_headless_onboard()` never installs the
+      skill, whatever `install_skill` says, so the web wizard and the agent path
+      follow the same rule. The response's `skill_installed` reads false.
++   - `cli/onboard.py`: the interactive wizard's own skill step
++     (`_install_skill_step()`) skips the install too; its summary says "not
++     installed (the Mac app's Terminal switch installs it)". (Review round 1.)
+    - `core/updater.py`: install type `app`; `update` and `update --check` print
+      "This anyscribe came with the Mac app, which updates itself." and exit 0
+      without pip or git. `doctor` shows "Install type: Mac app".
+@@ -37,11 +40,19 @@ Python only, testable on Linux. The Electron shell is built separately in
+ 2. **`ui --watch-stdin`** (hidden). Phase 0 found a force-killed app left its
+    engine running. The app now holds the engine's stdin; a daemon thread reads
+    it to end of file, then does what `POST /api/shutdown` does (removes this
+-   run's tailnet rule, sets `server.should_exit`), and calls `os._exit(1)` if
+-   the process is still alive 10 s later. A thread rather than a signal handler
+-   so it behaves the same on Windows.
+-3. **`GET /api/jobs`**: newest first, at most 50, `{job_id, url, status, stage,
+-   title, error, file_path, created_at, completed_at}`. The title is passed as
++   run's tailnet rule, sets `server.should_exit`), and exits hard if the
++   process is still alive 10 s later. The clock starts when stdin ends, before
++   the cleanup, so a slow Tailscale call or a failing print cannot hold it (review
++   round 1). On POSIX the engine leads its own process group from startup, and
++   the hard exit SIGKILLs that group, so pip, yt-dlp or ffmpeg children die with
++   it; it never signals a group it does not lead. Elsewhere it calls
++   `os._exit(1)`. A thread rather than a signal handler, so it is meant to work
++   on Windows; not yet run there.
++3. **`GET /api/jobs`**: newest first, every pending and running job (even past
++   50), then the newest finished jobs up to 50 rows in all, `{job_id, url, status,
++   stage, title, error, file_path, created_at, completed_at}`. Clean-up and the
++   memory cap never drop an active job, and in app mode finished jobs do not
++   expire after an hour (review round 1). The title is passed as
+    data on the orchestrator's "download completed" event and copied onto the
+    job, and taken from the result on completion; it is never parsed from the
+    message text. `web/jobs.py` is the only `on_progress` implementer for
+@@ -53,8 +64,9 @@ Python only, testable on Linux. The Electron shell is built separately in
+    no-preflight POST to `http://127.0.0.1:8457/api/shutdown` or `/api/upload`.
+    Now an Origin header, when present, must name a local host (any port, so the
+    Vite dev server at `localhost:5173` still works) or the tailnet name this
+-   server holds; otherwise 403 (WebSocket close 1008). `Origin: null` and
+-   unparseable values are refused; requests with no Origin (curl, the CLI, the
++   server holds; otherwise 403 (WebSocket close 1008). `Origin: null`, two
++   Origin headers and anything but a plain serialized origin (scheme, host,
++   optional port; no userinfo or path) are refused (review round 1); requests with no Origin (curl, the CLI, the
+    tray's shutdown call) pass as before. The 403 body says "anyscribe does not
+    answer requests sent by other websites."
+ 
+@@ -82,10 +94,17 @@ really shut the subprocess engine down). Details in
+   called `run_headless_onboard()` with its default `install_skill=True`, so
+   onboarding inside the app would have installed the skill when `~/.claude`
+   existed. The check now sits where the install happens, in
+-  `run_headless_onboard()`, covering every caller.
++  `run_headless_onboard()`, covering the web wizard and `onboard --yes`; the
++  interactive wizard has its own install step, guarded the same way in review
++  round 1.
+ - The app's window must load the dashboard over `http://127.0.0.1:<port>`.
+   A `file://` or custom-scheme page would send `Origin: null` or a non-local
+   Origin and be refused.
+-- Whether the Mac app's own terminal shim sets `ANYSCRIBE_APP=1` for
+-  `anyscribe` typed in Terminal decides whether `update` there says "the app
+-  updates itself"; that is the shim's choice, not the engine's.
++- Requirement: the app's Terminal command (`~/.local/bin/anyscribe`) must
++  export `ANYSCRIBE_APP=1`, `PIP_USER=1` and
++  `PYTHONUSERBASE=~/.anyscribe/runtime`, the same environment the app gives the
++  engine. Without them, `anyscribe update` and the local-engine setup typed in
++  Terminal would run pip into the signed app bundle.
++- In app mode nothing in the engine refreshes the Claude Code skill after an app
++  update (the CLI's own skill update is off there). So the app re-copies the
++  skill after each update while the Terminal switch is on.
+diff --git a/src/anyscribe/cli/main.py b/src/anyscribe/cli/main.py
+index fa16ab8..f484aae 100644
+--- a/src/anyscribe/cli/main.py
++++ b/src/anyscribe/cli/main.py
+@@ -270,16 +270,19 @@ def ui(
+     # a real error.
+     # min() keeps the scan inside the valid port range — connect_ex raises
+     # OverflowError on 65536, which would traceback instead of erroring cleanly.
+-    for candidate in range(port, min(port + PORT_SCAN_SPAN, 65535) + 1):
++    # The Mac app chose this port and connects to it, so in app mode never move.
++    span = 0 if is_app() else PORT_SCAN_SPAN
++    for candidate in range(port, min(port + span, 65535) + 1):
+         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+             if s.connect_ex(("127.0.0.1", candidate)) != 0:
+                 break
+     else:
+         err_console.print(f"[red]Port {port} is already in use.[/red]")
+-        err_console.print(
+-            f"Ports {port}–{min(port + PORT_SCAN_SPAN, 65535)} are all busy. "
+-            "Try: [bold]anyscribe ui --port <free port>[/bold]"
+-        )
++        if not is_app():
++            err_console.print(
++                f"Ports {port}–{min(port + span, 65535)} are all busy. "
++                "Try: [bold]anyscribe ui --port <free port>[/bold]"
++            )
+         raise typer.Exit(code=1)
+ 
+     if candidate != port:
+diff --git a/src/anyscribe/cli/onboard.py b/src/anyscribe/cli/onboard.py
+index f256c9f..4e195f1 100644
+--- a/src/anyscribe/cli/onboard.py
++++ b/src/anyscribe/cli/onboard.py
+@@ -23,6 +23,7 @@ from anyscribe.config.paths import (
+     get_workspace_dir,
+ )
+ from anyscribe.config.settings import Settings, save_config, save_env, load_config, load_env
++from anyscribe.core.appmode import is_app
+ from anyscribe.core.deps import check_and_install
+ from anyscribe.core.local_setup import RESTART_MESSAGE, run_setup as run_local_setup
+ from anyscribe.downloaders.instagram import SUPPORTED_BROWSERS
+@@ -433,6 +434,23 @@ LANGUAGE_OPTIONS = [
+ LANGUAGE_CODES = ["auto", "en", "es", "fr", "hi", "ar", "zh", "ja", "ko", "other"]
+ 
+ 
++def _install_skill_step() -> str:
++    """Install the Claude Code skill if Claude Code is present; return the summary's status.
++
++    Never in the Mac app's engine, matching the headless path: only the app's Terminal
++    switch installs the skill there.
++    """
++    if is_app():
++        return "not installed (the Mac app's Terminal switch installs it)"
++    if not CLAUDE_HOME.exists():
++        return ""
++    from anyscribe.cli.skill_cmd import copy_skill_files
++
++    copy_skill_files(quiet=True)
++    console.print("\n  [green]✓[/green] Claude Code skill installed to ~/.claude/skills/anyscribe/")
++    return "installed"
++
++
+ def onboard(
+     force: bool = typer.Option(
+         False, "--force", "-f", help="Re-run setup even if already configured."
+@@ -937,15 +955,7 @@ def onboard(
+     workspace = create_vault()
+ 
+     # Step 12: Claude Code skill (auto-installed — AI-first app)
+-    skill_status = ""
+-    if CLAUDE_HOME.exists():
+-        from anyscribe.cli.skill_cmd import copy_skill_files
+-
+-        copy_skill_files(quiet=True)
+-        skill_status = "installed"
+-        console.print(
+-            "\n  [green]✓[/green] Claude Code skill installed to ~/.claude/skills/anyscribe/"
+-        )
++    skill_status = _install_skill_step()
+ 
+     if os.environ.get("INSTAGRAM_PASSWORD"):
+         console.print(
+diff --git a/src/anyscribe/core/fileutil.py b/src/anyscribe/core/fileutil.py
+index e2f377e..c164b6b 100644
+--- a/src/anyscribe/core/fileutil.py
++++ b/src/anyscribe/core/fileutil.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import locale
+ import os
+ import tempfile
+ import threading
+@@ -30,16 +31,18 @@ def _thread_lock_for(path: Path) -> threading.Lock:
+         return _THREAD_LOCKS[resolved]
+ 
+ 
+-def atomic_write(path: Path, content: str) -> None:
++def atomic_write(path: Path, content: str, encoding: str | None = "utf-8") -> None:
+     """Write content atomically via temp file + os.replace().
+ 
+     os.replace() is atomic on POSIX and Windows. On crash mid-write, the
+-    original file is preserved.
++    original file is preserved. ``encoding=None`` means the platform default,
++    the same one ``Path.write_text`` and ``read_text`` use without an encoding.
+     """
++    data = content.encode(encoding or locale.getpreferredencoding(False))
+     path.parent.mkdir(parents=True, exist_ok=True)
+     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+     try:
+-        os.write(fd, content.encode())
++        os.write(fd, data)
+         os.close(fd)
+         os.replace(tmp, str(path))
+     except BaseException:
+diff --git a/src/anyscribe/vault/writer.py b/src/anyscribe/vault/writer.py
+index 0d108f3..cfb56cf 100644
+--- a/src/anyscribe/vault/writer.py
++++ b/src/anyscribe/vault/writer.py
+@@ -10,6 +10,7 @@ from pathlib import Path
+ 
+ from anyscribe.config.paths import get_workspace_dir, AUDIO_DIR
+ from anyscribe.config.settings import Settings
++from anyscribe.core.fileutil import atomic_write
+ from anyscribe.downloaders.base import DownloadResult
+ from anyscribe.providers.base import TranscriptResult, TranscriptSegment
+ 
+@@ -135,7 +136,10 @@ def write_transcript(
+         body_parts.append(f"\n## Transcript\n\n{transcript.text}\n")
+ 
+     content = frontmatter + "\n" + "\n".join(body_parts)
+-    out_path.write_text(content)
++    # Atomic: a process killed mid-write (the Mac app's hard exit) leaves no partial
++    # transcript for duplicate detection to mistake for a finished one. encoding=None keeps
++    # the platform default that write_text used and every transcript reader still uses.
++    atomic_write(out_path, content, encoding=None)
+ 
+     # Handle media file retention
+     if download.platform == "local":
+diff --git a/src/anyscribe/web/app.py b/src/anyscribe/web/app.py
+index 319326e..78f31a4 100644
+--- a/src/anyscribe/web/app.py
++++ b/src/anyscribe/web/app.py
+@@ -3,6 +3,8 @@
+ from __future__ import annotations
+ 
+ import os
++import re
++import signal
+ import sys
+ import threading
+ import time
+@@ -38,12 +40,15 @@ def _host_name(host: str) -> str:
+     return host.partition(":")[0]
+ 
+ 
++# A serialized origin and nothing else: scheme, host, optional port. No userinfo, path,
++# query, fragment or spaces; "null" does not match.
++SERIALIZED_ORIGIN = re.compile(r"https?://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(:[0-9]{1,5})?", re.I)
++
++
+ def _origin_host(origin: bytes) -> str:
+-    """The host:port an Origin header names; "" for "null" or anything unparseable."""
+-    try:
+-        return urlsplit(origin.decode("latin-1")).netloc
+-    except ValueError:  # e.g. "http://[bad"
+-        return ""
++    """The host an Origin header names; "" for "null" or anything but a serialized origin."""
++    match = SERIALIZED_ORIGIN.fullmatch(origin.decode("latin-1"))
++    return match.group(1).lower() if match else ""
+ 
+ 
+ class HostCheck:
+@@ -52,7 +57,8 @@ class HostCheck:
+     web page reaches 127.0.0.1 under its own name; with sharing off no other name is answered,
+     so a leftover or hand-made Tailscale rule cannot expose the page.
+ 
+-    An Origin header, when present, must name one of those same hosts (any port: the Vite dev
++    An Origin header, when present, must be one serialized origin naming one of those same
++    hosts (any port: the Vite dev
+     server proxies with the browser's Origin). Blocks other websites' no-preflight requests
+     (a form POST to /api/shutdown); "null" is refused, and no Origin (curl, the CLI) passes."""
+ 
+@@ -71,11 +77,11 @@ class HostCheck:
+         if scope["type"] in ("http", "websocket"):
+             headers = dict(reversed(scope["headers"]))  # a repeated header: the first counts
+             host = headers.get(b"host", b"").decode("latin-1")
+-            origin = headers.get(b"origin")
++            origins = [v for k, v in scope["headers"] if k == b"origin"]
+             refusal = None
+             if not self.allowed(host):
+                 refusal = WRONG_HOST
+-            elif origin is not None and not self.allowed(_origin_host(origin)):
++            elif len(origins) > 1 or (origins and not self.allowed(_origin_host(origins[0]))):
+                 refusal = WRONG_ORIGIN
+             if refusal:
+                 if scope["type"] == "websocket":
+@@ -140,19 +146,39 @@ def create_app() -> FastAPI:
+ STDIN_EXIT_GRACE_SECONDS = 10.0
+ 
+ 
++def _lead_own_process_group() -> None:
++    """Make this engine its own process group's leader, so its children (pip, yt-dlp, ffmpeg)
++    share its group and the hard exit can take them along. POSIX only."""
++    if hasattr(os, "setpgrp"):
++        try:
++            os.setpgrp()
++        except OSError:  # already a session leader: stay put, _exit_hard checks leadership
++            pass
++
++
++def _exit_hard() -> None:
++    """Exit now, killing the process group too when this engine leads it. Never signal a
++    group it does not lead: that could be the app's."""
++    if hasattr(os, "killpg") and os.getpgid(0) == os.getpid():
++        os.killpg(os.getpid(), signal.SIGKILL)
++    os._exit(1)
++
++
+ def _stop_when_stdin_closes(server, share: tailnet.Share) -> None:
+     """Read stdin until end of file, then stop as POST /api/shutdown does; exit hard if that
+     has not finished within the grace period (a running job or open socket can hold it)."""
+     while sys.stdin.buffer.read(4096):
+         pass
++    # The clock starts first, so a slow Tailscale call or a failing print cannot delay or skip it.
++    timer = threading.Timer(STDIN_EXIT_GRACE_SECONDS, _exit_hard)
++    timer.daemon = True
++    timer.start()
+     try:
+         error = share.close()
+         if error:
+             print(tailnet.CLEANUP_FAILED.format(error=error, port=share.port), flush=True)
+     finally:
+         server.should_exit = True
+-    time.sleep(STDIN_EXIT_GRACE_SECONDS)
+-    os._exit(1)
+ 
+ 
+ def run(
+@@ -212,6 +238,7 @@ def run(
+             print(tailnet.CLEANUP_FAILED.format(error=error, port=port), flush=True)
+ 
+     if watch_stdin:
++        _lead_own_process_group()
+         threading.Thread(target=_stop_when_stdin_closes, args=(server, share), daemon=True).start()
+ 
+     if open_browser:
+diff --git a/src/anyscribe/web/jobs.py b/src/anyscribe/web/jobs.py
+index 2eb3bba..9467f9f 100644
+--- a/src/anyscribe/web/jobs.py
++++ b/src/anyscribe/web/jobs.py
+@@ -11,13 +11,14 @@ from dataclasses import dataclass, field
+ from enum import Enum
+ from typing import Any
+ 
++from anyscribe.core.appmode import is_app
+ from anyscribe.web.progress import ProgressEvent
+ 
+ # Cleanup constants
+-JOB_TTL_SECONDS = 3600  # Remove completed/failed jobs after 1 hour
++JOB_TTL_SECONDS = 3600  # Remove finished jobs after 1 hour (never in the Mac app)
+ MAX_EVENTS_PER_JOB = 100  # Cap event history per job
+-MAX_JOBS = 500  # Hard cap on total jobs in memory
+-MAX_LISTED_JOBS = 50  # GET /api/jobs: the newest this many
++MAX_JOBS = 500  # Hard cap on jobs in memory: evicts the oldest finished jobs only
++MAX_LISTED_JOBS = 50  # GET /api/jobs: every active job, then the newest finished up to this
+ 
+ 
+ class JobStatus(str, Enum):
+@@ -28,6 +29,9 @@ class JobStatus(str, Enum):
+     CANCELLED = "cancelled"
+ 
+ 
++ACTIVE = (JobStatus.PENDING, JobStatus.RUNNING)
++
++
+ class JobCancelled(Exception):
+     """Raised inside the pipeline thread to abort a cancelled job."""
+ 
+@@ -56,29 +60,40 @@ class JobManager:
+         self._executor = ThreadPoolExecutor(max_workers=max_workers)
+ 
+     def _cleanup_stale(self) -> None:
+-        """Remove completed/failed jobs older than TTL."""
+-        now = time.time()
+-        stale = [
+-            jid
+-            for jid, job in self._jobs.items()
+-            if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+-            and job.completed_at
+-            and (now - job.completed_at) > JOB_TTL_SECONDS
+-        ]
+-        for jid in stale:
++        """Drop finished jobs older than TTL, then the oldest finished jobs past MAX_JOBS.
++        A pending or running job is never dropped. In the Mac app finished jobs do not
++        expire by age: its menu keeps them until the window is opened."""
++        finished = [jid for jid, job in self._jobs.items() if job.status not in ACTIVE]
++        if not is_app():
++            now = time.time()
++            stale = {
++                jid
++                for jid in finished
++                if self._jobs[jid].completed_at
++                and (now - self._jobs[jid].completed_at) > JOB_TTL_SECONDS
++            }
++            for jid in stale:
++                del self._jobs[jid]
++            finished = [jid for jid in finished if jid not in stale]
++        for jid in finished[: max(0, len(self._jobs) - MAX_JOBS)]:
+             del self._jobs[jid]
+-        # Hard cap
+-        while len(self._jobs) > MAX_JOBS:
+-            self._jobs.popitem(last=False)
+ 
+     def get(self, job_id: str) -> Job | None:
+         self._cleanup_stale()
+         return self._jobs.get(job_id)
+ 
+     def summaries(self) -> list[dict[str, Any]]:
+-        """Every job this run knows, newest first, at most MAX_LISTED_JOBS."""
++        """Newest first: every pending and running job, always, then the newest finished jobs
++        up to MAX_LISTED_JOBS in all. The quit question must never miss a running job."""
+         self._cleanup_stale()
+-        jobs = list(reversed(self._jobs.values()))[:MAX_LISTED_JOBS]
++        room = MAX_LISTED_JOBS - sum(j.status in ACTIVE for j in self._jobs.values())
++        jobs = []
++        for j in reversed(self._jobs.values()):
++            if j.status in ACTIVE:
++                jobs.append(j)
++            elif room > 0:
++                jobs.append(j)
++                room -= 1
+         return [
+             {
+                 "job_id": j.id,
+diff --git a/src/anyscribe/web/routes/health.py b/src/anyscribe/web/routes/health.py
+index ccc747a..40d0511 100644
+--- a/src/anyscribe/web/routes/health.py
++++ b/src/anyscribe/web/routes/health.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++import os
++
+ from fastapi import APIRouter
+ 
+ from anyscribe import __version__
+@@ -20,4 +22,6 @@ async def health() -> dict:
+         "ok": all(r.found for r in results if r.dep.required),  # optional rows never flip it
+         "version": __version__,
+         "dependencies": deps,
++        # The Mac app checks this matches the engine it started before trusting the port.
++        "pid": os.getpid(),
+     }
+diff --git a/tests/test_app_mode.py b/tests/test_app_mode.py
+index 911ffd8..69f96a0 100644
+--- a/tests/test_app_mode.py
++++ b/tests/test_app_mode.py
+@@ -171,3 +171,32 @@ def test_agent_onboarding_in_the_app_leaves_the_skill_uninstalled(tmp_path):
+     assert done.returncode == 0, done.stderr
+     skill_dir = tmp_path / ".claude" / "skills" / "anyscribe"
+     assert (json.loads(done.stdout)["skill_installed"], skill_dir.exists()) == (False, False)
++
++
++@pytest.fixture
++def tui_skill(tmp_path, monkeypatch):
++    """The interactive onboarding's skill step against a throwaway home holding ~/.claude."""
++    from anyscribe.cli import onboard
++
++    claude = tmp_path / ".claude"
++    claude.mkdir()
++    target = claude / "skills" / "anyscribe"
++    monkeypatch.setattr(onboard, "CLAUDE_HOME", claude)
++    monkeypatch.setattr(skill_cmd, "ASCLI_SKILL_TARGET", target)
++    return onboard._install_skill_step, target
++
++
++def test_interactive_onboarding_in_the_app_leaves_the_skill_uninstalled(app_mode, tui_skill):
++    step, target = tui_skill
++    # (what the summary says, whether ~/.claude/skills/anyscribe exists)
++    assert (step(), target.exists()) == (
++        "not installed (the Mac app's Terminal switch installs it)",
++        False,
++    )
++
++
++def test_interactive_onboarding_outside_the_app_still_installs_the_skill(monkeypatch, tui_skill):
++    monkeypatch.delenv("ANYSCRIBE_APP", raising=False)
++    step, target = tui_skill
++    assert step() == "installed"
++    assert (target / ".version").read_text() == __version__
+diff --git a/tests/test_engine_process.py b/tests/test_engine_process.py
+index 6248c7b..91111db 100644
+--- a/tests/test_engine_process.py
++++ b/tests/test_engine_process.py
+@@ -44,7 +44,7 @@ def _listening(port: int) -> bool:
+ def engine(tmp_path_factory):
+     home = tmp_path_factory.mktemp("engine-home")
+     port = _free_port()
+-    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
++    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "ANYSCRIBE_APP": "1"}
+     log = home / "engine.log"
+     with open(log, "wb") as out:
+         proc = subprocess.Popen(
+@@ -68,6 +68,16 @@ def engine(tmp_path_factory):
+             proc.wait()
+ 
+ 
++def test_health_reports_the_engines_own_pid(engine):
++    """The Mac app proves the server on its port is the engine it started by this pid."""
++    import json
++
++    proc, port, _ = engine
++    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=30) as r:
++        body = json.load(r)
++    assert (body["app"], body["pid"]) == ("anyscribe", proc.pid)
++
++
+ @pytest.mark.parametrize("origin", ["https://evil.example", "null"])
+ def test_another_website_cannot_stop_it_or_read_jobs(engine, origin):
+     proc, port, _ = engine
+@@ -96,14 +106,17 @@ def test_closing_stdin_stops_the_engine(engine):
+     assert not _listening(port)
+ 
+ 
+-def test_stdin_end_runs_the_shutdown_path_then_exits_hard(monkeypatch):
+-    """In-process: the tailnet rule is removed before the server is told to stop, and the
+-    process exits hard if the graceful stop has not finished after the grace period."""
++def _stop_in_process(monkeypatch, close, grace=0.2):
++    """Run _stop_when_stdin_closes on a closed stdin with the hard exit recorded, not taken.
++    Returns the event log and the monotonic time the hard exit fired (None if it never did)."""
+     import io
++    import threading
+ 
+     from anyscribe.web import app as web_app
+ 
+     order: list[str] = []
++    fired: list[float] = []
++    done = threading.Event()
+ 
+     class Server:
+         def __setattr__(self, name, value):
+@@ -114,10 +127,126 @@ def test_stdin_end_runs_the_shutdown_path_then_exits_hard(monkeypatch):
+ 
+         def close(self):
+             order.append("tailnet closed")
+-            return None
++            return close()
++
++    def exit_hard():
++        fired.append(time.monotonic())
++        order.append("exit")
++        done.set()
+ 
+     monkeypatch.setattr(sys, "stdin", type("S", (), {"buffer": io.BytesIO(b"anything\n")})())
+-    monkeypatch.setattr(web_app, "STDIN_EXIT_GRACE_SECONDS", 0)
+-    monkeypatch.setattr(web_app.os, "_exit", lambda code: order.append(f"exit {code}"))
+-    web_app._stop_when_stdin_closes(Server(), Share())
+-    assert order == ["tailnet closed", "should_exit=True", "exit 1"]
++    monkeypatch.setattr(web_app, "STDIN_EXIT_GRACE_SECONDS", grace)
++    monkeypatch.setattr(web_app, "_exit_hard", exit_hard)
++    start = time.monotonic()
++    try:
++        web_app._stop_when_stdin_closes(Server(), Share())
++    except Exception as e:
++        order.append(f"raised {type(e).__name__}")
++    done.wait(5)
++    return order, (fired[0] - start if fired else None)
++
++
++def test_stdin_end_runs_the_shutdown_path_then_exits_hard(monkeypatch):
++    """The tailnet rule is removed before the server is told to stop, and the process exits
++    hard if the graceful stop has not finished after the grace period."""
++    order, _ = _stop_in_process(monkeypatch, close=lambda: None)
++    assert order == ["tailnet closed", "should_exit=True", "exit"]
++
++
++def test_slow_tailnet_cleanup_cannot_delay_the_hard_exit(monkeypatch):
++    """The clock starts at end of input: a Tailscale call slower than the grace still ends
++    the process at the deadline, not after the call returns."""
++
++    def slow():
++        time.sleep(1.5)
++
++    order, at = _stop_in_process(monkeypatch, close=slow, grace=0.2)
++    assert at is not None and at < 1.0, (order, at)
++
++
++def test_a_failing_print_cannot_skip_the_hard_exit(monkeypatch):
++    import builtins
++
++    def broken_print(*a, **k):
++        raise OSError("stdout is gone")
++
++    monkeypatch.setattr(builtins, "print", broken_print)
++    order, at = _stop_in_process(monkeypatch, close=lambda: "tailscale said no")
++    assert order == ["tailnet closed", "should_exit=True", "raised OSError", "exit"]
++
++
++_HELD_ENGINE = """
++import sys, subprocess, time
++from anyscribe.web import app as web_app
++
++web_app.STDIN_EXIT_GRACE_SECONDS = 0.5
++web_app._lead_own_process_group()  # what run() does with --watch-stdin
++child = subprocess.Popen(["sleep", "300"])
++print(child.pid, flush=True)
++
++class Server:
++    should_exit = False  # a server that never finishes stopping (a job holding it)
++
++class Share:
++    port = 0
++    def close(self):
++        return None
++
++web_app._stop_when_stdin_closes(Server(), Share())
++time.sleep(300)
++"""
++
++
++def _alive(pid: int) -> bool:
++    stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
++    return stat.stdout.strip() not in ("", "Z")  # gone, or a zombie waiting to be reaped
++
++
++@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX only")
++def test_the_hard_exit_takes_the_engines_children_with_it():
++    """A real engine process, held up so the hard exit fires, with a real child (`sleep 300`,
++    standing in for pip, yt-dlp or ffmpeg): after the deadline both are gone."""
++    proc = subprocess.Popen(
++        [sys.executable, "-c", _HELD_ENGINE],
++        stdin=subprocess.PIPE,
++        stdout=subprocess.PIPE,
++        text=True,
++    )
++    child = int(proc.stdout.readline())
++    try:
++        assert _alive(child)
++        proc.stdin.close()
++        proc.wait(timeout=10)
++        deadline = time.monotonic() + 5
++        while _alive(child) and time.monotonic() < deadline:
++            time.sleep(0.1)
++        assert not _alive(child), "the engine's child outlived its hard exit"
++    finally:
++        if proc.poll() is None:  # stop exactly the processes this test started
++            proc.kill()
++        if _alive(child):
++            os.kill(child, 9)
++
++
++_APP_HOLDING_AN_ENGINE = """
++import subprocess, sys, time
++# This process stands in for the app; the engine below did not make itself a group leader.
++engine = subprocess.run(
++    [sys.executable, "-c", "from anyscribe.web import app; app._exit_hard()"]
++)
++print("app survived", engine.returncode, flush=True)
++"""
++
++
++@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX only")
++def test_the_hard_exit_never_signals_a_group_the_engine_does_not_lead():
++    """An engine in the app's group (no group of its own) exits alone; the app lives on.
++    Runs in a new session so even a wrong group kill cannot reach pytest."""
++    done = subprocess.run(
++        [sys.executable, "-c", _APP_HOLDING_AN_ENGINE],
++        capture_output=True,
++        text=True,
++        timeout=60,
++        start_new_session=True,
++    )
++    assert done.stdout.strip() == "app survived 1", (done.returncode, done.stderr)
+diff --git a/tests/test_orchestrator.py b/tests/test_orchestrator.py
+index e90e182..01ab32c 100644
+--- a/tests/test_orchestrator.py
++++ b/tests/test_orchestrator.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import time
+ from pathlib import Path
+ 
+ import pytest
+@@ -185,12 +186,69 @@ def test_job_title_is_never_parsed_from_the_message_text(jobs, monkeypatch):
+     assert job["stage"] == "download" and job["title"] is None
+ 
+ 
+-def test_job_list_is_newest_first_and_at_most_50(jobs):
++def _finished(manager, n, start=0, done_at=None):
+     from anyscribe.web.jobs import Job, JobStatus
+ 
++    for i in range(start, start + n):
++        manager._jobs[f"j{i}"] = Job(
++            id=f"j{i}", url=f"u{i}", status=JobStatus.COMPLETED, completed_at=done_at or time.time()
++        )
++
++
++def test_job_list_is_newest_first_and_at_most_50_finished(jobs):
+     manager, client = jobs
+-    for i in range(60):
+-        manager._jobs[f"j{i}"] = Job(id=f"j{i}", url=f"u{i}", status=JobStatus.PENDING)
++    _finished(manager, 60)
+     listed = client.get("/api/jobs").json()
+     assert [j["job_id"] for j in listed] == [f"j{i}" for i in range(59, 9, -1)]
+     assert listed[0]["stage"] is None and listed[0]["title"] is None
++
++
++def test_a_running_job_behind_50_finished_ones_is_still_listed(jobs):
++    """Review C2: two workers, one long job, fifty short ones finishing beside it."""
++    from anyscribe.web.jobs import Job, JobStatus
++
++    manager, client = jobs
++    manager._jobs["long"] = Job(id="long", url="u-long", status=JobStatus.RUNNING)
++    _finished(manager, 50)
++    manager._jobs["queued"] = Job(id="queued", url="u-q", status=JobStatus.PENDING)
++    ids = [j["job_id"] for j in client.get("/api/jobs").json()]
++    assert "long" in ids and "queued" in ids
++    assert ids[0] == "queued" and ids[-1] == "long"  # still newest first
++    assert len(ids) == 50  # 2 active + the newest 48 finished
++
++
++def test_every_active_job_is_listed_even_past_50(jobs):
++    from anyscribe.web.jobs import Job, JobStatus
++
++    manager, client = jobs
++    for i in range(55):
++        manager._jobs[f"r{i}"] = Job(id=f"r{i}", url="u", status=JobStatus.RUNNING)
++    _finished(manager, 3)
++    ids = [j["job_id"] for j in client.get("/api/jobs").json()]
++    assert ids == [f"r{i}" for i in range(54, -1, -1)]  # all 55 running, no finished room
++
++
++@pytest.mark.parametrize("app,listed", [("1", True), (None, False)])
++def test_finished_jobs_expire_after_an_hour_except_in_the_app(jobs, monkeypatch, app, listed):
++    """Review F1: the app's menu keeps "finished while the window was closed" rows."""
++    manager, client = jobs
++    if app:
++        monkeypatch.setenv("ANYSCRIBE_APP", app)
++    else:
++        monkeypatch.delenv("ANYSCRIBE_APP", raising=False)
++    _finished(manager, 1, done_at=time.time() - 3601)
++    ids = [j["job_id"] for j in client.get("/api/jobs").json()]
++    assert ids == (["j0"] if listed else [])
++
++
++def test_the_memory_cap_evicts_the_oldest_finished_jobs_never_an_active_one(jobs, monkeypatch):
++    from anyscribe.web import jobs as jobs_mod
++    from anyscribe.web.jobs import Job, JobStatus
++
++    manager, _ = jobs
++    monkeypatch.setattr(jobs_mod, "MAX_JOBS", 3)
++    manager._jobs["oldest-running"] = Job(id="oldest-running", url="u", status=JobStatus.RUNNING)
++    _finished(manager, 4)
++    manager._jobs["pending"] = Job(id="pending", url="u", status=JobStatus.PENDING)
++    manager._cleanup_stale()
++    assert list(manager._jobs) == ["oldest-running", "j3", "pending"]
+diff --git a/tests/test_tailnet.py b/tests/test_tailnet.py
+index 729a08b..2dfdfba 100644
+--- a/tests/test_tailnet.py
++++ b/tests/test_tailnet.py
+@@ -836,6 +836,15 @@ def test_a_foreign_host_cannot_open_the_progress_websocket(served_app):
+         "http://localhost@evil.example",
+         "http://[bad",
+         f"https://{HOST}",  # the tailnet name, while no share is held
++        "",
++        "http://127.0.0.1.evil.example",
++        "file://",
++        "chrome-extension://abc",
++        "http://evil.example@127.0.0.1",  # userinfo: a serialized origin never has it
++        "http://127.0.0.1:80@evil.example",  # Sol: the host is evil.example
++        "http://localhost:80 https://evil.example",  # Sol: two values in one header
++        "http://localhost:5173/",  # a path: not a serialized origin
++        "http://localhost:5173\n",
+     ],
+ )
+ def test_another_websites_origin_gets_403_and_the_server_keeps_running(served_app, origin):
+@@ -848,7 +857,14 @@ def test_another_websites_origin_gets_403_and_the_server_keeps_running(served_ap
+ 
+ 
+ @pytest.mark.parametrize(
+-    "origin", [None, "http://localhost:5173", "http://127.0.0.1:8467", "http://[::1]:5173"]
++    "origin",
++    [
++        None,
++        "http://localhost:5173",
++        "http://127.0.0.1:8467",
++        "http://[::1]:5173",
++        "HTTP://LOCALHOST",
++    ],
+ )
+ def test_no_origin_or_a_local_origin_on_any_port_is_answered(served_app, origin):
+     headers = {"origin": origin} if origin else {}
+@@ -874,6 +890,43 @@ def test_another_websites_origin_cannot_open_the_progress_websocket(served_app):
+         assert ws.receive_json()["message"] == "Job not found"
+ 
+ 
++@pytest.mark.parametrize(
++    "first, second",
++    [
++        ("http://localhost:5173", "https://evil.example"),
++        ("https://evil.example", "http://localhost:5173"),
++    ],
++)
++def test_two_origin_headers_are_refused_in_either_order(served_app, first, second):
++    import asyncio
++
++    from anyscribe.web.app import HostCheck
++
++    c = TestClient(served_app, base_url="http://127.0.0.1:8467")
++    r = c.post("/api/shutdown", headers=[("origin", first), ("origin", second)])
++
++    # TestClient joins repeated headers into one for a WebSocket, so drive the check with a
++    # raw upgrade scope carrying two separate Origin headers.
++    reached: list[bool] = []
++    sent: list[dict] = []
++
++    async def route(scope, receive, send):
++        reached.append(True)
++
++    async def receive():
++        return {"type": "websocket.connect"}
++
++    async def send(message):
++        sent.append(message)
++
++    origins = [(b"origin", first.encode()), (b"origin", second.encode())]
++    scope = {"type": "websocket", "headers": [(b"host", b"127.0.0.1:8467"), *origins]}
++    asyncio.run(HostCheck(route, served_app.state.tailnet)(scope, receive, send))
++    ws = "reached the route" if reached else sent[0].get("code")
++    # (HTTP status, whether the shutdown ran, what the WebSocket upgrade got)
++    assert (r.status_code, served_app.state.server.should_exit, ws) == (403, False, 1008)
++
++
+ def test_the_tailnet_origin_is_answered_only_while_the_share_is_held(
+     fake, lifecycle, config_restored
+ ):
+@@ -889,13 +942,15 @@ def test_the_tailnet_origin_is_answered_only_while_the_share_is_held(
+         seen["held"] = remote.get("/api/tailnet", headers=tailnet_origin).status_code
+         evil = {"origin": "https://evil.example"}
+         seen["evil"] = remote.get("/api/tailnet", headers=evil).status_code
++        suffixed = {"origin": f"https://{HOST}.evil.example"}
++        seen["suffixed"] = remote.get("/api/tailnet", headers=suffixed).status_code
+         local = TestClient(app, base_url="http://127.0.0.1:8467")
+         assert local.put("/api/tailnet", json={"enabled": False}).status_code == 200
+         seen["released"] = local.get("/api/tailnet", headers=tailnet_origin).status_code
+ 
+     lifecycle["during"] = during
+     run(port=8467, open_browser=False)
+-    assert seen == {"held": 200, "evil": 403, "released": 403}
++    assert seen == {"held": 200, "evil": 403, "suffixed": 403, "released": 403}
+ 
+ 
+ GATE_HOSTS = [
+@@ -1203,5 +1258,11 @@ def test_switch_off_with_a_broken_config_still_revokes(fake, lifecycle, config_r
+ 
+     lifecycle["during"] = during
+     run(port=8467, open_browser=False)
+-    assert seen == {"before": 200, "put": (500, True), "state_held": False, "held": None, "after": 403}
++    assert seen == {
++        "before": 200,
++        "put": (500, True),
++        "state_held": False,
++        "held": None,
++        "after": 403,
++    }
+     assert tailnet.port_state(fake.config, 8467) == "free"  # anyscribe's own rule was removed
+diff --git a/tests/test_ui_port.py b/tests/test_ui_port.py
+index 2fe7e83..0342bb9 100644
+--- a/tests/test_ui_port.py
++++ b/tests/test_ui_port.py
+@@ -97,3 +97,23 @@ def test_port_above_the_valid_range_is_rejected_by_the_parser(started):
+     assert result.exit_code != 0
+     assert started == []
+     assert "are all busy" not in result.output
++
++
++def test_in_the_mac_app_a_busy_port_is_an_error_not_a_move(busy_port, started, monkeypatch):
++    """The app chose the port and connects to it: moving would leave it talking to nothing."""
++    monkeypatch.setenv("ANYSCRIBE_APP", "1")
++    result = runner.invoke(app, ["ui", "--port", str(busy_port), "--no-open"])
++    # (exit code, the port the server was started on)
++    assert (result.exit_code, started) == (1, [])
++    assert f"Port {busy_port} is already in use." in result.output
++    assert "busy — using" not in result.output and "are all busy" not in result.output
++
++
++def test_in_the_mac_app_a_free_port_is_used_as_asked(started, monkeypatch):
++    monkeypatch.setenv("ANYSCRIBE_APP", "1")
++    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
++    s.bind(("127.0.0.1", 0))
++    free = s.getsockname()[1]
++    s.close()
++    result = runner.invoke(app, ["ui", "--port", str(free), "--no-open"])
++    assert (result.exit_code, started) == (0, [free])
+diff --git a/tests/test_vault_writer.py b/tests/test_vault_writer.py
+index ffe2d28..fb09778 100644
+--- a/tests/test_vault_writer.py
++++ b/tests/test_vault_writer.py
+@@ -168,3 +168,71 @@ def test_write_transcript_diarized_format_without_speakers_falls_back_to_timesta
+     content = out_path.read_text()
+ 
+     assert "**[0:00]** no speaker data" in content
++
++
++def test_a_write_cut_off_part_way_leaves_no_partial_transcript(tmp_path: Path, monkeypatch) -> None:
++    """A process killed mid-write (the Mac app's hard exit) must not leave a cut-off .md that
++    duplicate detection then reports as already transcribed. The interruption is simulated
++    at both write paths: half the bytes land on disk, then the write raises."""
++    import os
++    import types
++
++    from anyscribe.core import dedup, fileutil
++
++    class Cut(Exception):
++        pass
++
++    def half_then_fail(fd, data):
++        os.write(fd, data[: len(data) // 2])
++        raise Cut
++
++    def half_text_then_fail(self, data, *a, **k):
++        Path.write_bytes(self, data.encode()[: len(data) // 2])
++        raise Cut
++
++    clean = write_transcript(
++        make_download(), make_transcript(), Settings(), workspace=tmp_path / "a"
++    )
++    expected = clean.read_text()
++
++    ws = tmp_path / "b"
++    with monkeypatch.context() as m:
++        m.setattr(fileutil, "os", types.SimpleNamespace(**{**vars(os), "write": half_then_fail}))
++        m.setattr(Path, "write_text", half_text_then_fail)
++        with pytest.raises(Cut):
++            write_transcript(make_download(), make_transcript(), Settings(), workspace=ws)
++
++    out_dir = ws / "sources" / "youtube"
++    left = {p.name: p.read_text() for p in out_dir.iterdir()}
++    assert left == {}  # neither a cut-off .md nor a stray temp file
++    monkeypatch.setattr(dedup, "get_workspace_dir", lambda: ws)
++    assert dedup.find_existing_transcript(make_download().original_url) is None  # a retry runs
++
++    retried = write_transcript(make_download(), make_transcript(), Settings(), workspace=ws)
++    assert retried == out_dir / "my-test-video.md"
++    assert retried.read_text() == expected
++
++
++def test_transcript_keeps_the_platform_encoding(tmp_path: Path, monkeypatch) -> None:
++    """The atomic write must not change the encoding: transcripts are read back with the
++    platform default (History, MCP, duplicate detection), so they are written with it too,
++    exactly as Path.write_text did before."""
++    import locale
++
++    title = "Café Crème à la mode"
++    out = write_transcript(
++        make_download(title=title), make_transcript(), Settings(), workspace=tmp_path / "a"
++    )
++    ref = tmp_path / "ref.md"
++    # What write_text produces under the current locale. newline="\n": write_text wrote \r\n on
++    # Windows; every reader opens in text mode, which reads both the same.
++    ref.write_text(out.read_text(), newline="\n")
++    assert out.read_bytes() == ref.read_bytes()
++
++    # A Windows code page: the writer must follow it, not force UTF-8.
++    monkeypatch.setattr(locale, "getpreferredencoding", lambda do_setlocale=True: "cp1252")
++    cp = write_transcript(
++        make_download(title=title), make_transcript(), Settings(), workspace=tmp_path / "b"
++    )
++    assert cp.read_bytes() == out.read_bytes().decode("utf-8").encode("cp1252")
++    assert b"Caf\xe9 Cr\xe8me" in cp.read_bytes()

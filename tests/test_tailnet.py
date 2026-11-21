@@ -824,6 +824,157 @@ def test_a_foreign_host_cannot_open_the_progress_websocket(served_app):
         assert closed.value.code == 4004  # the route's own close, not the Host check's 1008
 
 
+# ── Origin check: other websites cannot send requests ────────
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://evil.example",
+        "null",
+        "http://localhost.evil.example",
+        "http://localhost@evil.example",
+        "http://[bad",
+        f"https://{HOST}",  # the tailnet name, while no share is held
+        "",
+        "http://127.0.0.1.evil.example",
+        "file://",
+        "chrome-extension://abc",
+        "http://evil.example@127.0.0.1",  # userinfo: a serialized origin never has it
+        "http://127.0.0.1:80@evil.example",  # Sol: the host is evil.example
+        "http://localhost:80 https://evil.example",  # Sol: two values in one header
+        "http://localhost:5173/",  # a path: not a serialized origin
+        "http://localhost:5173\n",
+    ],
+)
+def test_another_websites_origin_gets_403_and_the_server_keeps_running(served_app, origin):
+    c = TestClient(served_app, base_url="http://127.0.0.1:8467")
+    r = c.post("/api/shutdown", headers={"origin": origin})
+    assert r.status_code == 403
+    assert r.text == "anyscribe does not answer requests sent by other websites."
+    assert served_app.state.server.should_exit is False  # the shutdown never ran
+    assert c.get("/api/tailnet", headers={"origin": origin}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        None,
+        "http://localhost:5173",
+        "http://127.0.0.1:8467",
+        "http://[::1]:5173",
+        "HTTP://LOCALHOST",
+    ],
+)
+def test_no_origin_or_a_local_origin_on_any_port_is_answered(served_app, origin):
+    headers = {"origin": origin} if origin else {}
+    r = TestClient(served_app, base_url="http://127.0.0.1:8467").get(
+        "/api/tailnet", headers=headers
+    )
+    assert r.status_code == 200 and r.json()["enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "port, answered", [("0", True), ("65535", True), ("65536", False), ("99999", False)]
+)
+def test_an_origin_port_must_be_a_real_port(served_app, port, answered):
+    """0 to 65535 pass, anything above is not a serialized origin: on HTTP and WebSocket."""
+    from starlette.websockets import WebSocketDisconnect
+
+    origin = {"origin": f"http://localhost:{port}"}
+    c = TestClient(served_app, base_url="http://127.0.0.1:8467")
+    http = c.get("/api/tailnet", headers=origin).status_code
+    try:
+        with c.websocket_connect(
+            "/api/ws/jobs/x", headers={"host": "127.0.0.1:8467", **origin}
+        ) as ws:
+            ws.receive_json()  # the route answered
+            websocket = "answered"
+    except WebSocketDisconnect as refused:
+        websocket = refused.code
+    expected = (200, "answered") if answered else (403, 1008)
+    assert (http, websocket) == expected
+
+
+def test_another_websites_origin_cannot_open_the_progress_websocket(served_app):
+    from starlette.websockets import WebSocketDisconnect
+
+    client = TestClient(served_app)
+    local = {"host": "127.0.0.1:8467"}
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect(
+            "/api/ws/jobs/x", headers={**local, "origin": "https://evil.example"}
+        ):
+            pass
+    assert refused.value.code == 1008
+    ok = {**local, "origin": "http://localhost:5173"}
+    with client.websocket_connect("/api/ws/jobs/x", headers=ok) as ws:  # accepted: route answers
+        assert ws.receive_json()["message"] == "Job not found"
+
+
+@pytest.mark.parametrize(
+    "first, second",
+    [
+        ("http://localhost:5173", "https://evil.example"),
+        ("https://evil.example", "http://localhost:5173"),
+    ],
+)
+def test_two_origin_headers_are_refused_in_either_order(served_app, first, second):
+    import asyncio
+
+    from anyscribe.web.app import HostCheck
+
+    c = TestClient(served_app, base_url="http://127.0.0.1:8467")
+    r = c.post("/api/shutdown", headers=[("origin", first), ("origin", second)])
+
+    # TestClient joins repeated headers into one for a WebSocket, so drive the check with a
+    # raw upgrade scope carrying two separate Origin headers.
+    reached: list[bool] = []
+    sent: list[dict] = []
+
+    async def route(scope, receive, send):
+        reached.append(True)
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):
+        sent.append(message)
+
+    origins = [(b"origin", first.encode()), (b"origin", second.encode())]
+    scope = {"type": "websocket", "headers": [(b"host", b"127.0.0.1:8467"), *origins]}
+    asyncio.run(HostCheck(route, served_app.state.tailnet)(scope, receive, send))
+    ws = "reached the route" if reached else sent[0].get("code")
+    # (HTTP status, whether the shutdown ran, what the WebSocket upgrade got)
+    assert (r.status_code, served_app.state.server.should_exit, ws) == (403, False, 1008)
+
+
+def test_the_tailnet_origin_is_answered_only_while_the_share_is_held(
+    fake, lifecycle, config_restored
+):
+    from anyscribe.core.config_set import set_value
+    from anyscribe.web.app import run
+
+    assert set_value("tailnet", "on").ok
+    seen = {}
+
+    def during(app):
+        remote = TestClient(app, base_url=f"https://{HOST}:8467")
+        tailnet_origin = {"origin": f"https://{HOST}:8467"}
+        seen["held"] = remote.get("/api/tailnet", headers=tailnet_origin).status_code
+        evil = {"origin": "https://evil.example"}
+        seen["evil"] = remote.get("/api/tailnet", headers=evil).status_code
+        suffixed = {"origin": f"https://{HOST}.evil.example"}
+        seen["suffixed"] = remote.get("/api/tailnet", headers=suffixed).status_code
+        local = TestClient(app, base_url="http://127.0.0.1:8467")
+        assert local.put("/api/tailnet", json={"enabled": False}).status_code == 200
+        seen["released"] = local.get("/api/tailnet", headers=tailnet_origin).status_code
+
+    lifecycle["during"] = during
+    run(port=8467, open_browser=False)
+    assert seen == {"held": 200, "evil": 403, "suffixed": 403, "released": 403}
+
+
 GATE_HOSTS = [
     "127.0.0.1:8467",
     "localhost:8467",
@@ -1129,5 +1280,11 @@ def test_switch_off_with_a_broken_config_still_revokes(fake, lifecycle, config_r
 
     lifecycle["during"] = during
     run(port=8467, open_browser=False)
-    assert seen == {"before": 200, "put": (500, True), "state_held": False, "held": None, "after": 403}
+    assert seen == {
+        "before": 200,
+        "put": (500, True),
+        "state_held": False,
+        "held": None,
+        "after": 403,
+    }
     assert tailnet.port_state(fake.config, 8467) == "free"  # anyscribe's own rule was removed

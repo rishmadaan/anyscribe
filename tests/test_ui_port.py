@@ -27,7 +27,7 @@ def started(monkeypatch):
     """Record the port `ui` actually hands to the web server."""
     calls: list[int] = []
     monkeypatch.setattr(
-        "anyscribe.web.app.run", lambda port, open_browser=True: calls.append(port)
+        "anyscribe.web.app.run", lambda port, open_browser=True, **_: calls.append(port)
     )
     return calls
 
@@ -97,3 +97,23 @@ def test_port_above_the_valid_range_is_rejected_by_the_parser(started):
     assert result.exit_code != 0
     assert started == []
     assert "are all busy" not in result.output
+
+
+def test_in_the_mac_app_a_busy_port_is_an_error_not_a_move(busy_port, started, monkeypatch):
+    """The app chose the port and connects to it: moving would leave it talking to nothing."""
+    monkeypatch.setenv("ANYSCRIBE_APP", "1")
+    result = runner.invoke(app, ["ui", "--port", str(busy_port), "--no-open"])
+    # (exit code, the port the server was started on)
+    assert (result.exit_code, started) == (1, [])
+    assert f"Port {busy_port} is already in use." in result.output
+    assert "busy — using" not in result.output and "are all busy" not in result.output
+
+
+def test_in_the_mac_app_a_free_port_is_used_as_asked(started, monkeypatch):
+    monkeypatch.setenv("ANYSCRIBE_APP", "1")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    free = s.getsockname()[1]
+    s.close()
+    result = runner.invoke(app, ["ui", "--port", str(free), "--no-open"])
+    assert (result.exit_code, started) == (0, [free])

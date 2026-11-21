@@ -11,12 +11,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from anyscribe.core.appmode import is_app
 from anyscribe.web.progress import ProgressEvent
 
 # Cleanup constants
-JOB_TTL_SECONDS = 3600  # Remove completed/failed jobs after 1 hour
+JOB_TTL_SECONDS = 3600  # Remove finished jobs after 1 hour (never in the Mac app)
 MAX_EVENTS_PER_JOB = 100  # Cap event history per job
-MAX_JOBS = 500  # Hard cap on total jobs in memory
+MAX_JOBS = 500  # Hard cap on jobs in memory: evicts the oldest finished jobs only
+MAX_LISTED_JOBS = 50  # GET /api/jobs: every active job, then the newest finished up to this
 
 
 class JobStatus(str, Enum):
@@ -25,6 +27,9 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+ACTIVE = (JobStatus.PENDING, JobStatus.RUNNING)
 
 
 class JobCancelled(Exception):
@@ -36,6 +41,9 @@ class Job:
     id: str
     url: str
     status: JobStatus = JobStatus.PENDING
+    stage: str | None = None  # step of the last pipeline progress event
+    title: str | None = None  # from the "download completed" event's data, then the result
+    created_at: float = field(default_factory=time.time)
     events: list[ProgressEvent] = field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
@@ -52,24 +60,54 @@ class JobManager:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
     def _cleanup_stale(self) -> None:
-        """Remove completed/failed jobs older than TTL."""
-        now = time.time()
-        stale = [
-            jid
-            for jid, job in self._jobs.items()
-            if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-            and job.completed_at
-            and (now - job.completed_at) > JOB_TTL_SECONDS
-        ]
-        for jid in stale:
+        """Drop finished jobs older than TTL, then the oldest finished jobs past MAX_JOBS.
+        A pending or running job is never dropped. In the Mac app finished jobs do not
+        expire by age: its menu keeps them until the window is opened."""
+        finished = [jid for jid, job in self._jobs.items() if job.status not in ACTIVE]
+        if not is_app():
+            now = time.time()
+            stale = {
+                jid
+                for jid in finished
+                if self._jobs[jid].completed_at
+                and (now - self._jobs[jid].completed_at) > JOB_TTL_SECONDS
+            }
+            for jid in stale:
+                del self._jobs[jid]
+            finished = [jid for jid in finished if jid not in stale]
+        for jid in finished[: max(0, len(self._jobs) - MAX_JOBS)]:
             del self._jobs[jid]
-        # Hard cap
-        while len(self._jobs) > MAX_JOBS:
-            self._jobs.popitem(last=False)
 
     def get(self, job_id: str) -> Job | None:
         self._cleanup_stale()
         return self._jobs.get(job_id)
+
+    def summaries(self) -> list[dict[str, Any]]:
+        """Newest first: every pending and running job, always, then the newest finished jobs
+        up to MAX_LISTED_JOBS in all. The quit question must never miss a running job."""
+        self._cleanup_stale()
+        room = MAX_LISTED_JOBS - sum(j.status in ACTIVE for j in self._jobs.values())
+        jobs = []
+        for j in reversed(self._jobs.values()):
+            if j.status in ACTIVE:
+                jobs.append(j)
+            elif room > 0:
+                jobs.append(j)
+                room -= 1
+        return [
+            {
+                "job_id": j.id,
+                "url": j.url,
+                "status": j.status.value,
+                "stage": j.stage,
+                "title": j.title,
+                "error": j.error,  # set only when the job failed
+                "file_path": (j.result or {}).get("file_path"),  # result exists once completed
+                "created_at": j.created_at,
+                "completed_at": j.completed_at,
+            }
+            for j in jobs
+        ]
 
     def cancel(self, job_id: str) -> Job | None:
         """Request cooperative cancellation. No-op if the job already finished."""
@@ -127,6 +165,10 @@ class JobManager:
             # interrupted mid-step, so we abort at the next progress event.
             if job.cancel_requested:
                 raise JobCancelled()
+            job.stage = step
+            title = (kwargs.get("data") or {}).get("title")
+            if title:
+                job.title = title
             event = ProgressEvent(
                 step=step,
                 status=status,
@@ -159,6 +201,7 @@ class JobManager:
                 force=force,
                 model=model,
             )
+            job.title = result.title or job.title
             job.status = JobStatus.COMPLETED
             job.completed_at = time.time()
             job.result = {

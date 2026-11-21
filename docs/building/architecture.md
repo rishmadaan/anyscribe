@@ -87,7 +87,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - Launched via `anyscribe ui` — core dependency, not optional
 - REST API (`web/routes/*.py`):
   - Config/keys: GET/PUT `/api/config`, GET `/api/providers`, GET `/api/providers/{name}/languages`, POST `/api/providers/{name}/test`, GET `/api/keys/status`, PUT `/api/keys`, DELETE `/api/keys/{provider_name}`
-  - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
+  - Jobs: POST `/api/upload`, POST `/api/transcribe`, GET `/api/jobs` (every active job, then the newest finished, 50 rows in all), GET `/api/jobs/{job_id}`, POST `/api/jobs/{job_id}/cancel`
   - History: GET `/api/transcripts`, GET/DELETE `/api/transcripts/{transcript_id}`, GET `/api/workspace/info`
   - System: GET `/api/health`, GET/PUT `/api/autostart`, GET/PUT `/api/tailnet`, POST `/api/shutdown`
   - Local: GET `/api/local/status`, GET `/api/local/setup/log`, POST `/api/local/setup` (`{model, also}`: the background setup queues `also` itself), POST `/api/local/choose` (`{model, also}`: one server-side pending default; the download queue's worker switches `local_model` only once the model is `runnable()`, a failure keeps the old default; a later call replaces it; reported as `pending_default` in status), POST `/api/local/teardown`. Readiness everywhere is `providers/local_models.runnable()` (engine imports, weights complete, Parakeet's Tiny + VAD too); `cached` means weights only (sizes, disk maths). `config_set.set_value('local_model', X)` refuses a change to a model that isn't runnable: the one guarded switch for CLI, Web and MCP
@@ -100,7 +100,7 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - SPA routing: catch-all `/{full_path:path}` serves `index.html` for non-API paths
 - Server stashed on `app.state.server` for graceful `/shutdown` via `server.should_exit = True`
 - Busy port: `anyscribe ui` rolls forward up to 10 ports (clamped to 65535) and only errors when all are busy
-- Tailnet sharing (optional, `settings.tailnet`, default off; `ui --tailnet` / `--local-only` per run via `core.tailnet.run_override`): the bind stays `127.0.0.1`; `web.app.run` registers a startup handler that starts a short thread: it waits for `server.started` (uvicorn runs startup handlers before it binds, and runs shutdown handlers on a bind failure), then calls `core/tailnet.py` `Share.apply(True)` (runs `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` for the port actually chosen). The shutdown handler calls `Share.close()`, and `/api/shutdown` calls it before setting `should_exit`. Uvicorn runs shutdown handlers on SIGINT and SIGTERM before re-raising the signal, so every clean stop removes the rule; SIGKILL leaves it (documented limit). `run()` also installs `HostCheck`, a pure ASGI middleware that answers only Host `127.0.0.1` / `localhost` / `[::1]` and, only while this server holds a share (`share.held`, set when `start()` succeeds and cleared on switch-off, "removed outside anyscribe" and close; it stays set while the display reads failed because Tailscale is down), the exact host of `share.held` (403 otherwise, setting on or off; blocks DNS rebinding, and keeps a leftover or hand-made serve rule from exposing the page while sharing is off). It is not in `create_app()` so TestClient tests keep their "testserver" Host. The `Share` object lives on `app.state.tailnet`; `PUT /api/tailnet` (and `PUT /api/config` with `tailnet`) saves the setting and applies it live. The tray and desktop mode start the server as `python -m anyscribe ui`, so they inherit this with no extra code
+- Tailnet sharing (optional, `settings.tailnet`, default off; `ui --tailnet` / `--local-only` per run via `core.tailnet.run_override`): the bind stays `127.0.0.1`; `web.app.run` registers a startup handler that starts a short thread: it waits for `server.started` (uvicorn runs startup handlers before it binds, and runs shutdown handlers on a bind failure), then calls `core/tailnet.py` `Share.apply(True)` (runs `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` for the port actually chosen). The shutdown handler calls `Share.close()`, and `/api/shutdown` calls it before setting `should_exit`. Uvicorn runs shutdown handlers on SIGINT and SIGTERM before re-raising the signal, so every clean stop removes the rule; SIGKILL leaves it (documented limit). `run()` also installs `HostCheck`, a pure ASGI middleware that answers only Host `127.0.0.1` / `localhost` / `[::1]` and, only while this server holds a share (`share.held`, set when `start()` succeeds and cleared on switch-off, "removed outside anyscribe" and close; it stays set while the display reads failed because Tailscale is down), the exact host of `share.held` (403 otherwise, setting on or off; blocks DNS rebinding, and keeps a leftover or hand-made serve rule from exposing the page while sharing is off). It also refuses an `Origin` header that names any other host (see Mac app hooks). It is not in `create_app()` so TestClient tests keep their "testserver" Host. The `Share` object lives on `app.state.tailnet`; `PUT /api/tailnet` (and `PUT /api/config` with `tailnet`) saves the setting and applies it live. The tray and desktop mode start the server as `python -m anyscribe ui`, so they inherit this with no extra code
 - Web tests: `tests/test_web*.py`, `test_autostart_route.py`, `test_keys_status.py`, `test_ui_port.py`, `test_tailnet.py` (FastAPI TestClient; the tailscale CLI faked)
 
 ### Desktop surface (`cli/desktop_cmd.py` + `core/desktop.py`, `core/launcher.py`, `core/service.py`)
@@ -169,10 +169,92 @@ installers end with `desktop install --yes` unless `--no-desktop` /
 `-NoDesktop`. The skill and MCP server never depend on any of this: they run
 the pipeline in-process, and the dashboard reads history from the vault.
 
+### Mac app hooks (`core/appmode.py`, `ui --watch-stdin`, `GET /api/jobs`, the Origin check)
+
+The Mac app (an Electron shell, built separately in `desktop/`) starts this
+engine as `python -m anyscribe ui --watch-stdin ...` from a Python packed inside
+the app, shows the dashboard in its window and reads the engine's state for its
+menu bar. The engine side is four small hooks:
+
+- **`ANYSCRIBE_APP=1`** means "this engine belongs to the Mac app". Only
+  `core/appmode.py::is_app()` reads it (exactly `"1"`). In app mode the CLI
+  callback skips `_auto_update_skill()`, `run_headless_onboard()` never
+  installs the skill whatever `install_skill` says (web wizard and agent path
+  alike; `skill_installed` reads false), and the interactive `anyscribe onboard`
+  skips it too (`cli/onboard.py::_install_skill_step()`; its summary says "not
+  installed"), since only the app's Terminal switch installs it; `core/updater.py` reports install type `app`, and `update` /
+  `update --check` print "This anyscribe came with the Mac app, which updates
+  itself." and exit 0 without running pip or git; `core/local_setup.py`'s
+  `detect_install_method()` returns `app` first and installs or removes the local
+  engines with `[sys.executable, "-m", "pip", ...]`, never uv. The app's
+  environment sets `PIP_USER=1` and `PYTHONUSERBASE`, so pip writes to the
+  add-ons folder, not into the app bundle. `doctor` shows "Install type: Mac app".
+  `anyscribe ui --port N` never moves to another port in app mode (the app
+  connects to the port it chose): if N is taken it prints "Port N is already in
+  use." and exits 1.
+- **`anyscribe ui --watch-stdin`** (hidden from `--help`): a daemon thread reads
+  stdin until end of file. The app holds the other end of that pipe, so when the
+  app dies, even force-killed, the pipe closes and the engine stops the way
+  `POST /api/shutdown` does (removes this run's tailnet rule, then
+  `server.should_exit = True`). The 10 s clock starts the moment stdin ends,
+  before that cleanup, so a slow Tailscale call or a failing print cannot delay
+  or skip it. If the process is still alive when it runs out (a running job or
+  open socket holding the graceful stop), it exits hard. On POSIX the engine
+  leads its own process group (`os.setpgrp()` at startup; when the app starts it
+  detached it is already a session leader, the call fails harmlessly and it still
+  leads its group), so its children (pip, yt-dlp, ffmpeg) share its group.
+  **One exit door.** With `--watch-stdin` every way the engine ends goes through
+  `_exit_hard()`: stdin ending, SIGTERM or SIGINT (handlers installed before
+  `server.run()`; uvicorn captures the signal while serving, stops gracefully so
+  the tailnet rule is removed, then re-raises it into these handlers), the server
+  stopping by itself (`try/finally` around `server.run()`), and the deadline.
+  `_exit_hard()` SIGKILLs the engine's group, itself included, only when the
+  engine leads it (never the app's group); elsewhere it calls `os._exit(1)`. So a
+  watched engine always ends by signal 9 (exit 1 where there are no groups).
+  Invariant: when the app's engine ends, by any route, nothing it started is
+  still running. The one route the engine cannot see is a SIGKILL of its own pid;
+  the app covers that by killing the group. The stdin watch is a thread, not a
+  signal, so it is meant to work on Windows; not yet run there.
+  **Jobs: in app mode a stop is final.** The app asks before quitting while jobs
+  run; once it stops the engine, running jobs (a download, a transcription, a pip
+  install) end with it, mid-step. A transcript is either written whole or not at
+  all (`core/fileutil.atomic_write`), so a stopped job leaves nothing half-done
+  for duplicate detection to mistake for finished.
+- **`GET /api/jobs`**: newest first, every pending and running job always (even
+  past 50), then the newest finished jobs up to 50 rows in all, as `{job_id, url,
+  status, stage, title, error, file_path, created_at, completed_at}`. The job
+  manager never drops an active job: finished jobs expire one hour after they
+  finish (not in app mode, where the menu keeps "finished while the window was
+  closed" rows until the window opens), and the 500-job memory cap evicts the
+  oldest finished jobs only. `stage` is the step of the last pipeline progress event;
+  `title` arrives as data on the orchestrator's "download completed" event
+  (`data={"title": ...}`, never parsed from the message) and from the result on
+  completion; `error` and `file_path` are null unless failed or completed. The
+  menu bar, the quit question, Settings and the update restart read this list.
+- **`GET /api/health` carries `pid`**, the engine process's own `os.getpid()`.
+  The app checks it matches the engine it spawned before it loads the page on
+  its port or sends `/api/shutdown`, so it never trusts or stops another
+  process that happens to answer there.
+- **The Origin check** in `HostCheck` (see the Web UI layer): an `Origin` header,
+  when present, must be exactly one header holding one serialized origin
+  (`http` or `https`, a host, an optional port; no userinfo, path or spaces) and
+  name a local host (any port; the Vite dev server proxies with the browser's
+  Origin) or the tailnet name this server holds; anything else, `Origin: null`
+  and two Origin headers included, gets 403 (WebSocket: close 1008). No Origin
+  (curl, the CLI, the tray) passes. This closes a hole older than the app: any
+  web page the user visited could send a no-preflight POST to `/api/shutdown` or
+  `/api/upload`. The app's window must load the dashboard from
+  `http://127.0.0.1:<port>`, so its requests carry a local Origin.
+
+Tests: `tests/test_app_mode.py`, `tests/test_engine_process.py` (the real
+engine as a subprocess with a throwaway HOME and a free port), the jobs-list
+tests in `tests/test_orchestrator.py`, the Origin tests in `tests/test_tailnet.py`.
+Journal: `2026-11-20-mac-app-engine-hooks.md`.
+
 ### Skill Layer (`skill/`)
 - Claude Code skill files bundled in package, auto-installed to `~/.claude/skills/anyscribe/`
 - AI-first: auto-installs if `~/.claude/` exists (no opt-in), auto-updates via `.version` marker
-- On every CLI invocation: compare `.version` to `__version__`, re-copy if mismatched
+- On every CLI invocation (except in the Mac app's engine, `ANYSCRIBE_APP=1`): compare `.version` to `__version__`, re-copy if mismatched
 - One-time cleanup of the stale `ascli`/`scribe` skill directories (superseded by `anyscribe`)
 - Skill files: SKILL.md (operator guide), references/ (commands, providers, config, troubleshooting)
 
@@ -224,7 +306,7 @@ the pipeline in-process, and the dashboard reads history from the vault.
 - Config writes (`core/config_set.py`) — the single validated settings write path (CLI, Web UI, MCP)
 - Tailnet sharing (`core/tailnet.py`) — finds the tailscale CLI (PATH; macOS app bundle), reads `tailscale status --json` and `tailscale serve status --json`, adds the serve rule only when the port is free (never replaces another rule, never Funnel), removes it only if anyscribe recorded creating it (`~/.anyscribe/tailnet-owned.json`) and it is still exactly ours (a matching hand-made rule is used but left in place), re-checks a held share on every `GET /api/tailnet`, outside the lock with a 3 s timeout (`BackendState` Stopped, NeedsLogin or NeedsMachineAuth: shown failed as stopped; a failed or slow read, or Starting: shown as unconfirmed, other devices may still reach it; both keep the hold; Running and the rule ours: shown live again; Running and the rule gone: released; `GET /api/tailnet` returns `held` beside `active`, and the card's privacy line follows `held`, the field the Host gate uses), and words each failure as one reason + fix (plus `card_fix`, the Settings card's switch wording). With sharing off it starts no Tailscale command (a read already running at switch-off finishes, at most 3 s, and is discarded)
 - Dependency checker detects OS (macOS, Linux, Windows), checks/installs yt-dlp, ffmpeg, Python; auto-updates stale yt-dlp (>60 days) before download. Uses module-based detection for pip-installed tools (`python -m module --version`) and `shutil.which` for system binaries
-- Updater supports both git-based (dev) and pip-based (user) installs
+- Updater supports git-based (dev) and pip-based (user) installs, and refuses to update the Mac app's engine (install type `app`), which the app updates
 - Migrations run at startup: app home `~/.anyscribecli` → `~/.anyscribe`, workspace path rename, media → downloads, date-folder flattening, stale Sarvam model pin
 
 ## Key Technical Decisions

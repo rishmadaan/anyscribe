@@ -10,6 +10,7 @@ from typer.core import TyperGroup
 from rich.console import Console
 
 from anyscribe import __version__
+from anyscribe.core.appmode import is_app
 
 
 class DefaultToTranscribe(TyperGroup):
@@ -191,7 +192,9 @@ def main(
     # dir and write skill files before a `--dry-run` had reported anything —
     # the one flag whose whole value is that it writes nothing.
     if ctx.invoked_subcommand != "migrate":
-        _auto_update_skill()
+        # The Mac app's engine never touches the skill: only the app's Terminal switch does.
+        if not is_app():
+            _auto_update_skill()
         _check_path_windows()
 
 
@@ -242,6 +245,8 @@ def ui(
     local_only: bool = typer.Option(
         False, "--local-only", help="Keep it on this computer for this run, even if tailnet is on."
     ),
+    # The Mac app holds the other end of stdin: when it dies, even force-killed, we follow.
+    watch_stdin: bool = typer.Option(False, "--watch-stdin", hidden=True),
 ) -> None:
     """Launch the [bold]web UI[/bold] in your browser.
 
@@ -265,16 +270,19 @@ def ui(
     # a real error.
     # min() keeps the scan inside the valid port range — connect_ex raises
     # OverflowError on 65536, which would traceback instead of erroring cleanly.
-    for candidate in range(port, min(port + PORT_SCAN_SPAN, 65535) + 1):
+    # The Mac app chose this port and connects to it, so in app mode never move.
+    span = 0 if is_app() else PORT_SCAN_SPAN
+    for candidate in range(port, min(port + span, 65535) + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(("127.0.0.1", candidate)) != 0:
                 break
     else:
         err_console.print(f"[red]Port {port} is already in use.[/red]")
-        err_console.print(
-            f"Ports {port}–{min(port + PORT_SCAN_SPAN, 65535)} are all busy. "
-            "Try: [bold]anyscribe ui --port <free port>[/bold]"
-        )
+        if not is_app():
+            err_console.print(
+                f"Ports {port}–{min(port + span, 65535)} are all busy. "
+                "Try: [bold]anyscribe ui --port <free port>[/bold]"
+            )
         raise typer.Exit(code=1)
 
     if candidate != port:
@@ -283,7 +291,7 @@ def ui(
 
     console.print(f"[bold]anyscribe ui[/bold] → http://127.0.0.1:{port}")
     try:
-        run(port=port, open_browser=not no_open)
+        run(port=port, open_browser=not no_open, watch_stdin=watch_stdin)
     except KeyboardInterrupt:
         console.print("\n[dim]stopped.[/dim]")
 
@@ -359,7 +367,9 @@ def doctor() -> None:
     console.print("\n[bold]3. Installation[/bold]\n")
     console.print(f"  Version: v{__version__}")
     repo = get_install_path()
-    if repo:
+    if is_app():
+        console.print("  Install type: Mac app")
+    elif repo:
         console.print("  Install type: git (editable)")
         console.print(f"  Repo path: {repo}")
     else:

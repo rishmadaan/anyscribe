@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from anyscribe.config.settings import CONFIG_LOCK, load_config, save_config
+from anyscribe.core.appmode import is_app
 from anyscribe.core.deps import check_dependencies
 from anyscribe.providers.local_models import (
     any_model_runnable,
@@ -52,7 +53,7 @@ LOCAL_RUNTIME_SPECS = [FASTER_WHISPER_SPEC, AV_SPEC, ONNX_ASR_SPEC]
 # What teardown removes (av stays: other packages may use it).
 LOCAL_RUNTIME_PACKAGES = ["faster-whisper", "onnx-asr"]
 
-InstallMethod = Literal["pipx", "venv", "system", "uv", "unknown"]
+InstallMethod = Literal["app", "pipx", "venv", "system", "uv", "unknown"]
 
 # Engine modules this process may already have imported, by distribution.
 # Replacing one on disk doesn't replace the loaded copy (Python keeps it), so
@@ -101,9 +102,12 @@ def detect_install_method() -> InstallMethod:
     """Figure out how anyscribe itself was installed.
 
     The detection drives which command we shell out to when adding or removing
-    faster-whisper. Order matters: pipx lives inside its own venv, so we have
-    to check the pipx markers before the generic venv heuristic.
+    faster-whisper. Order matters: the Mac app first (its own Python, whose pip
+    writes to the add-ons folder via PIP_USER/PYTHONUSERBASE); pipx lives inside
+    its own venv, so we have to check the pipx markers before the generic venv heuristic.
     """
+    if is_app():
+        return "app"
     exe = Path(sys.executable).resolve()
 
     pipx_home = os.environ.get("PIPX_HOME")
@@ -143,7 +147,8 @@ def _pip_command(action: str, packages: list[str]) -> tuple[list[str], InstallMe
     has no pip, so fall back to ``uv pip --python <this interpreter>`` when uv is
     on PATH. Returns ``(argv, "uv")`` when that fallback is used, else ``(argv, None)``."""
     extra = ["-y"] if action == "uninstall" else []
-    if not _pip_available() and shutil.which("uv"):
+    # The Mac app keeps its own pip: PIP_USER/PYTHONUSERBASE send it to the add-ons folder.
+    if not is_app() and not _pip_available() and shutil.which("uv"):
         return ["uv", "pip", action, "--python", sys.executable, *packages], "uv"
     return [sys.executable, "-m", "pip", action, *extra, *packages], None
 

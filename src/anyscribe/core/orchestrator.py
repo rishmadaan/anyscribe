@@ -133,7 +133,12 @@ def process(
         if not quiet:
             err_console.print(f"  [green]{status}:[/green] {download.title}")
         if on_progress:
-            on_progress("download", "completed", f"{status}: {download.title}")
+            on_progress(
+                "download",
+                "completed",
+                f"{status}: {download.title}",
+                data={"title": download.title},
+            )
         download_succeeded = True
 
         # Step 2: Transcribe

@@ -23,6 +23,7 @@ from anyscribe.config.paths import (
     get_workspace_dir,
 )
 from anyscribe.config.settings import Settings, save_config, save_env, load_config, load_env
+from anyscribe.core.appmode import is_app
 from anyscribe.core.deps import check_and_install
 from anyscribe.core.local_setup import RESTART_MESSAGE, run_setup as run_local_setup
 from anyscribe.downloaders.instagram import SUPPORTED_BROWSERS
@@ -431,6 +432,23 @@ LANGUAGE_OPTIONS = [
     "[cyan]other[/cyan] — type a language code",
 ]
 LANGUAGE_CODES = ["auto", "en", "es", "fr", "hi", "ar", "zh", "ja", "ko", "other"]
+
+
+def _install_skill_step() -> str:
+    """Install the Claude Code skill if Claude Code is present; return the summary's status.
+
+    Never in the Mac app's engine, matching the headless path: only the app's Terminal
+    switch installs the skill there.
+    """
+    if is_app():
+        return "not installed (the Mac app's Terminal switch installs it)"
+    if not CLAUDE_HOME.exists():
+        return ""
+    from anyscribe.cli.skill_cmd import copy_skill_files
+
+    copy_skill_files(quiet=True)
+    console.print("\n  [green]✓[/green] Claude Code skill installed to ~/.claude/skills/anyscribe/")
+    return "installed"
 
 
 def onboard(
@@ -944,15 +962,7 @@ def onboard(
     workspace = create_vault()
 
     # Step 12: Claude Code skill (auto-installed — AI-first app)
-    skill_status = ""
-    if CLAUDE_HOME.exists():
-        from anyscribe.cli.skill_cmd import copy_skill_files
-
-        copy_skill_files(quiet=True)
-        skill_status = "installed"
-        console.print(
-            "\n  [green]✓[/green] Claude Code skill installed to ~/.claude/skills/anyscribe/"
-        )
+    skill_status = _install_skill_step()
 
     if os.environ.get("INSTAGRAM_PASSWORD"):
         console.print(

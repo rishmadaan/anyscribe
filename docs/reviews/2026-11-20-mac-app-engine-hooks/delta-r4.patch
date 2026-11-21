@@ -1,0 +1,220 @@
+diff --git a/src/anyscribe/core/fileutil.py b/src/anyscribe/core/fileutil.py
+index 092952b..cf0eccb 100644
+--- a/src/anyscribe/core/fileutil.py
++++ b/src/anyscribe/core/fileutil.py
+@@ -32,31 +32,45 @@ def _thread_lock_for(path: Path) -> threading.Lock:
+         return _THREAD_LOCKS[resolved]
+ 
+ 
+-def atomic_write(path: Path, content: str, encoding: str | None = "utf-8") -> None:
++def atomic_write(
++    path: Path, content: str, encoding: str | None = "utf-8", new_mode: int = 0o600
++) -> None:
+     """Write content atomically: a hidden temp file in the same folder, then os.replace().
+ 
+-    The final path only ever holds the whole new content or the previous content: the
+-    buffered file object writes every byte or raises (a short write included), and the
+-    data is flushed and fsynced before the rename. A new file gets the user's normal
+-    permissions (umask applies, as with ``Path.write_text``); an existing file keeps its own.
++    The contract:
++    1. The final path only ever holds the whole new content or the whole old content.
++    2. The temp file is never more readable than the final file, at any moment: it is
++       created with its final mode in os.open itself.
++    3. An existing file keeps its exact permission bits.
++    4. A new file is created with ``new_mode`` (narrowed by the umask): private 0600 by
++       default, as mkstemp made them; transcripts pass 0o666, as write_text gave them.
++    5. Buffered write, flush, fsync, then os.replace; the temp is removed on any failure.
++
+     ``encoding=None`` means the platform default, the one ``write_text`` and ``read_text``
+     use without an encoding.
+     """
+     data = content.encode(encoding or locale.getpreferredencoding(False))
+     path.parent.mkdir(parents=True, exist_ok=True)
++    try:
++        existing = stat.S_IMODE(os.stat(path).st_mode)
++    except FileNotFoundError:
++        existing = None
++    mode = new_mode if existing is None else existing
+     tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+-    f = open(tmp, "xb")  # outside the try: a name we did not create is never unlinked
++    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
++    fd = os.open(tmp, flags, mode)  # outside the try: a name we did not create is never unlinked
+     try:
+-        with f:
++        if existing is not None:
++            os.chmod(tmp, mode)  # undo the umask's narrowing, before any byte; never wider
++        with os.fdopen(fd, "wb") as f:
++            fd = None  # the file object owns it now
+             f.write(data)
+             f.flush()
+             os.fsync(f.fileno())
+-        try:  # never widen an existing file's permissions (an owner-only config stays so)
+-            os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode))
+-        except FileNotFoundError:
+-            pass
+         os.replace(tmp, path)
+     except BaseException:
++        if fd is not None:
++            os.close(fd)
+         try:
+             os.unlink(tmp)
+         except OSError:
+diff --git a/src/anyscribe/vault/writer.py b/src/anyscribe/vault/writer.py
+index cfb56cf..ffc73b0 100644
+--- a/src/anyscribe/vault/writer.py
++++ b/src/anyscribe/vault/writer.py
+@@ -138,8 +138,9 @@ def write_transcript(
+     content = frontmatter + "\n" + "\n".join(body_parts)
+     # Atomic: a process killed mid-write (the Mac app's hard exit) leaves no partial
+     # transcript for duplicate detection to mistake for a finished one. encoding=None keeps
+-    # the platform default that write_text used and every transcript reader still uses.
+-    atomic_write(out_path, content, encoding=None)
++    # the platform default that write_text used and every transcript reader still uses;
++    # new_mode=0o666 gives a new transcript write_text's permissions (umask applies).
++    atomic_write(out_path, content, encoding=None, new_mode=0o666)
+ 
+     # Handle media file retention
+     if download.platform == "local":
+diff --git a/tests/test_fileutil.py b/tests/test_fileutil.py
+index 801bef2..5f2d619 100644
+--- a/tests/test_fileutil.py
++++ b/tests/test_fileutil.py
+@@ -34,26 +34,92 @@ class TestAtomicWrite:
+         assert len(files) == 1
+         assert files[0].name == "test.txt"
+ 
+-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+-    def test_an_existing_files_permissions_are_kept(self, tmp_path):
++
++def _mode(p) -> str:
++    return oct(stat.S_IMODE(os.stat(p).st_mode))
++
++
++def _write_under(umask, path, content="new", **kwargs):
++    old = os.umask(umask)
++    try:
++        atomic_write(path, content, **kwargs)
++    finally:
++        os.umask(old)
++
++
++@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
++class TestAtomicWritePermissions:
++    """The contract's permission rules, checked on the temp file during the call as well as
++    on the final file after it: that is where a private file's content could leak."""
++
++    def test_the_temp_file_is_never_wider_than_a_private_target(self, tmp_path, monkeypatch):
++        target = tmp_path / "state.json"
++        target.write_text("old")
++        target.chmod(0o600)
++        seen: dict[str, str] = {}
++
++        def temp():
++            (found,) = tmp_path.glob(".*.tmp")
++            return found
++
++        real_open, real_fdopen, real_fsync = os.open, os.fdopen, os.fsync
++
++        def watched_open(file, flags, *a, **k):
++            fd = real_open(file, flags, *a, **k)
++            if str(file).endswith(".tmp"):
++                seen["created"] = _mode(file)
++            return fd
++
++        def watched_fdopen(fd, *a, **k):
++            seen["fdopen"] = _mode(temp())
++            return real_fdopen(fd, *a, **k)
++
++        def watched_fsync(fd):
++            seen["fsync"] = _mode(temp())
++            return real_fsync(fd)
++
++        monkeypatch.setattr(os, "open", watched_open)
++        monkeypatch.setattr(os, "fdopen", watched_fdopen)
++        monkeypatch.setattr(os, "fsync", watched_fsync)
++        _write_under(0o022, target)
++        monkeypatch.undo()
++        assert seen == {"created": "0o600", "fdopen": "0o600", "fsync": "0o600"}
++        assert (target.read_text(), _mode(target)) == ("new", "0o600")
++
++    def test_an_existing_private_file_stays_private(self, tmp_path):
+         p = tmp_path / "config.yaml"
+         p.write_text("old")
+         p.chmod(0o600)
+-        old = os.umask(0o022)
+-        try:
+-            atomic_write(p, "new")
+-        finally:
+-            os.umask(old)
+-        assert (p.read_text(), oct(stat.S_IMODE(p.stat().st_mode))) == ("new", "0o600")
+-
+-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+-    def test_a_new_file_gets_the_umask_default(self, tmp_path):
+-        old = os.umask(0o022)
+-        try:
+-            atomic_write(tmp_path / "new.md", "x")
+-        finally:
+-            os.umask(old)
+-        assert oct(stat.S_IMODE((tmp_path / "new.md").stat().st_mode)) == "0o644"
++        _write_under(0o022, p)
++        assert (p.read_text(), _mode(p)) == ("new", "0o600")
++
++    def test_an_existing_group_writable_file_keeps_its_bits(self, tmp_path):
++        """Wider than the umask allows: the chmod after creation restores it exactly."""
++        p = tmp_path / "shared.md"
++        p.write_text("old")
++        p.chmod(0o664)
++        _write_under(0o022, p)
++        assert (p.read_text(), _mode(p)) == ("new", "0o664")
++
++    @pytest.mark.parametrize("umask", [0o022, 0o002])
++    def test_a_new_file_is_private_by_default(self, tmp_path, umask):
++        _write_under(umask, tmp_path / "new.json")
++        assert _mode(tmp_path / "new.json") == "0o600"
++
++    @pytest.mark.parametrize("umask, expected", [(0o022, "0o644"), (0o002, "0o664")])
++    def test_new_mode_0o666_follows_the_umask(self, tmp_path, umask, expected):
++        _write_under(umask, tmp_path / "new.md", new_mode=0o666)
++        assert _mode(tmp_path / "new.md") == expected
++
++    def test_a_failed_write_leaves_no_temp_file(self, tmp_path, monkeypatch):
++        def broken_fsync(fd):
++            raise OSError("disk gone")
++
++        monkeypatch.setattr(os, "fsync", broken_fsync)
++        with pytest.raises(OSError, match="disk gone"):
++            atomic_write(tmp_path / "x.json", "data")
++        monkeypatch.undo()
++        assert os.listdir(tmp_path) == []
+ 
+ 
+ class TestFileLock:
+diff --git a/tests/test_vault_writer.py b/tests/test_vault_writer.py
+index 3bcac7b..fdbe020 100644
+--- a/tests/test_vault_writer.py
++++ b/tests/test_vault_writer.py
+@@ -239,8 +239,10 @@ def test_a_short_write_never_reaches_the_final_path(tmp_path: Path, monkeypatch)
+ 
+ 
+ @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+-@pytest.mark.parametrize("umask", [0o022, 0o002])
+-def test_a_transcript_gets_the_same_permissions_as_write_text(tmp_path: Path, umask) -> None:
++@pytest.mark.parametrize("umask, expected", [(0o022, "0o644"), (0o002, "0o664")])
++def test_a_transcript_gets_the_same_permissions_as_write_text(
++    tmp_path: Path, umask, expected
++) -> None:
+     """The atomic write must not make transcripts owner-only: same bits as write_text."""
+     old = os.umask(umask)
+     try:
+@@ -249,7 +251,10 @@ def test_a_transcript_gets_the_same_permissions_as_write_text(tmp_path: Path, um
+         plain.write_text("x")
+     finally:
+         os.umask(old)
+-    assert oct(out.stat().st_mode & 0o777) == oct(plain.stat().st_mode & 0o777)
++    assert (oct(out.stat().st_mode & 0o777), oct(plain.stat().st_mode & 0o777)) == (
++        expected,
++        expected,
++    )
+ 
+ 
+ def test_transcript_keeps_the_platform_encoding(tmp_path: Path, monkeypatch) -> None:

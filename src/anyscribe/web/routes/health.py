@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter
 
 from anyscribe import __version__
@@ -20,4 +22,6 @@ async def health() -> dict:
         "ok": all(r.found for r in results if r.dep.required),  # optional rows never flip it
         "version": __version__,
         "dependencies": deps,
+        # The Mac app checks this matches the engine it started before trusting the port.
+        "pid": os.getpid(),
     }

@@ -108,8 +108,8 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
   const [step, setStepNow] = useState<Step>("welcome");
   // Read by the opening status reply when it lands (review L1). Shown: the
   // local step was ever asked for, set with the step itself. Heard: on any
-  // visit, the step accepted a status read of its own or sent a start, which
-  // is newer than the reply.
+  // visit, the step accepted a status read of its own, which is newer than the
+  // reply (a start needs one first: the pick comes from it).
   const localShownRef = useRef(false);
   const heardRef = useRef(false);
   const setStep = useCallback((s: Step) => {
@@ -187,12 +187,11 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
   // hands the step what it read; the step reports whether a setup is watched.
   // What the wizard has heard when the reply lands decides what it may do (L1).
   useEffect(() => {
-    let live = true; // false once this wizard closed (or StrictMode replays the effect)
-    const ctl = new AbortController();
+    const ctl = new AbortController(); // aborted once this wizard closes (or StrictMode replays the effect)
     limited(getLocalStatus, ctl)
       .then((s) => {
-        // heard: the step's own accepted read, or a start it sent, is newer
-        if (!live || !s.setup_running || heardRef.current) return;
+        // heard: the step's own accepted read is newer
+        if (!s.setup_running || heardRef.current) return;
         // shown before: the step takes it, now if mounted, else at its next
         // mount; the form and the route stay
         if (localShownRef.current) return setAdopt(s);
@@ -206,10 +205,7 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
         setStep("offline_opt_in");
       })
       .catch(() => undefined);
-    return () => {
-      live = false;
-      ctl.abort();
-    };
+    return () => ctl.abort();
   }, [setStep]);
 
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the
@@ -756,7 +752,7 @@ function StepOfflineOptIn({
   /** the wizard's opening read saw a setup running: watch it, unless something newer spoke */
   adopt: LocalStatusResponse | null;
   onRunning: (watched: boolean) => void;
-  /** the step accepted a status read of its own or sent a start (review L1) */
+  /** the step accepted a status read of its own (review L1) */
   onHeard: () => void;
   onBack: () => void;
   onNext: () => void;
@@ -793,8 +789,8 @@ function StepOfflineOptIn({
   }, [busy, onRunning]);
 
   // A handed reply counts only if this step has no accepted read of its own.
-  // The wizard drops a reply once the step was heard (a read or a start, on any
-  // visit); this covers a read accepted in the same render as the hand-off.
+  // The wizard drops a reply once the step accepted a read on any visit; this
+  // covers a read accepted in the same render as the hand-off.
   // Taken while rendering, so the render that receives it already watches.
   const [taken, setTaken] = useState<LocalStatusResponse | null>(null);
   if (adopt && adopt !== taken && status === null) {
@@ -880,7 +876,6 @@ function StepOfflineOptIn({
   // already run) switches the default and queues the extras server-side.
   const handleStartSetup = async () => {
     if (!selected) return;
-    onHeard();
     startGenRef.current += 1;
     setStarting(true);
     setMissing(null);
@@ -919,7 +914,6 @@ function StepOfflineOptIn({
   const checkFfmpeg = async () => {
     const s = await limited(getLocalStatus);
     setStatus(s);
-    onHeard();
     return s.ffmpeg_ok;
   };
 

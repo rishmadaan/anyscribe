@@ -352,3 +352,62 @@ The lead's decision follows the house rule that a guard no test can tell apart i
 - The download finished (`setup_outcome: set_up`, `tiny` runnable), and the page moved on to Workspace by itself with the flag `null`.
 - **Cleanup:** I stopped the real server (pid 1935173, with its uv parent 1935160) and `slowproxy.py` (1935159) by pid after reading each command line. No listener is left on 8470 to 8479. My preview tab is closed. The throwaway home (75 MB model plus the uv cache) is deleted.
 - **Disk:** `df -h ~` showed 30 GB free before and after (219G total, 178G used).
+
+## Lead-made change after the round 2 re-check (R2C1, unreviewed, lead-verified)
+
+**The change.** The owner chose a lead-made fix, reported as lead-verified rather than reviewed. It is the lead's own:
+- `294fb9e`: `askOrClose` also asks when `adopt && step !== "offline_opt_in"`. A running reply held for the local step makes closing ask on any other screen.
+- `a184b18`: bundle `index-B5rC99Gz.js`.
+- `1a09db2`: records.
+
+This section is the test evidence only; no code under `ui/src` or `src/` changed for it. Branch checked at `1a09db2` before starting.
+
+**Bundles.**
+- Old: `index-CDPOZTVX.js`, from `4b7232e`, unpacked with `git archive` into `old-4b7232e/` and served on 8472.
+- New: `index-B5rC99Gz.js`, the worktree at `1a09db2`, served on 8471.
+- Each server had a new empty HOME and ran with `--local-only`.
+- The cases are in `~/.review-runs/2026-11-21-wizard-opening-read/instruments/r2-cases.js` (not committed).
+
+**What the cases assert.**
+- Where the screen allows it, closing is tried three ways: Escape, a backdrop click and Skip for now. Each must open "Close setup?" with focus on Keep setting up, and the dismissed flag must stay `null`.
+- Nothing may change while the box is open or after it: the title, the "Step N of M" counter and the API key field's value must all stay the same. The counter shows the provider (cloud is "of 4", local is "of 3"). On All set, the whole summary must be unchanged.
+- Close setup then closes the wizard with the flag `null`.
+
+| Case | Sequence (the opening reply, running Whisper Small, is held until after the person moves on) | `index-CDPOZTVX.js` (old) | `index-B5rC99Gz.js` |
+|---|---|---|---|
+| **R2P**, must ask | Local step with failing reads, Back to Provider; the reply (4 s late) lands on Provider | **FAIL**: Escape closed at once, `{"dialogOpen":false,"flag":null}` | PASS: Escape, backdrop and Skip each ask; flag `null`; still "How should anyscribe transcribe?", "Step 1 of 3"; Close setup closes, flag `null` |
+| **R2K**, must ask | Cloud path (Sarvam key typed), the optional local step with failing reads, Back to API key; the reply (5 s late) lands there | **FAIL**: Escape closed at once | PASS: all three ask; still "Add your API key", "Step 2 of 4", key `sk_fake_sarvam_key_0000` kept; Close setup closes, flag `null` |
+| **R2W**, must ask | Cloud path, local left off, "Skip, next" before any accepted local read (checked: 0 accepted status reads); the reply (5 s late) lands on Workspace | **FAIL**: Escape closed at once | PASS: all three ask; still "Workspace location", "Step 4 of 4"; Close setup closes, flag `null` |
+| **R2D**, must ask | The R2W sequence, then Next to All set; the reply (6 s late) lands there | **FAIL**: Escape closed at once | PASS: Escape and backdrop ask (no Skip on this screen, checked); flag `null`; still "All set"; summary unchanged (Sarvam, no "On this computer", no offline model); Close setup closes, flag `null` |
+| **R2N1**, must not ask | The reply is held on Provider; the person returns and the step takes it (S13 line, Back off); then the real server's not-running read ends watching (S13 line gone, Back enabled, S14) | pass | PASS: Escape closes at once, flag `null` |
+| **R2N2**, must not ask | The step's own read is accepted first (heard); Back to Provider; the reply lands later and is dropped | pass | PASS: Escape on Provider closes at once, flag `null` |
+
+The old bundle never reached Skip in the four "must ask" cases, because Escape had already closed the wizard. R2C1's report traces that Skip there sets the flag.
+
+**Full harness on `index-B5rC99Gz.js`: 43 of 43 pass** (`results/r2-final-all.json`). That is the 37 cases of round 1, LR2 among them, plus R2P, R2K, R2W, R2D, R2N1 and R2N2. Results: `results/r2-new.json` and `results/r2-old.json`.
+
+**Mutant Mstep.** Only the `step !== "offline_opt_in"` part is removed: `watched || (adopt) ? ask : close`. It was built into the separate package on 8473 as `index-DYCsB2gr.js`, and the worktree source was restored with `git checkout`. **Killed by R2N1 and T5** (`results/r2-Mstep.json`):
+- **R2N1:** after the real not-running read ended watching (S14, Back enabled), Escape opened "Close setup?" instead of closing.
+- **T5:** the same on the never-shown path. The opening reply routed, the step's read said not running, and S14 showed; Escape still asked.
+- Both happen because `adopt` stays set while the person is on the local step after the step took it.
+- R2P, R2K, R2W, R2D, R2N2, T5_late and T13 pass under the mutant.
+- So the step check is not equivalent: without it, a setup that has visibly ended still asks before closing.
+
+**One concern for the lead (traced, not run; no code changed).**
+- **Where:** the Mac app's Terminal step, which comes after Finish (`setStep("terminal")` when `offerTerminal` is set).
+- **How it is reached:** a reply held on Workspace or All set is still in `adopt` after Finish, because Finish does not clear it. The step is now `"terminal"`, which is not `"offline_opt_in"`, so the held-reply condition is true.
+- **What happens:** Escape or a click outside calls `offerTerminal()` and then `askOrClose(true)`, which now opens "Close setup?".
+  - That box says "Your choices on these screens are saved only when you click Finish", although Finish has already saved them.
+  - Close setup calls `dismiss(false)`, where this path used `dismiss(true)` before.
+  - A second Escape only hides the box, and a third calls `offerTerminal()` again.
+- **Not a trap:** Close setup and the Terminal flow's own Done still close the wizard.
+- **Reach:** only the Mac app, and it needs the same slow-server sequence as R2W or R2D followed by Finish.
+- **Possible fixes, the lead's call:** exclude `"terminal"` (and `"done"`?) from the held-reply condition, or clear `adopt` at Finish.
+- **Not run:** the web harness cannot open the Mac app's Terminal step, so this has no harness case.
+
+**Cleanup.**
+- Stopped by pid after reading each command line: 8471 (1974113), 8472 (1974114), `serve.py` on 8477 (1974115) and the mutant server on 8473 (1986875).
+- No listener is left on 8470 to 8479, and my preview tab is closed.
+- Deleted `home-r2new`, `home-r2old` and `home-r2mut`.
+- `df -h ~` shows 30 GB free.
+- Only proof.md is committed.

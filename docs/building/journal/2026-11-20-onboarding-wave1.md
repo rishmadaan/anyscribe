@@ -187,8 +187,8 @@ orderings went wrong (lock review, L1):
 
 The rule chosen: what the wizard has heard when the reply lands decides what
 the reply may do. Once the local step, on any visit, has accepted a status
-read of its own or sent a start, those are newer than the reply, so it is
-dropped. Otherwise, if the local step was never shown: as before (set the
+read of its own, that read is newer than the reply, so it is dropped (a
+start needs such a read first, because the pick comes from it). Otherwise, if the local step was never shown: as before (set the
 form, route, watch from the first render). If it was shown, the reply is
 handed to the step without touching the form or the route: a step on screen
 takes it now, and a step the person left takes it at their next visit. The

@@ -29,6 +29,8 @@ Close it in code. Do not record it as residue. Replace "left: drop" with "heard:
 
 Update spec.md: add one line under rule 1 recording this round 1 lead decision.
 
+*Lead decision after the fix (round 1):* the three spots the fixer showed equivalent are removed (house rule: a guard no test can tell apart is removed): the opening effect's `live` flag (the abort stays), and `onHeard()` in `handleStartSetup` and in `checkFfmpeg`. A start needs a pick, which needs an accepted read or a taken hand-off that leaves the step watching, and the ffmpeg notice renders only once `status` is set, so "heard" means the step accepted a status read of its own on any visit.
+
 ## F2 (should-fix): a real walk on the bundle that ships
 
 After the fix and the final rebuild, rerun the hook-free walk on a real server with a throwaway HOME, using the smallest model:

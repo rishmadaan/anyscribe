@@ -128,14 +128,14 @@ The main checkout's venv has neither pytest nor ruff, so both ran from uv's temp
 ## Where I think the spec is wrong, and choices to review
 
 1. **Half of rule 2's check cannot fire.** "No start request sent in this mount" is implied by "no accepted status read" in every reachable state (traced under Mii_start). **Resolved: the lead removed it** (spec.md, rule 2's added line).
-2. **A second visit to the local step.** Rule 1 names never shown, showing and left, but not "left, then shown again". I made `left` final: a reply landing on a second visit is dropped, because the first visit's reads and any start are newer than it. Reading "showing now" literally would hand it to the new mount, which has not read yet, and a stale "running" could then start watching and end in a false "Setup didn't finish". **Accepted by the lead as built, with this residue: if every read on the first visit failed, the old reply no longer helps a second visit.** The step's own reads still show the running download once they get through.
+2. **A second visit to the local step.** Rule 1 names never shown, showing and left, but not "left, then shown again". I made `left` final: a reply landing on a second visit is dropped, because the first visit's reads and any start are newer than it. Reading "showing now" literally would hand it to the new mount, which has not read yet, and a stale "running" could then start watching and end in a false "Setup didn't finish". **Accepted by the lead as built, with this residue: if every read on the first visit failed, the old reply no longer helps a second visit.** The step's own reads still show the running download once they get through. **Superseded in round 1 (C1/F1):** the lead closed this residue in code with the "heard" rule; see "Round 1 fixes".
 3. **Variant C failed on the old build too**, by overwriting the pick, not by watching. The spec framed C as a guard check; it is also a defect the old code had.
 4. **"Has been shown" is set when the step is asked for**, in the `setStep` wrapper, not after React renders it. An effect would leave a gap between a `setStep` from a status callback and the commit in which a reply could still be routed by the old value.
 
 ## What I could not prove
 
 - The real run used the Linux preview browser only; no Mac or Windows, no screen reader.
-- React StrictMode double effects: the production bundle has no StrictMode, and I did not run the dev server. Reasoned only: the opening effect's second read would land while `showing` and be handed to the step, which takes it only if it has not read yet, the same reply twice.
+- React StrictMode double effects. **Corrected in round 1 (C2):** the statement first written here, that the production bundle has no StrictMode, was wrong: `ui/src/main.tsx` wraps the root in `<StrictMode>`, and the committed bundle carries it. Production React runs each effect once; development replays it. Round 1 gave the opening read a cleanup and proved it in development mode ("Round 1 fixes", C2).
 - A reply landing while "Close setup?" is open, and after Finish: not run as cases. After Finish the wizard is closed or on the Terminal step (`left`), so the reply is dropped.
 
 ## Cleanup
@@ -170,3 +170,141 @@ Mii (the whole check) and Mii_status are now the same mutant, so only Mii_status
 **Not re-run after this change:** the real download walk (it ran on `index-Bl10hv_a.js`, whose reload path, the never-shown branch with acceptance at mount, is the same logic now; the harness's R3C1, T5, T6 and T13 cover that path on the new bundle). pytest, ruff and the docs checks were not re-run: no Python or user docs changed since they passed.
 
 **Cleanup:** stopped by pid after reading each command line: 8471 (pid 1687867), `serve.py` 8477 (1687868), 8473 (1712849); no listener on 8470 to 8479; closed my preview tab; deleted `home-new2` and `home-mut2`.
+
+## Round 1 fixes
+
+Fixer: Claude Opus 5.5 (Agent tool). Branch `fix/wizard-opening-read`, base `13944d6` (checked with `git rev-parse --short HEAD` before editing). The fix plan (`fix-plan-r1.md`) set every choice below. C3 was the lead's.
+
+Commits:
+- `25c2f81` Setup wizard: drop a late opening reply only once the step heard something newer (C1/F1); spec.md rule 1 records the lead decision
+- `2ca1ece` Setup wizard: the opening status read is cancelled when its effect is cleaned up (C2)
+- `a333637` Rebuilt bundle `index-DdNfqDJq.js` (lint, build and the static diff check run first; static diff clean after)
+- `1fbc25b` Records: BACKLOG's L1 line, the wave 2 API key line, the journal (F3)
+- this section's commit
+
+Instruments (outside the repo, not committed), in `~/.review-runs/2026-11-21-wizard-opening-read/instruments/`:
+- `harness.js` has a new outcome, `gate`. The answer is held until `__openGate(name)`, so two replies can land in the same moment. The previous copy is `harness.r0.l1.js`.
+- `l1-cases.js` adds L1E, L1F, L1G, L1H, L1S and L1X.
+- `strict-cases.js` (SM1, SM2) runs in development mode only.
+- `mutate.py` adds Mh, Mhold, Mshown, Mc2, Mlive and Mheard_start. Mii_status is kept, with the same text.
+- `devcfg/vite.dev.config.mjs` serves the worktree's `ui/` through Vite's dev server on 8476. It proxies `/api` to my own server on 8471, not the config's 8457.
+
+Old build for "fails before": `8d53ebc` (`index-CJbYAiX1.js`), from `git archive` into `old-8d53ebc/`, on 8472. New build: the worktree on 8471 (`index-DdNfqDJq.js`). Each server had a new empty HOME and ran with `--local-only`.
+
+### C1 / F1: drop a reply only when something newer spoke. FIXED (`25c2f81`)
+
+**Changed** (`OnboardingWizard.tsx`):
+- The three-state ref is now two refs:
+  - `localShownRef`: the local step was ever asked for. It is set inside the `setStep` wrapper, as before.
+  - `heardRef`: the step heard something newer than the reply.
+- `heardRef` is set by one stable callback, `onHeard`, which the step calls in three places:
+  - in the tick's accepted branch, right after `setStatus(s)`;
+  - in `checkFfmpeg`, after `setStatus(s)`;
+  - in `handleStartSetup`, before the start is sent (after `if (!selected) return`).
+- `onHeard` touches only the ref. `watched` and `confirmClose` still have the step as their only writer, and `onRunning` still has one call site.
+- The opening reply handler, when the reply says `setup_running`:
+  - **heard:** drop it.
+  - **never shown:** as before (set the form, hand the reply over, route).
+  - **otherwise:** `setAdopt(reply)` only. The form and the route are untouched. A mounted step takes it while rendering; if the person is elsewhere, the step's next mount takes it, with `useState(adopt !== null)` and the same render-time take.
+- Back and `goWorkspace` still clear the reply.
+- The step keeps its one guard, `if (adopt && adopt !== taken && status === null)`. Its comment now says what it covers: a read accepted in the same render as the hand-off.
+- spec.md rule 1 has the round 1 lead-decision line.
+
+**Why no start can come between a hand-off and its take within one mount (plan item 4).**
+- The take runs while rendering, in the render that receives the new `adopt`. React cannot run a click handler between `setAdopt` and that render's own body.
+- A start sent before the hand-off calls `onHeard()` first, so the shell drops the reply instead of handing it over.
+- A start sent after the take finds the step already watching. The start button is disabled while `busy`.
+- On a second visit, where `selected` survives with `status === null`, the same holds. A start there sets `heardRef` before its request goes out.
+
+**New cases, on 8d53ebc and on the new build** (`results/r1-old-l1.json`, `results/r1-new-l1.json`; all pass again in `results/r1-final-all.json`):
+
+| Case | Sequence | 8d53ebc | New build |
+|---|---|---|---|
+| **L1E** (C1's sequence) | Opening reply (running Small) 7 s late. Local step with every read failing; Back; return; reads still failing; the reply lands. | **FAIL**: after the reply, no S13 line, Back `enabled`, "Install now [disabled]", S12. Escape gave `{"dialogOpen":false,"flag":null}`. | PASS: watched; Escape, backdrop and Skip each ask first (Keep setting up focused); flag `null`; Back is off; reads come back naming no model and the selected card is `small`; Close setup closes with the flag `null`. |
+| **L1F** | The reply (4 s late) lands while the person is on Provider after a Back; they return. | **FAIL**: on return, not watched (Back `enabled`). Escape closed at once. | PASS: watched on the first snapshot after the return (150 ms); the same closing checks and the `small` card. |
+| **L1G** | First visit: an accepted not-running read, Whisper Base picked. Back; return with failing reads; the reply lands. | pass (its "left" rule drops it too) | PASS: dropped. Not watched, Back enabled. When reads come back, `base` is still picked. Escape closes at once, flag `null`. |
+| **L1H** | First visit: a refused start (500) after its accepted read. Back; return; the reply lands. | pass (same reason) | PASS: dropped. Not watched, `base` still picked, Escape closes at once. |
+| **L1S** (for the step's guard) | First visit. The opening reply (running Small) and the step's first read (not running) are held at a gate and released together; both settle within 5 ms of each other. | pass | PASS: not watched, Back enabled, no red alert. Escape closes at once. |
+
+The plan asked for each new case to fail on 8d53ebc. L1G and L1H cannot: 8d53ebc's "left: drop" rule drops those replies too, for a different reason. They are there to catch the new `heardRef` guard (Mh below), not a defect in the old build. L1S tests a guard 8d53ebc already had.
+
+**Mutants** (each built into a separate copy of the package on 8473, with the worktree source restored by `git checkout` after each build):
+
+| Mutant | Change | Killed by | What the failing case saw |
+|---|---|---|---|
+| **Mh**: heardRef's drop | `if (!live \|\| !s.setup_running) return;` | **L1B**, **L1G**, **L1H** (`results/r1-Mh.json`) | L1G: the second visit watched a stale reply (S13 line, Back `disabled`, "Setting up… [disabled]"). When reads came back, `small` was picked and S14 showed. L1H: the same. L1B: after Back from Workspace, the step took the held stale reply, `small` was picked, and S14 showed. L1A, L1C to L1F, L1S, L1X, T5_late and R3C1 pass. |
+| **Mii_status**: the step's `status === null` | `if (adopt && adopt !== taken)` | **L1S** (`results/r1-Mii_status.json`) | With both replies landing in the same moment: S13 line, Back `disabled`, "Setting up… [disabled]", `small` picked. Escape asked first instead of closing. Every other case passes, so this guard is not equivalent: L1S is the ordering only it covers. |
+| **Mhold**: hold for the next mount | the reply is handed over only if the step is on screen; otherwise dropped | **L1F** (`results/r1-Mhold.json`) | On return: no S13 line, Back `enabled`, "Install now [disabled]". Escape closed at once. Every other case passes. |
+| **Mshown**: the whole hand-off after the step was shown | `if (localShownRef.current) return;` | **L1A**, **L1E**, **L1F** (`results/r1-Mshown.json`) | Each: not watched after the reply or the return, and Escape closed at once. |
+| **Mheard_start**: the start no longer reports heard | `onHeard()` removed from `handleStartSetup` | **survives**: L1B, L1D, L1H, R3C2 pass (`results/r1-Mheard_start.json`) | **Equivalent, not a weak test** (traced below). Kept; the lead decides. |
+
+Why Mheard_start is equivalent: a start needs `selected`. `selected` gets a value in one of two ways:
+- From an accepted read on some visit: the recommendation, a card click or `onPresetSize`, all of which need `status`. That read already called `onHeard`.
+- From a hand-off the step took: the never-shown branch, or a held reply taken at mount. The step then watches, the start button stays disabled, and Back is off until an accepted read ends watching. That read calls `onHeard`.
+
+So `heardRef` is always true before any start, and the start's own call is never the one that sets it. The same trace covers `checkFfmpeg`'s call: "Check again" exists only when `status` shows ffmpeg missing, so a read was already accepted. I did not build that mutant.
+
+### F2: a real walk on the bundle that ships. DONE
+
+- **Bundle:** `index-DdNfqDJq.js`, committed in `a333637`. The page loaded it from the real server, as the page's own script URL shows.
+- **Server:** the worktree's code. `HOME` was a new empty folder. Port 8474, `--local-only`. Downloads went through `slowproxy.py` at 200 kB/s per connection.
+  - The server ran in a uv overlay environment on top of the main venv, with `faster-whisper`, `av<19` and `onnx-asr` added. I warmed that environment first without the proxy. Nothing was installed into the main venv: `import faster_whisper` there still fails.
+- **Real clicks:** Let's go, On this computer, More models, Whisper Tiny, "Download Whisper Tiny (75 MB)". The server then reported `setup_running: true`, `tiny`, 0.9%.
+- **Reload mid-setup:** the wizard opened on Local transcription. It showed "Back is off until setup finishes. Skip for now asks first.", "Downloading Whisper Tiny… 8.3%" and "Setting up…"; Back was disabled, Whisper Tiny was selected and the flag was `null` (`screens/r1-real-reload-watched-DdNfqDJq.png`).
+- **Escape asks first:** I clicked the dialog title to focus the page, then pressed the real Escape key. "Close setup? The download keeps going…" opened, focus was on Keep setting up and the flag was `null` (`screens/r1-real-reload-escape-asks-DdNfqDJq.png`, opened and checked).
+- **Keep setting up keeps it:** a real Enter on the focused button hid the box. The wizard stayed open and watched, at 15.5%, with the flag `null`.
+- The download finished (`setup_outcome: set_up`, `tiny` runnable), and the page moved on to Workspace by itself.
+- **Disk:** `df -h ~` showed 30 GB free before and after. The throwaway home (75 MB model, 462 MB uv cache) is deleted.
+
+### C2: the opening read gets a cleanup. FIXED (`2ca1ece`)
+
+**Changed:** the opening effect now makes its own `AbortController` and passes it to `limited`, and keeps a `live` flag that its `.then` checks first. The cleanup sets `live = false` and aborts.
+
+**Proof, by harness case (production bundle) and in development mode (StrictMode):**
+- **L1X** (production bundle): the wizard opens with the opening reply 3 s late, and Skip for now closes it at 0.5 s. The opening request ended `AbortError` less than 1.5 s after it was sent.
+  - Under mutant **Mc2** (cleanup removed): it was `answered 200` at 3245 ms (`results/r1-Mc2.json`). **Killed by L1X.**
+  - On 8d53ebc: `answered 200` too (`results/r1-old-l1.json`).
+- **SM1 and SM2**, under Vite's dev server, where `<StrictMode>` replays the opening effect (`results/r1-dev-strict.json`):
+  - Both show the read sent twice at the same moment: A (delayed 3 s) and B.
+  - **SM1** is Sol's order: A says running Small, and the newer B says running Base. A was `AbortError`, B `answered 200`. After A's time had passed, Whisper Base was still the selected card.
+  - **SM2**: B says not running, and A (running Small) is older. A was `AbortError`. The wizard stayed on Welcome.
+  - With **Mc2** applied to the source the dev server serves (`results/r1-dev-strict-Mc2.json`):
+    - SM1 fails: A `answered 200` at 3.3 s, and the step took it. Picked `small`, "Downloading Whisper Small… 30%".
+    - SM2 fails: A routed a Welcome wizard to Local transcription. Picked `small`, and S14 after the next read.
+  - The source was restored with `git checkout` straight after.
+- **Mutant Mlive** (only `live = false` removed, the abort kept): **survives** L1X, L1A and R3C1 (`results/r1-Mlive.json`).
+  - It is equivalent in practice. Once the cleanup aborts, `limited`'s promise rejects and the `.then` never runs. `live` matters only if the request had already settled but its `.then` had not yet run when the cleanup ran, which is a window of a few microtasks.
+  - StrictMode's replay runs mount, cleanup and mount within one commit, before any reply can arrive. A wizard closed by a click unmounts in that click's task.
+  - Kept, as the plan names it; the lead decides.
+- **proof.md corrected:** "What I could not prove" no longer says the bundle has no StrictMode. `main.tsx` wraps the root in it; production React runs each effect once.
+
+### F3 and the records. DONE (`1fbc25b`)
+
+- **BACKLOG.md, the L1 line**, now ends "…so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); Done in #PR: a late reply is dropped only once the local step has heard something newer (an accepted read or a start); otherwise the step takes it." `#PR` is literal, for the lead to fill in.
+- **BACKLOG.md**, an unticked wave 2 line under R2L1, verbatim from the plan: the late opening reply on the API key step.
+- **Journal, Follow-up 2:** the rule is now "heard". Round 1 gets one paragraph on why the rule changed. The proof line names the Back-and-return and same-moment cases and the real walk.
+- **spec.md:** the round 1 lead-decision line under rule 1 (in `25c2f81`).
+
+### Full harness on the final bundle `index-DdNfqDJq.js`: 37 of 37 pass (`results/r1-final-all.json`)
+
+T1, T1_500, T2, T3, T4, T4_notRunning, T4_refused, T5, T5_late, T6, T7, T8, T9, T10, T11, T12, T12b, F4, F1, T13, TG, T4v2, R3C1, R3C2, L3, LF3, LR2, L1A, L1B, L1C, L1D, and the new L1E, L1F, L1G, L1H, L1S, L1X. No existing case changed.
+
+### Checks on the final commit
+
+`npm run lint`: no findings. `npm run build`: `index-DdNfqDJq.js`, the committed name. `git diff --exit-code -- src/anyscribe/web/static`: clean. pytest was not run: no Python changed in round 1, as the plan says.
+
+### Where the plan is wrong, or worth a second look
+
+1. "Each failing on 8d53ebc" cannot hold for the heard-on-first-visit and refused-start cases (L1G, L1H). 8d53ebc drops those replies too, by its "left" rule. They pass there and serve as the kill cases for the new `heardRef` guard (Mh).
+2. The refused-start case cannot isolate "a start" as what was heard. A start needs a pick, and on a first visit the pick needs an accepted read, which has already set heard. The start's own `onHeard()` call is an equivalent mutant (Mheard_start), kept as the plan names it.
+3. The `live` flag is equivalent in practice once the abort is there (Mlive). Kept as the plan names it.
+
+### Cleanup
+
+- Stopped by pid after reading each command line:
+  - 8471 (pid 1731626), 8472 (1731627), `serve.py` on 8477 (1731628);
+  - the mutant server on 8473 (1745532) and the Vite dev server on 8476 (1804062);
+  - the real server on 8474 (1845604, with its uv parent 1845592) and `slowproxy.py` on 8478 (1845591).
+- No listener is left on 8470 to 8479. My preview tab is closed.
+- Deleted the throwaway homes (`home-r1new`, `home-r1old`, `home-r1mut`, `home-r1real`).
+- Left in the run folder: the instruments, results, screenshots, `old-8d53ebc/`, `mut-src/` (the last mutant's build), `devcfg/` (config plus a node_modules symlink) and `wizard-with-c2.tsx` (a working copy).

@@ -185,21 +185,26 @@ orderings went wrong (lock review, L1):
   Workspace, routed back to the local step and watched from that old reply.
   The same path also overwrote the person's pick with the old reply's model.
 
-The rule chosen: where the wizard is when the reply lands decides what the
-reply may do. The local step never shown: as before (set the form, route,
-watch from the first render). Showing now: the reply is handed to the step,
-and the step watches it only if nothing newer has spoken (no accepted status
-read of its own yet), doing what its own running read does.
-Shown and since left: dropped, because the step's own reads and any start it
-sent are newer. "Left" stays left for the rest of that wizard, so a second
-visit does not take a reply older than the first. Where the wizard is comes
-from a ref set together with the step, never from what the read's closure
-saw when it was sent. The step stays the one writer of "a setup is watched".
+The rule chosen: what the wizard has heard when the reply lands decides what
+the reply may do. Once the local step, on any visit, has accepted a status
+read of its own or sent a start, those are newer than the reply, so it is
+dropped. Otherwise, if the local step was never shown: as before (set the
+form, route, watch from the first render). If it was shown, the reply is
+handed to the step without touching the form or the route: a step on screen
+takes it now, and a step the person left takes it at their next visit. The
+step takes it only if it has no accepted read of its own yet, which covers a
+read accepted in the same moment as the hand-off, and then does what its own
+running read does. Both facts are refs set when they happen, never what the
+read's closure saw when it was sent. The step stays the one writer of "a
+setup is watched". The opening read is also cancelled when the wizard closes.
 
-Proof: three new tab-harness cases, one per ordering above plus "the step
-already read not running", each failing on the previous build and passing on
-the new one, and the existing cases still pass. Each guard was removed in
-turn and a named case failed. A second half of the step's check, "no start
-sent", was removed: no case could tell it apart, because a start needs a pick
-and the pick comes only from the step's own accepted read, so the first half
-already covers it (`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).
+Round 1 of the review found that the first version's rule, "the person left
+the local step: drop", also dropped a reply nothing newer had contradicted
+(every read of the first visit failed, then Back and return), so it became
+"heard: drop".
+
+Proof: tab-harness cases for each ordering above, for Back and return, and for
+two replies landing in the same moment, with the existing cases still
+passing; each guard was removed in turn and a named case failed, and a real
+reload during a real download opened on it and asked before closing
+(`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).

@@ -688,9 +688,10 @@ audio) found 41 problems and grouped the fixes into three waves. Journal:
 - [ ] LocalSetupModal has the same lock shape: `disableClose={running}`, `Promise.all`, swallowed errors.
 - [ ] `beforeunload` guard on reload.
 - [ ] tests/conftest.py leaves a /tmp/ascli-test-home-* folder per pytest run (about 300 so far, harmless)
-- [x] **Before the next PyPI release** (the leftovers of the lock were promised not to reach customers): setup wizard: an opening status reply that arrives after the local step mounted is not handed to it, so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); reconcile it through the step's start-ordering guard. Done in the L1 follow-up (branch `fix/wizard-opening-read`): where the wizard is when the reply lands decides what it may do.
+- [x] **Before the next PyPI release** (the leftovers of the lock were promised not to reach customers): setup wizard: an opening status reply that arrives after the local step mounted is not handed to it, so one Escape or Skip can close without the warning while a download runs (review L1, 2026-11-20); Done in #PR: a late reply is dropped only once the local step has heard something newer (an accepted read or a start); otherwise the step takes it.
 - [ ] Code comments in `providers/local_models.py` and `web/routes/models.py` say a pull resumes; with huggingface_hub 2.4 a stopped download starts again from 0% (`docs/reviews/2026-11-20-onboarding-wave1-lock/proof.md`, rule 12). The dashboard, docs and `anyscribe model info` wording was fixed in the W6 follow-up.
 - [ ] Setup wizard: when the last install-log read fails, or the log is past its 500-line cap, the failure's `[error]` line never reaches the browser's install log; keep the ending status's `setup_error` in the log panel (review R2L1, 2026-11-20).
+- [ ] Setup wizard: a late opening reply that says a setup is running, landing while a cloud user is on the API key step, turns them into a local user and jumps them to Local transcription; their key stays in the form but is not saved at Finish (seen in the L1 review, 2026-11-21).
 
 ### Wave 3
 

@@ -220,8 +220,10 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
     }
     onClose();
   };
-  // While a setup is watched, closing asks first (S11)
-  const askOrClose = (persist: boolean) => (watched ? setConfirmClose(true) : dismiss(persist));
+  // While a setup is watched, closing asks first (S11). So does a running reply
+  // held for the local step while another screen shows (review R2C1).
+  const askOrClose = (persist: boolean) =>
+    watched || (adopt && step !== "offline_opt_in") ? setConfirmClose(true) : dismiss(persist);
 
   const branchFromProvider = (provider: string) => {
     setForm((f) => ({ ...f, provider }));

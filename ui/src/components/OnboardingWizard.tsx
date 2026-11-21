@@ -105,7 +105,16 @@ interface Props {
 }
 
 export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
-  const [step, setStep] = useState<Step>("welcome");
+  const [step, setStepNow] = useState<Step>("welcome");
+  // Whether the local step was never shown, is showing, or was left (left stays
+  // left). Set with the step itself, so the opening read sees it when it lands.
+  const localStepRef = useRef<"never" | "showing" | "left">("never");
+  const setStep = useCallback((s: Step) => {
+    if (s === "offline_opt_in") {
+      if (localStepRef.current === "never") localStepRef.current = "showing";
+    } else if (localStepRef.current === "showing") localStepRef.current = "left";
+    setStepNow(s);
+  }, []);
   const [form, setForm] = useState<FormState>({
     provider: null,
     apiKey: "",
@@ -124,9 +133,9 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
     setWatched(w);
     if (!w) setConfirmClose(false); // nothing left to warn about
   }, []);
-  // The opening read saw a setup running: the local step it routes to starts
-  // watching at once. Cleared when that step is left, so it is used once.
-  const [adopt, setAdopt] = useState(false);
+  // The opening read's running reply, handed to the local step, which decides
+  // whether to watch it. Cleared when that step is left, so it is used once.
+  const [adopt, setAdopt] = useState<LocalStatusResponse | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState("");
   const modelName = useLocalModelNames(); // fetched now, so All set shows names at once
@@ -150,9 +159,9 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
     []
   );
   const goWorkspace = useCallback(() => {
-    setAdopt(false);
+    setAdopt(null);
     setStep("workspace");
-  }, []);
+  }, [setStep]);
 
   // Preload the default workspace so StepWorkspace can show it as a hint.
   useEffect(() => {
@@ -172,21 +181,25 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
   // A download already running (the page was reloaded mid-download, or Settings
   // started one): open on it instead of offering Download again. Routes and
   // hands the step what it read; the step reports whether a setup is watched.
+  // Where the wizard is when the reply lands decides what it may do (review L1).
   useEffect(() => {
     limited(getLocalStatus)
       .then((s) => {
-        if (!s.setup_running) return;
+        // left the local step: its own reads, and any start it sent, are newer
+        if (!s.setup_running || localStepRef.current === "left") return;
+        // showing: the mounted step decides; the form and the route stay
+        if (localStepRef.current === "showing") return setAdopt(s);
         setForm((f) => ({
           ...f,
           provider: "local",
           enableLocal: true,
           localModel: s.setup_last_model,
         }));
-        setAdopt(true);
+        setAdopt(s);
         setStep("offline_opt_in");
       })
       .catch(() => undefined);
-  }, []);
+  }, [setStep]);
 
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the
   // wizard again next page load.
@@ -363,7 +376,7 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
           adopt={adopt}
           onRunning={onWatched}
           onBack={() => {
-            setAdopt(false);
+            setAdopt(null);
             setStep(form.provider === "local" ? "provider" : "api_key");
           }}
           onNext={goWorkspace}
@@ -727,15 +740,16 @@ function StepOfflineOptIn({
   onPresetSize: (s: string) => void;
   onSetLanguage: (code: string) => void;
   onSetupDone: (done: Pick<FormState, "alsoModels" | "restartNeeded">) => void;
-  /** the wizard's opening read saw a setup running: watch it from the start */
-  adopt: boolean;
+  /** the wizard's opening read saw a setup running: watch it, unless something newer spoke */
+  adopt: LocalStatusResponse | null;
   onRunning: (watched: boolean) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const [status, setStatus] = useState<LocalStatusResponse | null>(null);
   // watching: a setup is (or may be) running, so the step reads its status
-  const [watching, setWatching] = useState(adopt);
+  // a reply handed before mount is accepted on the first render
+  const [watching, setWatching] = useState(adopt !== null);
   const [starting, setStarting] = useState(false); // the start request hasn't settled
   // +1 when a start request is sent and again when it settles (odd: in flight).
   // A status read speaks for the setup only if this was even and unchanged
@@ -762,6 +776,15 @@ function StepOfflineOptIn({
     report(busy);
     return () => report(false);
   }, [busy, onRunning]);
+
+  // A reply handed after mount counts only if nothing newer has spoken: no
+  // accepted read of this step's own and no start sent (review L1).
+  useEffect(() => {
+    if (!adopt || status !== null || startGenRef.current !== 0) return;
+    onSetEnabled(true);
+    if (adopt.setup_last_model) onSelectSize(adopt.setup_last_model);
+    setWatching(true);
+  }, [adopt, status, onSetEnabled, onSelectSize]);
 
   // One status read at a time, each with a time limit: until the first status
   // arrives, then for as long as a setup is watched. Watching ends only on a

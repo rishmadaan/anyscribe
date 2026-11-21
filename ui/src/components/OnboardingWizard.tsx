@@ -779,13 +779,19 @@ function StepOfflineOptIn({
 
   // A reply handed after mount counts only if nothing newer has spoken: no
   // accepted read of this step's own yet. That is enough, since a start needs
-  // one too: the cards and the pick come from that read (review L1).
-  useEffect(() => {
-    if (!adopt || status !== null) return;
-    onSetEnabled(true);
-    if (adopt.setup_last_model) onSelectSize(adopt.setup_last_model);
+  // one too: the cards and the pick come from that read (review L1). Taken
+  // while rendering, so the render that receives it already watches.
+  const [taken, setTaken] = useState<LocalStatusResponse | null>(null);
+  if (adopt && adopt !== taken && status === null) {
+    setTaken(adopt);
     setWatching(true);
-  }, [adopt, status, onSetEnabled, onSelectSize]);
+  }
+  // and the wizard's form follows it: local on, the running model picked
+  useEffect(() => {
+    if (!taken) return;
+    onSetEnabled(true);
+    if (taken.setup_last_model) onSelectSize(taken.setup_last_model);
+  }, [taken, onSetEnabled, onSelectSize]);
 
   // One status read at a time, each with a time limit: until the first status
   // arrives, then for as long as a setup is watched. Watching ends only on a

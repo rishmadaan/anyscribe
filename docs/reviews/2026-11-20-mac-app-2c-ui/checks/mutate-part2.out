@@ -1,0 +1,8 @@
+OK  r1/readiness-gate-row: killed={'C5: Settings row for a shell not asked': True} restored={'C5: Settings row for a shell not asked': True} scenario_all_pass=True
+OK  r1/quiet-answer-marks: killed={'C6: a click outside the launcher question is Keep both': True} restored={'C6: a click outside the launcher question is Keep both': True} scenario_all_pass=True
+OK  r1/mark-failure-shown: killed={'C6: a failed save is shown with its reason': True} restored={'C6: a failed save is shown with its reason': True} scenario_all_pass=True
+OK  restart/disabled: killed={'GUARD restart: disabled while transcriptions run': True, 'GUARD restart: a click while disabled calls nothing': True} restored={'GUARD restart: disabled while transcriptions run': True, 'GUARD restart: a click while disabled calls nothing': True} scenario_all_pass=True
+OK  restart/pending-counts: killed={'engine with jobs line': True} restored={'engine with jobs line': True} scenario_all_pass=True
+
+5 of 5 mutants killed and restored cleanly
+exit 0

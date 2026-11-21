@@ -134,12 +134,45 @@ async function main() {
   await waitFor(() => evaluate(dash, "document.readyState === 'complete' && document.getElementById('root')?.childElementCount > 0"), 30_000, 'dashboard rendered');
   step('engine starts and the dashboard loads', `engine pid ${enginePid}, page ${dash.url}, ${Date.now() - t0} ms after ready`);
   const bridge = await evaluate(dash, `(async () => ({ keys: Object.keys(window.anyscribeDesktop).sort(), status: await window.anyscribeDesktop.engineStatus(), settings: await window.anyscribeDesktop.getSettings(), version: window.anyscribeDesktop.version, node: typeof require }))()`);
-  assert.deepEqual(bridge.keys, ['engineStatus', 'getSettings', 'onEngineStatus', 'openLogFolder', 'pathForFile', 'platform', 'restartEngine', 'revealInFinder', 'setDockMode', 'setStartAtLogin', 'version']);
+  assert.deepEqual(bridge.keys, ['engineStatus', 'firstLaunch', 'getSettings', 'oldLauncher', 'onEngineStatus', 'onOpenFile', 'openLogFolder', 'pathForFile', 'platform', 'restartEngine', 'revealInFinder', 'setDockMode', 'setStartAtLogin', 'terminal', 'version']);
   assert.equal(bridge.status.state, 'running');
   assert.equal(bridge.status.port, 8470);
   assert.deepEqual(bridge.settings, { dockMode: 'dock', startAtLogin: false });
   assert.equal(bridge.node, 'undefined');
   step('the bridge answers in the dashboard, no Node in the page', `version ${bridge.version}, status ${JSON.stringify(bridge.status)}`);
+
+  // 1b. Bridge v2 through the real app: first-launch flags, the old launcher, and the Terminal
+  // command with the real engine (skill install into this run's throwaway ~/.claude, the login
+  // shell reading this run's throwaway HOME).
+  const call = (expr) => evaluate(dash, `(async () => { const d = window.anyscribeDesktop; return ${expr}; })()`);
+  assert.deepEqual(await call('d.firstLaunch.get()'), { ok: true, oldLauncherAsked: false, terminalAsked: false });
+  assert.deepEqual(await call("d.firstLaunch.mark('terminalAsked')"), { ok: true });
+  assert.deepEqual(await call('d.firstLaunch.get()'), { ok: true, oldLauncherAsked: false, terminalAsked: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')), { dockMode: 'dock', oldLauncherAsked: false, terminalAsked: true, port: 8470 });
+  assert.match(await call("d.firstLaunch.mark('bogus').then(() => 'accepted', (e) => e.message)"), /firstLaunch\.mark takes one of/);
+  assert.deepEqual(await call('d.oldLauncher.status()'), { ok: true, installed: false, pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'not running' }, lastRemoval: null });
+  assert.deepEqual(await call('d.oldLauncher.remove()'), { ok: false, reason: 'The old launcher is removed only on a Mac.', pieces: null, startAtLoginCarriedOver: false });
+  step('firstLaunch and oldLauncher answer; a marked question is saved in the app\'s settings');
+
+  fs.mkdirSync(path.join(HOME, '.claude'));
+  const command = path.join(HOME, '.local', 'bin', 'anyscribe');
+  const skill = path.join(HOME, '.claude', 'skills', 'anyscribe', 'SKILL.md');
+  let t = await call('d.terminal.status()');
+  assert.deepEqual([t.ok, t.state, t.command, t.uses, t.claudeCode, t.skill], [true, 'off', null, null, true, 'missing']);
+  t = await call('d.terminal.turnOn({ replace: false })');
+  assert.deepEqual([t.ok, t.state, t.command, t.skill], [true, 'path-missing', command, 'installed'], JSON.stringify(t));
+  assert.ok(fs.existsSync(skill), 'the real engine installed the skill');
+  const version = require('node:child_process').execFileSync(command, ['--version'], { env: { HOME, PATH: '/usr/bin:/bin' } }).toString().trim();
+  assert.match(version, /^anyscribe v\d+\.\d+\.\d+/);
+  const added = await call('d.terminal.addToPath()');
+  assert.equal(added.ok, true);
+  t = await call('d.terminal.status()');
+  assert.deepEqual([t.state, t.uses], ['on', { path: command, version: t.appVersion, via: 'app' }], JSON.stringify(t));
+  t = await call('d.terminal.turnOff()');
+  assert.deepEqual([t.ok, t.state, t.command, t.skill], [true, 'off', null, 'missing'], JSON.stringify(t));
+  assert.equal(fs.existsSync(command), false, 'our command removed');
+  assert.equal(fs.existsSync(path.dirname(skill)), false, 'the skill removed: no anyscribe left for Terminal');
+  step('Terminal: turned on (real skill install), Terminal can\'t see it, added to PATH, on, turned off', `${version}; ${added.file}`);
 
   // 2. Closing the window (its close button) keeps the engine up.
   assert.equal(await inMain(`${DASH_WINDOW}.isVisible()`), true, 'dashboard window shown');
@@ -157,6 +190,46 @@ async function main() {
   assert.ok(alive(enginePid));
   await waitFor(() => inMain(`${DASH_WINDOW}.isVisible()`), 5000, 'the hidden window to show again');
   step('opening the app again shows the hidden window (single instance)', `second launch exit code ${second.exitCode}`);
+
+  // 3b. Opened files: one arrives while the window is hidden and nobody listens (held, window
+  // shown), then the dashboard subscribes and gets it; one more on a second launch's command line.
+  const dropped = path.join(HOME, 'talk.m4a');
+  const named = path.join(HOME, 'second launch.mp4');
+  for (const f of [dropped, named]) fs.writeFileSync(f, 'not really audio');
+  // The dashboard subscribes as it loads (2c-ui), so "nobody listens" needs a page without it: the
+  // engine's own /api/health, same origin, where the preload still gives the bridge. Back to / after.
+  const HEALTH_PAGE = 'http://127.0.0.1:8470/api/health';
+  await inMain(`${DASH_WINDOW}.loadURL(${JSON.stringify(HEALTH_PAGE)}), true`);
+  await waitFor(async () => (await pages()).some((p) => p.url === HEALTH_PAGE), 10_000, 'the window to show the health page');
+  await inMain(`${DASH_WINDOW}.close()`);
+  await waitFor(async () => !(await inMain(`${DASH_WINDOW}.isVisible()`)), 5000, 'the window to hide');
+  await inMain(`require('electron').app.emit('open-file', { preventDefault() {} }, ${JSON.stringify(dropped)}), true`);
+  await waitFor(() => inMain(`${DASH_WINDOW}.isVisible()`), 5000, 'an opened file to show the window');
+  const dashNow = (await pages()).find((p) => p.url === HEALTH_PAGE);
+  await sleep(300);
+  // C2: subscribe and unsubscribe at once; the file was sent but never acknowledged, so it is kept.
+  await evaluate(dashNow, 'window.__lost = [], window.anyscribeDesktop.onOpenFile((p) => window.__lost.push(p))(), true');
+  await sleep(500);
+  // In one tick: subscribe, unsubscribe, subscribe again. The app sends the unacknowledged file
+  // twice; the page hands it over once.
+  await evaluate(
+    dashNow,
+    'window.__opened = [], window.anyscribeDesktop.onOpenFile((p) => window.__lost.push(p))(), window.__unsubscribe = window.anyscribeDesktop.onOpenFile((p) => window.__opened.push(p)), true'
+  );
+  await waitFor(() => evaluate(dashNow, 'window.__opened.length >= 1'), 5000, 'the held file on subscribe');
+  await sleep(500);
+  assert.deepEqual(await evaluate(dashNow, 'window.__opened'), [dropped], 'handed over once, though sent twice');
+  const third = launch([named]);
+  await waitFor(() => third.exitCode !== null, 15_000, 'the launch with a file to exit');
+  await waitFor(() => evaluate(dashNow, 'window.__opened.length === 2'), 5000, 'the file named on the second launch');
+  assert.deepEqual(await evaluate(dashNow, 'window.__opened'), [dropped, named]);
+  assert.deepEqual(await evaluate(dashNow, 'window.__lost'), [], 'the unsubscribed callback got nothing');
+  step('opened files are held until the dashboard acknowledges them, then delivered in order (open-file, an at-once unsubscribe, a second launch)', `${path.basename(dropped)}, ${path.basename(named)}`);
+  await inMain(`${DASH_WINDOW}.loadURL('http://127.0.0.1:8470/'), true`);
+  await waitFor(async () => {
+    const p = (await pages()).find((x) => x.url === 'http://127.0.0.1:8470/');
+    return p && (await evaluate(p, "document.readyState === 'complete'").catch(() => false));
+  }, 15_000, 'the dashboard back in the window');
 
   // 4. The engine dies: restarted automatically, and the window reloads the dashboard.
   const page = (await pages()).find((p) => p.url === 'http://127.0.0.1:8470/');

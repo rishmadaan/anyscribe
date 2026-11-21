@@ -1,0 +1,6 @@
+# Diagnosis, round 4 (claude-fable-5-2, read-only, Agent tool), summary
+
+Cause of B1 and B2: the pause is owned by the run object, which a stop or quit discards while the uninstaller process lives on. Tie the exclusion to the step's lifetime, and the helper's lifetime to the app's.
+B1: one engine flag held for the step (`stepRunning` set before `await run.before()`, cleared in finally); start() returns false and restart() refuses ("The old launcher is still being removed.") while it is set; no gap before it; bounded by the helper's 60 s kill; stop() keeps its contract.
+B2: kill, do not wait. run.js keeps the live pids of helpers that opt in (only remove() does) and exports killHelpers(), which SIGKILLs each group synchronously; will-quit calls engine.stopForQuit() then killHelpers(). Quit stays instant (waiting could take about 25 s and stall logout). An interrupted removal leaves pieces; status() reads them directly and offers removal again; lastRemoval is memory-only.
+Second instance: after a normal quit nothing remains. A force quit, crash or power loss during the uninstall, then a reopen within about 25 s, could let the helper stop the new engine once; the crash supervisor restarts it. Recommended: accept and document (a durable reservation would be a hand-made lock-file protocol).

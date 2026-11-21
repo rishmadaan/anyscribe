@@ -1,0 +1,697 @@
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 234af49..52a5321 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -106,15 +106,16 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
+ #### The dashboard inside the Mac app (`ui/src/desktop.ts`)
+ The Mac app (Electron, `desktop/`) loads this same dashboard and gives it a bridge, `window.anyscribeDesktop` (contract: `desktop/README.md`, bridge v2 with its amendments). `ui/src/desktop.ts` is the one module that reads it: typed bridge, `desktop` (null in a browser), `isMac`, `useEngineStatus()`, `runningJobs()` (reads `GET /api/jobs`, counts pending and running), and the notes below. Every Mac screen renders only when `desktop` is set, so a browser gets today's dashboard pixel for pixel (checked against the previous bundle in `docs/reviews/2026-11-20-mac-app-2c-ui/checks/`).
+ 
++"This restart is mine" (the banner's "Restarting anyscribe's engine.", and no outage) is true only while this page's own Restart engine or removal call is in flight: a module variable, not storage, because the app reloads the page only once the engine runs again.
++
+ **The reload after every restart.** The app loads the dashboard's `/` again each time the engine returns to running (2c-app `main.js`, the `loadURL` in the engine status handler). A restart keeps the port, so the page's origin and its storage survive; anything that must outlive a restart is written to storage before the reload can happen:
+ - the outage note (`OUTAGE` in sessionStorage, `{job, at}`): written when the engine stops by itself; the reloaded page shows "Running again" naming the job once;
+-- the restart this page asked for (Restart engine, or the old launcher's removal): noted first, so the banner says "Restarting anyscribe's engine." and records no outage;
+-- the queue of dropped and Dock files (sessionStorage), written inside the callback because the preload acknowledges a file as soon as it returns; a file leaves it once the engine has answered its submission;
+-- the removal note (localStorage, `{at, before}`): kept until the reloaded page claims `oldLauncher.status().lastRemoval` (newer than the note) or the result card is closed; a refusal (no restart seen) clears it at once;
++- the queue of dropped and Dock files (sessionStorage), written inside the callback because the preload acknowledges a file as soon as it returns. A file starts only while the engine reads running and the page is idle or done; it leaves the queue only once the engine accepted it. On a failure it stays at the head and the error screen is the pause (Try again resubmits it; New drops it only when it is the one that failed);
++- the removal note (localStorage, `{at, before}`): resolved in one place (`resolveRemoval`) against the app's own saved `oldLauncher.status().lastRemoval`, and only while the engine reads running. A `lastRemoval` at or after the note means the removal ran (the reloaded page claims it; the live page keeps the note until the card is closed); anything else means nothing ran, and the note goes. The shape of a result never decides it;
+ - a first-launch answer the app couldn't save (`firstLaunch.mark` gave `{ok: false, reason}`), shown once things are quiet.
+ 
+ - `components/Layout.tsx`: no Shutdown in the app; on macOS a 28 px drag strip (`.app-drag`, CSS `app-region: drag`) above the logo so the window's buttons clear it; drops and Dock files go to the stored queue and open Transcribe, which starts them one at a time and names those waiting. The overlay reads "Drop to transcribe" only: a browser gives the dragged file's name only on the drop.
+-- `components/EngineBanner.tsx`: the engine trouble banner on every page (restarting, in his words when he asked for it; running again naming the watched job; keeps stopping with Restart engine, Copy details, Open log folder and the troubleshooting guide).
++- `components/EngineBanner.tsx`: the engine trouble banner on every page (restarting, in his words while his own call runs; running again naming the watched job; keeps stopping, or stopped without restarting, in one red card with Restart engine, Copy details, Open log folder and the troubleshooting guide).
+ - `components/ThisMac.tsx`: Settings "This Mac" in place of Startup (Show anyscribe in, Start at login, Terminal and Claude Code, version, Engine with Restart engine disabled while `runningJobs()` is above zero, the old launcher while installed, how to remove the app).
+ - `components/MacCards.tsx`: the old-launcher question and the Terminal cards, used by `App.tsx` on first launch (launcher first, then Terminal) and as the setup wizard's optional last step ("One last thing"). Each question is asked once: Escape or a click outside is the quiet answer (Keep both, Skip for now). "Ready in Terminal" only when the login shell found this app's command (`runsOurs`); "Switch to this app's copy" whenever a copy sits at `~/.local/bin/anyscribe` unused (`occupant`). `terminal.addToPath()` is called only from the card that shows the exact line.
+ - Browse in the app puts `pathForFile(file)` in the box (no upload copy); he starts it as in the browser (`components/URLInput.tsx`).
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-ui.md b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+index a8577df..e790cec 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-ui.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+@@ -67,3 +67,25 @@ architecture.md, "The reload after every restart"). Other round 1 decisions:
+ each first-launch question is asked once (Escape and a click outside are the
+ quiet answer); "ready in Terminal" only when the login shell confirmed it;
+ Browse fills the box as in the browser (the spec's "submits" was an error).
++
++## Round 2 (review: NOT YET and CONDITIONAL)
++
++Round 1 still let the page guess what the app had done from side signals:
++any status other than running meant "the removal ran", any answer to a POST
++meant "the file is handled", a stored note meant "this restart is mine".
++Round 2 reads facts only. A queued file leaves only once the engine accepted
++it and starts only while the engine reads running; the error screen is the
++pause. The removal note is resolved against the app's own saved
++`lastRemoval`, only while the engine reads running. "Mine" is true only
++while the page's own call is in flight. The stub now behaves as the real
++bridge by default (sessionStorage as the app's memory, localStorage as its
++disk, removal restarts and reloads, `/api` fails while the engine is down);
++simplified component cases are labelled "[component]" in the checker.
++
++Documented limits (not built):
++- A crash during the job check of his own Restart or Remove click (one HTTP
++  read long) shows the asked-for wording and records no outage, once.
++- A window reopened while his own restart runs may read it as a crash.
++- Files waiting in Up next are lost if anyscribe quits before they start.
++- Real Electron reload timing and sessionStorage across `loadURL`: no stub
++  proves them; they stay a check on a Mac.
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index 91b7080..543ee28 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useState } from "react";
++import { useEffect, useRef, useState } from "react";
+ import { BrowserRouter, Routes, Route } from "react-router-dom";
+ import Layout from "./components/Layout";
+ import OnboardingWizard from "./components/OnboardingWizard";
+@@ -9,8 +9,8 @@ import SettingsPage from "./pages/SettingsPage";
+ import { getOnboardingStatus } from "./api/client";
+ import Modal from "./components/Modal";
+ import { BTN_MAIN, Card, LauncherQuestion, RemovalAfterReload, TerminalFlow } from "./components/MacCards";
+-import { claimRemoval, desktop, MARK_PROBLEM, MARK_PROBLEM_EVENT, markAsked, session } from "./desktop";
+-import type { FirstLaunch, LauncherStatus } from "./desktop";
++import { desktop, MARK_PROBLEM, MARK_PROBLEM_EVENT, markAsked, resolveRemoval, session, useEngineStatus } from "./desktop";
++import type { FirstLaunch, LauncherStatus, MarkProblem, Removal } from "./desktop";
+ 
+ /**
+  * Wizard trigger: on app mount, ask the backend whether onboarding has been
+@@ -31,7 +31,7 @@ export default function App() {
+   const [asked, setAsked] = useState<FirstLaunch | null>(null);
+   const [launcher, setLauncher] = useState<LauncherStatus | null>(null);
+   // a removal this page started before the engine restart reloaded it
+-  const [removed, setRemoved] = useState<ReturnType<typeof claimRemoval>>(null);
++  const [removed, setRemoved] = useState<Removal | null>(null);
+ 
+   useEffect(() => {
+     const dismissed = localStorage.getItem("scribe_onboarding_dismissed") === "1";
+@@ -52,11 +52,26 @@ export default function App() {
+       .then(([a, l]) => {
+         setLauncher(l);
+         setAsked(a);
+-        setRemoved(claimRemoval(l));
+       })
+       .catch(() => undefined); // unanswered questions wait for the next launch
+   }, []);
+ 
++  // A removal this page's predecessor started: settled against the app's saved lastRemoval on the
++  // first status that reads running (never earlier: an unmatched note is cleared only then).
++  const engine = useEngineStatus();
++  const settled = useRef(false);
++  useEffect(() => {
++    if (!desktop || engine?.state !== "running" || settled.current) return;
++    settled.current = true;
++    desktop.oldLauncher
++      .status()
++      .then((l) => {
++        const r = resolveRemoval(l, true, true);
++        if (r && r !== "refused") setRemoved(r);
++      })
++      .catch(() => undefined);
++  }, [engine?.state]);
++
+   const askLauncher = !!asked && !asked.oldLauncherAsked && !!launcher?.installed;
+   const askTerminal = !!asked && !asked.terminalAsked && !askLauncher && !removed;
+   const terminalAnswered = () => {
+@@ -70,9 +85,9 @@ export default function App() {
+     setAsked((a) => a && { ...a, oldLauncherAsked: true });
+   };
+   // An answer the app couldn't save (firstLaunch.mark said so): shown once things are quiet.
+-  const [markProblem, setMarkProblem] = useState<string | null>(() => session.get<string>(MARK_PROBLEM));
++  const [markProblem, setMarkProblem] = useState<MarkProblem | null>(() => session.get<MarkProblem>(MARK_PROBLEM));
+   useEffect(() => {
+-    const show = () => setMarkProblem(session.get<string>(MARK_PROBLEM));
++    const show = () => setMarkProblem(session.get<MarkProblem>(MARK_PROBLEM));
+     window.addEventListener(MARK_PROBLEM_EVENT, show);
+     return () => window.removeEventListener(MARK_PROBLEM_EVENT, show);
+   }, []);
+@@ -101,7 +116,7 @@ export default function App() {
+       </Routes>
+       {removed && (
+         <Modal onClose={() => setRemoved(null)} ariaLabel="The old browser launcher" size="lg">
+-          <RemovalAfterReload initial={removed.result} before={removed.before} onDone={() => setRemoved(null)} />
++          <RemovalAfterReload initial={removed} onDone={() => setRemoved(null)} />
+         </Modal>
+       )}
+       {askLauncher && launcher && (
+@@ -120,8 +135,14 @@ export default function App() {
+       {markProblem && !removed && !askLauncher && !(askTerminal && wizardDecided) && !showWizard && (
+         <Modal onClose={markProblemSeen} ariaLabel="Your answer wasn't saved" size="md">
+           <Card tone="warn" title="anyscribe couldn't save your answer">
+-            <p>{markProblem}</p>
+-            <p>This question may come back the next time anyscribe starts.</p>
++            <p>{markProblem.reason}</p>
++            <p>
++              {markProblem.keys.length > 1
++                ? "These questions may come back the next time anyscribe starts."
++                : markProblem.keys[0] === "terminalAsked"
++                  ? "The Terminal question may come back the next time anyscribe starts."
++                  : "The old launcher question may come back the next time anyscribe starts."}
++            </p>
+             <div className="flex gap-2 pt-1">
+               <button autoFocus onClick={markProblemSeen} className={BTN_MAIN}>OK</button>
+             </div>
+diff --git a/ui/src/components/EngineBanner.tsx b/ui/src/components/EngineBanner.tsx
+index 380ff6e..375a469 100644
+--- a/ui/src/components/EngineBanner.tsx
++++ b/ui/src/components/EngineBanner.tsx
+@@ -3,7 +3,7 @@
+ import { useEffect, useState } from "react";
+ import { Link } from "react-router-dom";
+ import { AlertCircle, Check, RefreshCw } from "lucide-react";
+-import { desktop, exitWords, GUIDE_URL, OUTAGE, restartConsumed, restartEngine, restartIsMine, session } from "../desktop";
++import { desktop, exitWords, GUIDE_URL, OUTAGE, restartEngine, restartIsMine, session } from "../desktop";
+ import type { EngineStatus } from "../desktop";
+ 
+ const BTN_MAIN =
+@@ -35,11 +35,8 @@ export default function EngineBanner({ watching }: { watching: { current: string
+         setRefused(null);
+         const note = session.get<{ job: string | null }>(OUTAGE);
+         if (note) setBackAgain({ job: note.job });
+-        if (first) {
+-          // a fresh page takes the notes; an older page leaves them for the reload that follows
+-          session.del(OUTAGE);
+-          restartConsumed();
+-        }
++        // a fresh page takes the note; an older page leaves it for the reload that follows
++        if (first) session.del(OUTAGE);
+       } else if ((wasRunning || s.state === "restarting") && !asked && !session.get(OUTAGE)) {
+         session.set(OUTAGE, { job: watching.current, at: Date.now() });
+         setBackAgain(null);
+@@ -64,7 +61,9 @@ export default function EngineBanner({ watching }: { watching: { current: string
+     </div>
+   );
+ 
+-  if (status.stoppedRestarting) {
++  // Keeps stopping, or stopped and not restarting (a restart that failed): the same red card.
++  if (status.stoppedRestarting || status.state === "stopped") {
++    const keeps = status.stoppedRestarting;
+     const restart = async () => {
+       setRefused(null);
+       const r = await restartEngine();
+@@ -73,7 +72,7 @@ export default function EngineBanner({ watching }: { watching: { current: string
+     const copy = async () => {
+       const details = [
+         `anyscribe app ${desktop!.version} (${desktop!.platform})`,
+-        `Engine: ${status.state}, stopped restarting after repeated exits`,
++        keeps ? `Engine: ${status.state}, stopped restarting after repeated exits` : "Engine: stopped, couldn't start again",
+         `Last exit: code ${status.lastExit?.code ?? "none"}, signal ${status.lastExit?.signal ?? "none"}`,
+         `Reason: ${status.lastExit?.reason ?? "not reported"}`,
+         "Log: ~/.anyscribe/logs/app.log",
+@@ -90,10 +89,14 @@ export default function EngineBanner({ watching }: { watching: { current: string
+       "border-red/45 bg-red/[0.08]",
+       <AlertCircle className="w-4 h-4 text-red shrink-0 mt-0.5" />,
+       <>
+-        <h3 className="text-sm font-medium text-text">The engine keeps stopping</h3>
++        <h3 className="text-sm font-medium text-text">
++          {keeps ? "The engine keeps stopping" : "anyscribe's engine stopped"}
++        </h3>
+         <p className="text-[13px] text-text-secondary">
+-          It stopped 3 times in a minute, so anyscribe stopped restarting it. Your transcripts
+-          are safe. {exitWords(status.lastExit)}.
++          {keeps
++            ? "It stopped 3 times in a minute, so anyscribe stopped restarting it. "
++            : "It couldn't start again. "}
++          Your transcripts are safe. {exitWords(status.lastExit)}.
+         </p>
+         {refused && <p className="text-xs text-red">{refused}</p>}
+         <div className="flex flex-wrap items-center gap-3">
+diff --git a/ui/src/components/Layout.tsx b/ui/src/components/Layout.tsx
+index 6821cc4..91e1ef1 100644
+--- a/ui/src/components/Layout.tsx
++++ b/ui/src/components/Layout.tsx
+@@ -10,7 +10,7 @@ import { REMOTE, useTailnet } from "../hooks/useTailnet";
+ /** What the Transcribe page gets from the layout (Mac app: files dropped or opened with the app). */
+ export type LayoutContext = {
+   incoming: string[];
+-  /** The file has been handed to the engine (accepted, or refused with its error on screen). */
++  /** The engine accepted the file at the head of the queue (or he chose New on its error): it leaves. */
+   doneIncoming: (path: string) => void;
+   /** The job the page is following, so the engine banner can name it after a restart. */
+   setWatching: (job: string | null) => void;
+@@ -80,8 +80,8 @@ function useIncomingFiles() {
+ 
+   const doneIncoming = useCallback((path: string) => {
+     const q = session.get<string[]>(QUEUE) ?? [];
+-    const i = q.indexOf(path);
+-    if (i >= 0) q.splice(i, 1);
++    if (q[0] !== path) return; // only the head: a failed typed link never takes a waiting file
++    q.shift();
+     session.set(QUEUE, q);
+     setIncoming(q);
+   }, []);
+diff --git a/ui/src/components/MacCards.tsx b/ui/src/components/MacCards.tsx
+index d0c04ba..a2954a9 100644
+--- a/ui/src/components/MacCards.tsx
++++ b/ui/src/components/MacCards.tsx
+@@ -4,8 +4,8 @@
+ 
+ import { useEffect, useState } from "react";
+ import { AlertCircle, Check, Loader2 } from "lucide-react";
+-import { desktop, markAsked, occupantWords, otherCopyWords, removalConsumed, removalRefusal, removeOldLauncher, runsOurs, VIA } from "../desktop";
+-import type { LauncherRemoval, LauncherStatus, Pieces, TerminalStatus } from "../desktop";
++import { desktop, markAsked, occupantWords, otherCopyWords, removalConsumed, removeOldLauncher, runsOurs, VIA } from "../desktop";
++import type { LauncherRemoval, LauncherStatus, Pieces, Removal, TerminalStatus } from "../desktop";
+ 
+ export const BTN_MAIN =
+   "rounded-md bg-amber text-surface px-3.5 py-1.5 text-sm font-medium hover:bg-amber/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+@@ -62,29 +62,44 @@ const PIECE_WORDS: [keyof NonNullable<LauncherRemoval["pieces"]>, string, string
+   ["menuBarIcon", "Old menu bar icon", "stopped"],
+ ];
+ 
+-/** "Removed the old launcher, its login item and its menu bar icon.": only what was there before. */
+-function removedWords(result: LauncherRemoval, before: Pieces | null): string {
+-  const login = before ? before.loginItem === "present" : result.startAtLoginCarriedOver || !!result.reason;
+-  const icon = before ? before.menuBarIcon === "running" : true;
+-  const parts = ["the old launcher", login && "its login item", icon && "its menu bar icon"].filter(Boolean) as string[];
++/** "Removed the old launcher, its login item and its menu bar icon.": only what was there before,
++ * from the pieces read before the removal (A5, G4). */
++function removedWords(before: Pieces | null): string {
++  if (!before) return "Cleanup finished. Nothing of the old launcher is left on this Mac.";
++  const launcher = before.launcher === "present";
++  const login = before.loginItem === "present";
++  const icon = before.menuBarIcon === "running";
++  if (!launcher && !login && icon) return "Stopped the old menu bar icon. The launcher and login item were already gone.";
++  const parts = [
++    launcher && "the old launcher",
++    login && (launcher ? "its login item" : "the old login item"),
++    icon && (launcher ? "its menu bar icon" : "the old menu bar icon"),
++  ].filter(Boolean) as string[];
++  if (!parts.length) return "Cleanup finished. Nothing of the old launcher is left on this Mac.";
+   const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+   return `Removed ${list}.`;
+ }
+ 
++/** The result's own reason; claimed after a reload, a "didn't start again" is out of date. */
++function reasonWords(r: LauncherRemoval, afterReload: boolean): string | null {
++  if (!r.reason) return null;
++  return afterReload && /didn't start again/.test(r.reason) ? `${r.reason} It is running again now.` : r.reason;
++}
++
+ /** The result of a removal: "Removed", the cleanup checklist, or (no pieces) the reason alone. */
+ export function RemovalResult({
+-  result,
+-  before,
++  removal,
+   onRetry,
+   onDone,
+   busy,
+ }: {
+-  result: LauncherRemoval;
+-  before: Pieces | null;
++  removal: Removal;
+   onRetry: () => void;
+   onDone?: () => void;
+   busy: boolean;
+ }) {
++  const { result, before, afterReload } = removal;
++  const reason = reasonWords(result, afterReload);
+   const [copied, setCopied] = useState(false);
+   const done = onDone && (() => {
+     removalConsumed();
+@@ -94,10 +109,10 @@ export function RemovalResult({
+     return (
+       <Card tone="ok" title="Old launcher removed">
+         <p>
+-          {removedWords(result, before)}
++          {removedWords(before)}
+           {result.startAtLoginCarriedOver && " This app now starts at login instead; change it in Settings."}
+         </p>
+-        {!result.startAtLoginCarriedOver && result.reason && <p>{result.reason}</p>}
++        {reason && <p>{reason /* always: it can say the engine didn't start again (A3, G3) */}</p>}
+         {done && (
+           <Buttons>
+             <button autoFocus onClick={done} className={BTN_MAIN}>OK</button>
+@@ -118,7 +133,7 @@ export function RemovalResult({
+     // the removal itself failed (the app kept {ok: false, pieces: null, reason}): its reason alone
+     return (
+       <Card tone="bad" title="Cleanup didn't finish">
+-        <p>{result.reason || "The old launcher couldn't be removed."}</p>
++        <p>{reason || "The old launcher couldn't be removed."}</p>
+         <Buttons>{retryButtons}</Buttons>
+       </Card>
+     );
+@@ -164,25 +179,17 @@ export function RemovalResult({
+ }
+ 
+ /** The result of a removal this page started, read from lastRemoval after the reload. */
+-export function RemovalAfterReload({
+-  initial,
+-  before,
+-  onDone,
+-}: {
+-  initial: LauncherRemoval;
+-  before: Pieces | null;
+-  onDone: () => void;
+-}) {
+-  const [result, setResult] = useState(initial);
++export function RemovalAfterReload({ initial, onDone }: { initial: Removal; onDone: () => void }) {
++  const [removal, setRemoval] = useState(initial);
+   const [busy, setBusy] = useState(false);
+   const [problem, setProblem] = useState<string | null>(null);
+   const retry = async () => {
+     setBusy(true);
+     setProblem(null);
+     try {
+-      const r = await removeOldLauncher(before);
+-      if (!r.ok && !r.pieces) setProblem(removalRefusal(r));
+-      else setResult(r);
++      const r = await removeOldLauncher(initial.before);
++      if ("refused" in r) setProblem(r.refused);
++      else setRemoval(r.shown);
+     } catch (e) {
+       setProblem(e instanceof Error ? e.message : String(e));
+     } finally {
+@@ -191,7 +198,7 @@ export function RemovalAfterReload({
+   };
+   return (
+     <>
+-      <RemovalResult result={result} before={before} onRetry={retry} onDone={onDone} busy={busy} />
++      <RemovalResult removal={removal} onRetry={retry} onDone={onDone} busy={busy} />
+       <Problem text={problem} />
+     </>
+   );
+@@ -200,7 +207,7 @@ export function RemovalAfterReload({
+ /** First launch: replace the old launcher, or keep both. Marks the question asked on either answer. */
+ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; onDone: () => void }) {
+   const [busy, setBusy] = useState(false);
+-  const [result, setResult] = useState<LauncherRemoval | null>(null);
++  const [result, setResult] = useState<Removal | null>(null);
+   const [problem, setProblem] = useState<string | null>(null);
+   const login = status.pieces.loginItem === "present";
+ 
+@@ -210,8 +217,8 @@ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; o
+     try {
+       await markAsked("oldLauncherAsked"); // a failed save is shown; the removal still runs
+       const r = await removeOldLauncher(status.pieces); // the app reloads the page: App shows the kept result
+-      if (!r.ok && !r.pieces) setProblem(removalRefusal(r));
+-      else setResult(r);
++      if ("refused" in r) setProblem(r.refused);
++      else setResult(r.shown);
+     } catch (e) {
+       setProblem(e instanceof Error ? e.message : String(e));
+     } finally {
+@@ -223,7 +230,7 @@ export function LauncherQuestion({ status, onDone }: { status: LauncherStatus; o
+     onDone();
+   };
+ 
+-  if (result) return <RemovalResult result={result} before={status.pieces} onRetry={remove} onDone={onDone} busy={busy} />;
++  if (result) return <RemovalResult removal={result} onRetry={remove} onDone={onDone} busy={busy} />;
+   return (
+     <Card title="Replace the old anyscribe launcher?">
+       <p>
+@@ -429,7 +436,8 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+         {view === "added-but-missing" ? (
+           <p>{addedReason || "The line was added, but Terminal still can't see the command."}</p>
+         ) : byHand ? (
+-          <p>{byHand.reason}</p>
++          // the app's reason often ends with the line itself: say it once, in the box (G6)
++          <p>{byHand.reason.endsWith(byHand.line) ? byHand.reason.slice(0, -byHand.line.length).trimEnd() : byHand.reason}</p>
+         ) : (
+           <p>
+             The command is in <code className={CODE}>~/.local/bin</code>, but your Terminal doesn't look in
+@@ -448,7 +456,9 @@ export function TerminalFlow({ eyebrow, onDone }: { eyebrow?: string; onDone: ()
+           )}
+           <button onClick={onDone} disabled={busy} className={BTN_QUIET}>I'll do it myself</button>
+         </Buttons>
+-        <Note>Takes effect in new Terminal windows. Claude Code picks it up the next time it starts.</Note>
++        {view === "path" && (
++          <Note>Takes effect in new Terminal windows. Claude Code picks it up the next time it starts.</Note>
++        )}
+       </Card>
+     );
+ 
+diff --git a/ui/src/components/ThisMac.tsx b/ui/src/components/ThisMac.tsx
+index 44b9ed5..30db7af 100644
+--- a/ui/src/components/ThisMac.tsx
++++ b/ui/src/components/ThisMac.tsx
+@@ -5,8 +5,8 @@ import { RefreshCw } from "lucide-react";
+ import Modal from "./Modal";
+ import Toggle from "./Toggle";
+ import { RemovalResult, TerminalFlow } from "./MacCards";
+-import { desktop, occupantWords, otherCopyWords, removalRefusal, removeOldLauncher, restartEngine, runningJobs, runsOurs, useEngineStatus } from "../desktop";
+-import type { DockMode, LauncherRemoval, LauncherStatus, TerminalStatus } from "../desktop";
++import { desktop, occupantWords, otherCopyWords, removeOldLauncher, restartEngine, runningJobs, runsOurs, useEngineStatus } from "../desktop";
++import type { DockMode, LauncherStatus, Removal, TerminalStatus } from "../desktop";
+ 
+ const SMALL_BTN =
+   "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-secondary";
+@@ -57,7 +57,7 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+   const [skillRemoved, setSkillRemoved] = useState(false); // F8: this view's turnOff just removed it
+   const [flow, setFlow] = useState(false); // the Terminal card, opened from a row
+   const [launcher, setLauncher] = useState<LauncherStatus | null>(null);
+-  const [removal, setRemoval] = useState<LauncherRemoval | null>(null);
++  const [removal, setRemoval] = useState<Removal | null>(null); // with the pieces read before it (G4)
+   const [jobs, setJobs] = useState<number | null>(null);
+   const [busy, setBusy] = useState<string | null>(null);
+   const [problem, setProblem] = useState<{ row: string; text: string } | null>(null);
+@@ -140,8 +140,8 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+   const removeLauncher = () =>
+     run("launcher", async () => {
+       const r = await removeOldLauncher(launcher?.pieces ?? null); // the app reloads the page: App shows the kept result
+-      if (!r.ok && !r.pieces) throw new Error(removalRefusal(r));
+-      setRemoval(r);
++      if ("refused" in r) throw new Error(r.refused);
++      setRemoval(r.shown);
+       setLauncher(await bridge.oldLauncher.status());
+     });
+   const restart = () =>
+@@ -360,7 +360,7 @@ export default function ThisMac({ workspace }: { workspace?: string }) {
+             )}
+             {removal && (
+               <div className="mt-2 rounded-lg border border-border bg-surface-raised px-4 py-3">
+-                <RemovalResult result={removal} before={launcher?.pieces ?? null} onRetry={removeLauncher} busy={busy === "launcher"} />
++                <RemovalResult removal={removal} onRetry={removeLauncher} busy={busy === "launcher"} />
+               </div>
+             )}
+             {failed("launcher")}
+diff --git a/ui/src/desktop.ts b/ui/src/desktop.ts
+index 2814a17..f807929 100644
+--- a/ui/src/desktop.ts
++++ b/ui/src/desktop.ts
+@@ -135,33 +135,28 @@ export const session = {
+ 
+ /** The engine stopped by itself while this page was open: {job, at}. Read after the reload. */
+ export const OUTAGE = "anyscribe_outage";
+-/** This page asked for the restart (Restart engine): not an outage. */
+-const RESTART_MINE = "anyscribe_restart_mine";
+-
+-/** True while a restart this page started is under way (Restart engine, or the old launcher's removal). */
++// "This restart is mine": true only while this page's own Restart engine or removal call is in
++// flight. The app reloads the page only once the engine runs again, so a new page never needs it.
++let ownCalls = 0;
+ export function restartIsMine(): boolean {
+-  return !!session.get(RESTART_MINE) || removalStarted();
+-}
+-export function restartConsumed() {
+-  session.del(RESTART_MINE);
++  return ownCalls > 0;
+ }
+-
+-/** Restart engine, noted first so the restart reads as asked for, across the reload it causes. */
+-export async function restartEngine(): Promise<Result> {
+-  session.set(RESTART_MINE, Date.now());
++async function own<T>(call: () => Promise<T>): Promise<T> {
++  ownCalls += 1;
+   try {
+-    const r = await desktop!.restartEngine();
+-    if (!r.ok) session.del(RESTART_MINE); // refused: nothing restarts
+-    return r;
+-  } catch (e) {
+-    session.del(RESTART_MINE);
+-    throw e;
++    return await call();
++  } finally {
++    ownCalls -= 1;
+   }
+ }
+ 
++/** Restart engine, as this page's own restart (no outage, his words in the banner). */
++export const restartEngine = (): Promise<Result> => own(() => desktop!.restartEngine());
++
+ /** A first-launch answer the app couldn't save: shown, so the question coming back is explained. */
+ export const MARK_PROBLEM = "anyscribe_mark_problem";
+ export const MARK_PROBLEM_EVENT = "anyscribe-mark-problem";
++export type MarkProblem = { keys: ("oldLauncherAsked" | "terminalAsked")[]; reason: string };
+ 
+ /** Record a first-launch question as asked. The person's choice goes ahead either way (C6). */
+ export async function markAsked(key: "oldLauncherAsked" | "terminalAsked") {
+@@ -172,7 +167,10 @@ export async function markAsked(key: "oldLauncherAsked" | "terminalAsked") {
+     r = { ok: false, reason: e instanceof Error ? e.message : String(e) };
+   }
+   if (r && r.ok === false) {
+-    session.set(MARK_PROBLEM, r.reason || "anyscribe couldn't save your answer.");
++    // which questions, so the card can name them (G5)
++    const prev = session.get<MarkProblem>(MARK_PROBLEM);
++    const keys = [...new Set([...(prev?.keys ?? []), key])];
++    session.set(MARK_PROBLEM, { keys, reason: r.reason || "anyscribe couldn't save your answer." } satisfies MarkProblem);
+     window.dispatchEvent(new Event(MARK_PROBLEM_EVENT));
+   }
+ }
+@@ -227,14 +225,16 @@ export function runsOurs(s: TerminalStatus | null): boolean {
+ }
+ 
+ // Removing the old launcher restarts the engine around it (amendment 2), and the app reloads this
+-// page when the engine is back, before or after remove() settles. The page notes when it started a
+-// removal and what was there before; the note is kept until the result is consumed: claimed by the
+-// reloaded page (lastRemoval newer than the note), or its card closed. A refusal changes nothing
+-// and the note goes at once.
++// page when the engine runs again. The page notes when it started a removal and what was there
++// before ({at, before} in localStorage). The note is resolved in one place, against the app's own
++// saved lastRemoval, and only while the engine reads running: a lastRemoval at or after the note
++// means the removal ran; anything else means nothing ran (a refusal) and the note goes. The shape
++// of a result never decides it: a removal that threw is also {ok: false, pieces: null}, and kept.
+ const REMOVING = "anyscribe_launcher_removing";
+-const NOTE_LIFE_MS = 10 * 60 * 1000;
+ export type Pieces = LauncherStatus["pieces"];
+ type RemovalNote = { at: number; before: Pieces | null };
++/** A removal's result with what was there before it; afterReload: claimed by a reloaded page. */
++export type Removal = { result: LauncherRemoval; before: Pieces | null; afterReload: boolean };
+ 
+ function readNote(): RemovalNote | null {
+   try {
+@@ -254,10 +254,6 @@ function note(value: RemovalNote | null) {
+   }
+ }
+ 
+-function removalStarted(): boolean {
+-  return !!readNote();
+-}
+-
+ /** A refusal from the app, worded so he sees why a removal talks about the engine (F6). */
+ export const removalRefusal = (r: LauncherRemoval) =>
+   `Removing the old launcher restarts the engine. ${r.reason || "The old launcher couldn't be removed."}`;
+@@ -267,37 +263,33 @@ export function removalConsumed() {
+   note(null);
+ }
+ 
+-export async function removeOldLauncher(before: Pieces | null): Promise<LauncherRemoval> {
+-  note({ at: Date.now(), before });
+-  // A refusal answers before any restart. Once the engine has left "running", the app restarts it
+-  // around the removal and keeps the result for the reloaded page, so the note must stay.
+-  let restarted = false;
+-  const off = desktop!.onEngineStatus((st) => {
+-    if (st.state !== "running") restarted = true;
+-  });
+-  let r: LauncherRemoval;
+-  try {
+-    r = await desktop!.oldLauncher.remove();
+-  } catch (e) {
+-    if (!restarted) note(null);
+-    throw e;
+-  } finally {
+-    off();
++/** Resolve the note against the app's saved lastRemoval, only while the engine reads running.
++ * null: no note, or not yet decidable. "refused": nothing ran, and the note is gone. A reloaded
++ * page claims the result (the note goes); the live page keeps it until its card is closed. */
++export function resolveRemoval(s: LauncherStatus, engineRunning: boolean, afterReload: boolean): Removal | "refused" | null {
++  const n = readNote();
++  if (!n || !engineRunning) return null;
++  const r = s.lastRemoval;
++  const at = r ? (typeof r.at === "number" ? r.at : Date.parse(r.at)) : NaN;
++  if (r && at >= n.at) {
++    if (afterReload) note(null);
++    return { result: r, before: n.before, afterReload };
+   }
+-  if (!r.ok && !r.pieces && !restarted) note(null); // refused: nothing changed, nothing kept
+-  return r; // settled before any reload: the caller shows it, and the note waits for its card
++  note(null);
++  return "refused";
+ }
+ 
+-/** After a reload: the removal this page started and what was there before, once; else null. */
+-export function claimRemoval(s: LauncherStatus | null): { result: LauncherRemoval; before: Pieces | null } | null {
+-  const started = readNote();
+-  if (!started) return null;
+-  const r = s?.lastRemoval;
+-  const at = r ? (typeof r.at === "number" ? r.at : Date.parse(r.at)) : NaN;
+-  if (r && at >= started.at) {
+-    note(null);
+-    return { result: r, before: started.before };
++/** Remove the old launcher: what to show, the result or the refusal's words. */
++export async function removeOldLauncher(before: Pieces | null): Promise<{ shown: Removal } | { refused: string }> {
++  note({ at: Date.now(), before });
++  const r = await own(() => desktop!.oldLauncher.remove());
++  const engine = await desktop!.engineStatus().catch(() => null);
++  if (engine?.state === "running") {
++    const res = resolveRemoval(await desktop!.oldLauncher.status(), true, false);
++    if (res === "refused") return { refused: removalRefusal(r) };
++    if (res) return { shown: res };
+   }
+-  if (Date.now() - started.at > NOTE_LIFE_MS) note(null); // a removal that never reported back
+-  return null;
++  // The engine is not running (it didn't start again, or a crash is being restarted): show what
++  // remove() said; the note waits for the running engine, which settles it.
++  return { shown: { result: r, before, afterReload: false } };
+ }
+diff --git a/ui/src/pages/TranscribePage.tsx b/ui/src/pages/TranscribePage.tsx
+index c8dafab..758a1d7 100644
+--- a/ui/src/pages/TranscribePage.tsx
++++ b/ui/src/pages/TranscribePage.tsx
+@@ -1,6 +1,7 @@
+ import { useState, useEffect, useEffectEvent } from "react";
+ import { Link, useOutletContext } from "react-router-dom";
+ import type { LayoutContext } from "../components/Layout";
++import { desktop, useEngineStatus } from "../desktop";
+ import { useJob } from "../hooks/useJob";
+ import { getConfig, getProviders } from "../api/client";
+ import type { Config, Provider } from "../api/types";
+@@ -108,20 +109,23 @@ export default function TranscribePage() {
+     setWatching(phase === "running" ? downloadedTitle || lastUrl : null);
+   }, [setWatching, phase, downloadedTitle, lastUrl]);
+ 
+-  // Mac app: a dropped or opened file starts once config is in and no job is running here.
++  // Mac app: a dropped or opened file starts only while the engine reads running and the page is
++  // idle or done. It leaves the stored queue only once the engine accepted it; on a failure it
++  // stays at the head, and the error screen is the pause (Try again resubmits it, New drops it).
++  const engine = useEngineStatus();
++  const engineUp = !desktop || engine?.state === "running";
+   const next = incoming[0];
+   const startIncoming = useEffectEvent((path: string) => {
+-    // with the options set on this page right now; the file leaves the stored queue only once the
+-    // engine has answered (accepted; or refused, with the error on screen and Try again)
+-    void handleSubmit(path).then(() => doneIncoming(path));
++    // with the options set on this page right now
++    void handleSubmit(path).then((ok) => ok && doneIncoming(path));
+   });
+-  // the one being handed over is not "next" any more
+-  const waiting = phase === "running" && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
++  // the head is not "next" while it is being handed over or its error is on screen
++  const waiting = (phase === "running" || phase === "error") && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
+   useEffect(() => {
+-    if (!next || !config || phase === "running") return;
++    if (!next || !config || phase === "running" || phase === "error" || !engineUp) return;
+     const id = window.setTimeout(() => startIncoming(next), 0);
+     return () => window.clearTimeout(id);
+-  }, [next, config, phase]);
++  }, [next, config, phase, engineUp]);
+ 
+   return (
+     <div className="flex flex-col items-center justify-center min-h-full px-8 py-16">
+@@ -415,9 +419,15 @@ export default function TranscribePage() {
+             <p className="text-sm text-red font-medium mb-1">Transcription failed</p>
+             <p className="text-xs text-text-secondary font-mono whitespace-pre-line">{error}</p>
+           </div>
++          {waiting.length > 0 && (
++            <p className="mb-4 text-xs text-text-muted break-all">
++              Up next: {waiting.map((p) => p.split(/[\\/]/).pop()).join(", ")}.{" "}
++              {waiting.length === 1 ? "It starts" : "They start in turn"} once you try this one again or choose New.
++            </p>
++          )}
+           <div className="flex gap-2">
+             <button
+-              onClick={() => lastUrl && handleSubmit(lastUrl)}
++              onClick={() => lastUrl && void handleSubmit(lastUrl).then((ok) => ok && doneIncoming(lastUrl))}
+               className="
+                 flex-1 flex items-center justify-center gap-2
+                 rounded-lg bg-amber/90 hover:bg-amber px-5 py-2.5
+@@ -427,7 +437,10 @@ export default function TranscribePage() {
+               Try again
+             </button>
+             <button
+-              onClick={reset}
++              onClick={() => {
++                doneIncoming(lastUrl); // drops a waiting file only when it is the one that failed
++                reset();
++              }}
+               className="
+                 flex items-center justify-center gap-2
+                 rounded-lg border border-border hover:border-border/80

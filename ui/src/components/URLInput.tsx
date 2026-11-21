@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link2, Play, Camera, FileAudio, Loader2, FolderOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { uploadFile } from "../api/client";
+import { desktop } from "../desktop";
 
 type Platform = "youtube" | "instagram" | "local" | null;
 
@@ -46,6 +47,16 @@ export default function URLInput({ onSubmit, disabled }: URLInputProps) {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Mac app: the file is read where it sits, no upload copy. As in the browser, its path goes in
+    // the box and he starts it (he may change the options first).
+    const path = desktop?.pathForFile(file);
+    if (path) {
+      if (fileRef.current) fileRef.current.value = "";
+      setUrl(path);
+      inputRef.current?.focus();
+      return;
+    }
 
     setUploading(true);
     try {

@@ -1,0 +1,1066 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index 9aaeb5f..c6058e3 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -66,8 +66,11 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+ 
+ ## How it behaves
+ 
+-- **Port**: 8470, or 8471 when `~/.anyscribe/desktop.json` (the older desktop
+-  mode) records 8470. If the port answers or cannot be bound, the app shows
++- **Port**: the port the app last ran on (saved in `settings.json`, so the
++  dashboard's per-port browser storage stays put), else 8470 or the next port
++  up; never a port the older desktop mode records (its `desktop.json` port,
++  its login item's port, or 8457), since its uninstall stops whatever answers
++  there. If the port answers or cannot be bound, the app shows
+   "couldn't start" and never connects to or stops whatever holds it. The
+   engine is ready only when `/api/health` reports the pid the app spawned;
+   any other answer is treated as another program on the port, and nothing
+@@ -99,7 +102,7 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+ - **Opened files**: a file dropped on the Dock icon or opened with the app
+   (`open-file`, registered before ready) and absolute file paths on a second
+   launch's command line are held until the dashboard window's page calls
+-  `onOpenFile`, then delivered in order; they also show the window. A new page
++  `onOpenFile`, then delivered in order and kept until the page acknowledges them; they also show the window. A new page
+   (a reload, an engine restart) must subscribe again; until then files are
+   held. Associating file types with the app is packaging (phase 3).
+ - **Windows**: closing hides; a second launch or reopening shows the window;
+@@ -155,16 +158,16 @@ left alone).
+ 
+ | Member | Gives |
+ |--------|-------|
+-| `terminal.status()` | `{ok, reason, state, command, uses, appVersion, claudeCode, skill}`. `state`: `"off"` (no command of ours), `"on"` (Terminal runs ours; also when ours is written and the login shell couldn't be asked, with `reason` saying so), `"other-copy"` (Terminal runs a different anyscribe first), `"path-missing"` (ours is written, the login shell finds no anyscribe). `command`: our command's path, or null. `uses`: `{path, version, via: "uv" \| "pipx" \| "pip" \| "app" \| "unknown"}` or null (an alias or function: path null, via unknown). `claudeCode`: `~/.claude` exists. `skill`: `"installed" \| "missing" \| "not-applicable"` |
+-| `terminal.turnOn({replace})` | Writes our command. With another file at `~/.local/bin/anyscribe` and no `replace: true`: `ok: false` (state `other-copy` when Terminal runs it), nothing touched. With `replace`, the other file or symlink is moved to `~/.anyscribe/runtime/replaced/anyscribe` (an older one there is renamed with a timestamp, never deleted). Then, if `~/.claude` exists, `python -m anyscribe install-skill --force`. `ok: false` only when the command was not written; a failed skill shows as `skill: "missing"` with `reason` |
++| `terminal.status()` | `{ok, reason, state, command, uses, appVersion, claudeCode, skill}`. `state`: `"off"` (no command of ours), `"on"` (Terminal runs ours; also when ours is written and the login shell couldn't be asked, with `reason` saying so), `"other-copy"` (Terminal runs a different anyscribe first), `"path-missing"` (ours is written, the login shell finds no anyscribe). `command`: our command's path, or null. `uses`: `{path, version, via: "uv" \| "pipx" \| "pip" \| "app" \| "unknown"}` or null (an alias or function: path null, via unknown). `occupant`: `{path, via, version}` for whatever sits at `~/.local/bin/anyscribe` when it is not ours, else null; offer "Switch to this app's copy" only when it is set. When ours is written but another copy comes first, `reason` is "Terminal finds another anyscribe at <path> first." `claudeCode`: `~/.claude` exists. `skill`: `"installed" \| "missing" \| "not-applicable"` |
++| `terminal.turnOn({replace})` | Writes our command. With another file at `~/.local/bin/anyscribe` and no `replace: true`: `ok: false` (state `other-copy` when Terminal runs it), nothing touched. With `replace`, the other file or symlink is moved to `~/.anyscribe/runtime/replaced/anyscribe` (an older one there is renamed with a timestamp, never deleted). Then, if `~/.claude` exists, `python -m anyscribe install-skill --force`. `ok: false` only when the command was not written; a failed skill shows as `skill: "missing"` with `reason` until a later install succeeds, even when an older skill folder is still there. The new command's hash is recorded only after it is in place, so a failed refresh leaves the old one ours |
+ | `terminal.turnOff({choice})` | Removes ours only if it is still ours (marker and recorded hash); puts back what it replaced in one rename. If ours was changed or removed since and something can be put back: `{ok: false, needsChoice: "keep-current-or-restore", reason}`, nothing touched. Answer with `turnOff({choice: "keep-current"})` (leave the current file, forget ours) or `turnOff({choice: "restore"})` (the current file is moved aside into `replaced/`, the old one put back). A changed command with nothing to put back is left as it is (`ok: true`, `reason` says so). Then the skill folder `~/.claude/skills/anyscribe` is removed only if the login shell finds no anyscribe at all (unknown keeps it) |
+-| `terminal.addToPath()` | `{ok, file, line}`: appends `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile` (zsh) or `~/.bash_profile` (bash), creating it if missing, never twice. Not ok for any other shell, and for bash when `~/.bash_profile` is missing but `~/.bash_login` or `~/.profile` exists (creating it would hide them): `reason` gives the line to add by hand |
++| `terminal.addToPath()` | `{ok, file, line}`: appends `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile` (zsh) or `~/.bash_profile` (bash), creating it if missing, never twice. Then it asks the login shell again: if `~/.local/bin` is still not on PATH, `ok: true` with the reason "The line is in ~/.zprofile, but your shell setup removes it again later (check ~/.zshrc)." Not ok for any other shell, and for bash when `~/.bash_profile` is missing but `~/.bash_login` or `~/.profile` exists (creating it would hide them): `reason` gives the line to add by hand |
+ | `terminal.retrySkill()` | Runs `install-skill --force` again; `ok` when the skill is installed |
+-| `oldLauncher.status()` | `{ok, installed, pieces: {launcher, loginItem, menuBarIcon}}`: `~/Applications/anyscribe.app` and `~/Library/LaunchAgents/com.anyscribe.tray.plist` `"present" \| "absent"`; the old menu bar icon `"running" \| "not running"` (`~/.anyscribe/tray.pid` names a live process whose command line is an anyscribe tray). `installed` (launcher or login item present) is true only on macOS |
+-| `oldLauncher.remove()` | macOS only. Runs `python -m anyscribe desktop uninstall --json` with the engine's environment, then checks each piece itself: `{ok, pieces: {launcher: "removed" \| "still there", loginItem: "removed" \| "still there", menuBarIcon: "stopped" \| "still running"}, startAtLoginCarriedOver}`; ok only when all three are gone. When the old login item was there before and is gone after, the app's own Start at login is turned on |
++| `oldLauncher.status()` | `{ok, installed, pieces: {launcher, loginItem, menuBarIcon}}`: `~/Applications/anyscribe.app` and `~/Library/LaunchAgents/com.anyscribe.tray.plist` `"present" \| "absent"`; the old menu bar icon `"running" \| "not running"` (`~/.anyscribe/tray.pid` names a live process whose command line is an anyscribe tray). `installed` (any piece left, a running old menu bar icon alone included) is true only on macOS |
++| `oldLauncher.remove()` | macOS only. Refuses, running nothing, when the uninstall would target this app's engine port (the manifest's port, else the login item's, else 8457): `ok: false`, `pieces: null`, `reason` "The old launcher is set to the same port as this app, so removing it now would stop this app's engine. Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal." Otherwise runs `python -m anyscribe desktop uninstall --json` with the engine's environment, then checks each piece itself: `{ok, pieces: {launcher: "removed" \| "still there", loginItem: "removed" \| "still there", menuBarIcon: "stopped" \| "still running"}, startAtLoginCarriedOver}`; ok only when all three are gone. When the old login item was there before and is gone after, the app's own Start at login is turned on; `startAtLoginCarriedOver` is true only when the system then reads it as enabled, else `reason` says what macOS needs (approval in System Settings, General, Login Items) |
+ | `firstLaunch.get()` | `{ok, oldLauncherAsked, terminalAsked}` |
+ | `firstLaunch.mark(key)` | Records `"oldLauncherAsked"` or `"terminalAsked"` as asked; any other key is rejected |
+-| `onOpenFile(callback)` | Calls `callback(absolutePath)` for each opened file; held files arrive on the first subscribe. Returns an unsubscribe function. Only the dashboard window's page can subscribe |
++| `onOpenFile(callback)` | Calls `callback(absolutePath)` for each opened file; held files arrive on the first subscribe. Returns an unsubscribe function. Only the dashboard window's page can subscribe. The app keeps each file until the page acknowledges it (the preload does, after the callbacks ran), so an unsubscribe or reload in between never loses it, and an acknowledged file is never sent again |
+ 
+ The Terminal command is one POSIX sh script, `~/.local/bin/anyscribe`. Line 2
+ is the marker `# anyscribe-mac-app-command <version>: ...`; it exports
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index daf7ddd..eef05bb 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -8,6 +8,7 @@ const fs = require('node:fs');
+ const net = require('node:net');
+ const path = require('node:path');
+ const logic = require('./logic');
++const { recordedPorts } = require('./old-launcher');
+ 
+ const LOG_MAX = 5 * 1024 * 1024;
+ const LOG_KEEP = 1024 * 1024;
+@@ -92,16 +93,9 @@ function portTaken(port, host = '127.0.0.1') {
+   });
+ }
+ 
+-function readManifestPort(home) {
+-  try {
+-    return JSON.parse(fs.readFileSync(path.join(home, '.anyscribe', 'desktop.json'), 'utf8')).port;
+-  } catch {
+-    return null; // no desktop mode installed (or an unreadable manifest)
+-  }
+-}
+-
+-async function pickPort(home) {
+-  const port = logic.choosePort(readManifestPort(home));
++// saved: the port the app last ran on. Never one the old launcher's uninstall could target.
++async function pickPort(home, saved = null) {
++  const port = logic.choosePort({ saved, avoid: recordedPorts(home) });
+   return { port, taken: await portTaken(port) };
+ }
+ 
+@@ -161,13 +155,14 @@ class Engine extends EventEmitter {
+     stopWaitMs = 10_000,
+     pythonError = null,
+     packaged = false,
++    savedPort = () => null, // the port the app last ran on (main.js keeps it in its settings)
+     spawn = childProcess.spawn,
+     health: healthSeam = health,
+     jobs: jobsSeam = jobs,
+     killGroup: killSeam = killGroup,
+   }) {
+     super();
+-    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged });
++    Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged, savedPort });
+     Object.assign(this, { spawn, health: healthSeam, readJobs: jobsSeam, killGroup: killSeam });
+     this.state = 'stopped';
+     this.port = null;
+@@ -220,7 +215,7 @@ class Engine extends EventEmitter {
+     if (this.pythonError) return this._failBeforeSpawn(run, 'python', { reason: this.pythonError });
+     const logError = this.log.probe(); // every launch, so Try again sees a repaired log
+     if (logError) return this._failBeforeSpawn(run, 'log', { reason: `Can't write the log file: ${logError}` });
+-    const { port, taken } = await pickPort(this.home);
++    const { port, taken } = await pickPort(this.home, this.savedPort());
+     if (!this._current(run)) return;
+     this.port = port;
+     // Never attach to, or stop, whatever already holds the port.
+@@ -444,4 +439,4 @@ class Engine extends EventEmitter {
+   }
+ }
+ 
+-module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, readManifestPort, killGroup, health, jobs };
++module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, killGroup, health, jobs };
+diff --git a/desktop/src/logic.js b/desktop/src/logic.js
+index 7da7c08..5ab3d99 100644
+--- a/desktop/src/logic.js
++++ b/desktop/src/logic.js
+@@ -4,11 +4,15 @@
+ const path = require('node:path');
+ 
+ const DEFAULT_PORT = 8470;
+-const ALT_PORT = 8471; // only when today's desktop mode (desktop.json) already records 8470
+ 
+-// One function picks the port: never the old launcher's recorded one.
+-function choosePort(manifestPort) {
+-  return manifestPort === DEFAULT_PORT ? ALT_PORT : DEFAULT_PORT;
++// One function picks the port. The app keeps the port it last ran on (saved), so the
++// dashboard's per-port storage stays put, unless the old launcher now records it; a first
++// choice is 8470 or the next port up that the old launcher does not record (avoid).
++function choosePort({ saved = null, avoid = [] } = {}) {
++  if (Number.isInteger(saved) && !avoid.includes(saved)) return saved;
++  let port = DEFAULT_PORT;
++  while (avoid.includes(port)) port += 1;
++  return port;
+ }
+ 
+ // Packaged: the Python inside the app. Dev: ANYSCRIBE_DEV_PYTHON, made absolute against the
+@@ -322,6 +326,7 @@ function parseSettings(saved) {
+     dockMode: DOCK_MODES.includes(s.dockMode) ? s.dockMode : 'menubar',
+     oldLauncherAsked: s.oldLauncherAsked === true,
+     terminalAsked: s.terminalAsked === true,
++    port: Number.isInteger(s.port) && s.port > 1023 && s.port < 65536 ? s.port : null, // the port the app last ran on
+   };
+ }
+ 
+@@ -333,29 +338,30 @@ function openedFiles(argv, isFile) {
+   return argv.slice(1).filter((a) => !a.startsWith('-') && path.isAbsolute(a) && isFile(a));
+ }
+ 
+-// Held until the dashboard subscribes, then delivered in order. deliver(path) returns false when
+-// it cannot deliver (the page is gone): that path and the rest wait for the next subscriber.
++// Each file is held, with an id, until the dashboard acknowledges it (its callback ran): sending
++// is not receiving. A subscriber gets every unacknowledged file in order; an unsubscribe or a
++// reload before the ack leaves it held for the next one. An ack for an unknown id does nothing,
++// so an acknowledged file is never sent again.
+ class OpenFiles {
+   constructor() {
+-    this.held = [];
++    this.held = []; // [{id, file}]
++    this.nextId = 1;
+     this.deliver = null;
+   }
+   add(file) {
+-    this.held.push(file);
+-    this.flush();
++    const item = { id: this.nextId++, file };
++    this.held.push(item);
++    this.deliver?.(item);
+   }
+   subscribe(deliver) {
+     this.deliver = deliver;
+-    this.flush();
++    for (const item of this.held) deliver(item);
+   }
+   unsubscribe() {
+     this.deliver = null;
+   }
+-  flush() {
+-    while (this.deliver && this.held.length) {
+-      if (this.deliver(this.held[0]) === false) this.deliver = null;
+-      else this.held.shift();
+-    }
++  ack(id) {
++    this.held = this.held.filter((item) => item.id !== id);
+   }
+ }
+ 
+@@ -381,7 +387,6 @@ class CrashWindow {
+ 
+ module.exports = {
+   DEFAULT_PORT,
+-  ALT_PORT,
+   choosePort,
+   resolvePython,
+   buildEnv,
+diff --git a/desktop/src/main.js b/desktop/src/main.js
+index 18996cf..a981aa4 100644
+--- a/desktop/src/main.js
++++ b/desktop/src/main.js
+@@ -41,6 +41,7 @@ function run() {
+   const engine = new Engine({
+     python,
+     pythonError,
++    savedPort: () => settings.port,
+     packaged: app.isPackaged,
+     home,
+     log,
+@@ -94,9 +95,12 @@ function run() {
+   }
+   // The system's Login Items are the source of truth (he can turn it off in System Settings,
+   // or it can wait for approval there); nothing is stored for it here.
+-  function startsAtLogin() {
++  function loginItemState() {
+     const s = app.getLoginItemSettings();
+-    return s.status ? s.status === 'enabled' : s.openAtLogin === true;
++    return s.status ?? (s.openAtLogin ? 'enabled' : 'not-registered');
++  }
++  function startsAtLogin() {
++    return loginItemState() === 'enabled';
+   }
+ 
+   function setStartAtLogin(on) {
+@@ -333,6 +337,10 @@ function run() {
+     if (startWin) startWin.webContents.send('start:state', startState());
+     mainWin?.webContents.send('engine:status', status);
+     if (status.state === 'running') {
++      if (settings.port !== engine.port) {
++        settings.port = engine.port; // kept, so the next launch uses it again
++        saveSettings();
++      }
+       if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`${engineOrigin()}/`); // after a restart
+       if (visible(startWin)) showUI(); // someone is waiting for it
+     }
+@@ -419,7 +427,9 @@ function run() {
+   handle('oldLauncher:status', () => oldLauncher.status({ home, platform: process.platform }));
+   handle(
+     'oldLauncher:remove',
+-    oneAtATime(() => oldLauncher.remove({ home, platform: process.platform, python, pythonError, env: engine.env, setStartAtLogin }))
++    oneAtATime(() =>
++      oldLauncher.remove({ home, platform: process.platform, python, pythonError, env: engine.env, enginePort: engine.port, setStartAtLogin, loginItemState })
++    )
+   );
+   handle('firstLaunch:get', () => ({ ok: true, oldLauncherAsked: settings.oldLauncherAsked, terminalAsked: settings.terminalAsked }));
+   handle('firstLaunch:mark', (key) => {
+@@ -433,15 +443,16 @@ function run() {
+   ipcMain.handle('openFile:subscribe', (e) => {
+     if (!fromDashboard(e)) throw new Error('not allowed from this page');
+     const contents = e.sender;
+-    openFiles.subscribe((file) => {
+-      if (contents.isDestroyed()) return false;
+-      contents.send('open-file', file);
+-      return true;
++    openFiles.subscribe((item) => {
++      if (!contents.isDestroyed()) contents.send('open-file', item); // kept until the page acks it
+     });
+   });
+   ipcMain.handle('openFile:unsubscribe', (e) => {
+     if (fromDashboard(e)) openFiles.unsubscribe();
+   });
++  ipcMain.handle('openFile:ack', (e, id) => {
++    if (fromDashboard(e)) openFiles.ack(id);
++  });
+   handle('start:state', () => startState());
+   handle('start:retry', () => engine.state === 'stopped' && engine.start());
+   handle('start:copy', () => clipboard.writeText(log.tail(40).join('\n')));
+diff --git a/desktop/src/old-launcher.js b/desktop/src/old-launcher.js
+index 24688c7..6c7d117 100644
+--- a/desktop/src/old-launcher.js
++++ b/desktop/src/old-launcher.js
+@@ -19,6 +19,47 @@ function files(home) {
+   };
+ }
+ 
++// The ports `desktop uninstall` reads, the engine's way (core/desktop.py at b22df16):
++// installed_port() is the manifest's port, else the login item's last ProgramArguments entry;
++// with neither it uses tray.DEFAULT_PORT.
++const ENGINE_DEFAULT_PORT = 8457;
++
++function manifestPort(home) {
++  try {
++    const m = JSON.parse(fs.readFileSync(path.join(home, '.anyscribe', 'desktop.json'), 'utf8'));
++    // Python reads an empty manifest as none.
++    if (!m || typeof m !== 'object' || !Object.keys(m).length) return undefined;
++    return Number.isInteger(m.port) ? m.port : null;
++  } catch {
++    return undefined; // no manifest (or unreadable): the engine falls back to the login item
++  }
++}
++
++// shortcut: reads the XML plist the engine writes; a binary plist reads as no port. Use plutil if
++// one ever turns up.
++function loginItemPort(home) {
++  try {
++    const xml = fs.readFileSync(files(home).loginItem, 'utf8');
++    const args = xml.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/)[1];
++    const port = Number([...args.matchAll(/<string>([^<]*)<\/string>/g)].pop()[1]);
++    return Number.isInteger(port) ? port : null;
++  } catch {
++    return null;
++  }
++}
++
++// The port `desktop uninstall` would stop a server on.
++function uninstallTarget(home) {
++  const m = manifestPort(home);
++  if (m !== undefined) return m ?? ENGINE_DEFAULT_PORT;
++  return loginItemPort(home) ?? ENGINE_DEFAULT_PORT;
++}
++
++// Every port the old launcher records, which the app never chooses.
++function recordedPorts(home) {
++  return [manifestPort(home), loginItemPort(home), ENGINE_DEFAULT_PORT].filter(Number.isInteger);
++}
++
+ function lexists(p) {
+   try {
+     fs.lstatSync(p);
+@@ -67,17 +108,27 @@ async function pieces(home, cmdline) {
+   };
+ }
+ 
+-// Works on any OS; only a Mac can have it installed (elsewhere `installed` is false).
++// Works on any OS; only a Mac can have it installed (elsewhere `installed` is false). Any piece
++// left, a live old tray alone included, counts: that is when cleanup is still needed (C6).
+ async function status({ home, platform, cmdline }) {
+   const p = await pieces(home, cmdline);
+-  return { ok: true, installed: platform === 'darwin' && (p.launcher === 'present' || p.loginItem === 'present'), pieces: p };
++  const left = p.launcher === 'present' || p.loginItem === 'present' || p.menuBarIcon === 'running';
++  return { ok: true, installed: platform === 'darwin' && left, pieces: p };
+ }
+ 
+-// ctx: {home, platform, python, pythonError, env (the engine's), setStartAtLogin, cmdline?, run?}.
+-// ok only when all three pieces are gone. When the old login item was there and is now gone,
+-// the app's own Start at login is turned on in its place.
+-async function remove({ home, platform, python, pythonError, env, setStartAtLogin, cmdline, run = runCapture }) {
++const SAME_PORT =
++  "The old launcher is set to the same port as this app, so removing it now would stop this app's engine. Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal.";
++
++// ctx: {home, platform, python, pythonError, env (the engine's), enginePort (the app engine's
++// port), setStartAtLogin, loginItemState (the system's: "enabled", "requires-approval", ...),
++// cmdline?, run?}. ok only when all three pieces are gone. When the old
++// login item was there and is now gone, the app's own Start at login is turned on in its place.
++async function remove({ home, platform, python, pythonError, env, enginePort, setStartAtLogin, loginItemState, cmdline, run = runCapture }) {
+   if (platform !== 'darwin') return { ok: false, reason: 'The old launcher is removed only on a Mac.', pieces: null, startAtLoginCarriedOver: false };
++  // The uninstall stops whatever anyscribe answers on its port: never this app's engine.
++  if (enginePort != null && uninstallTarget(home) === enginePort) {
++    return { ok: false, reason: SAME_PORT, pieces: null, startAtLoginCarriedOver: false };
++  }
+   const before = await pieces(home, cmdline);
+   const r = python
+     ? await run(python, ['-m', 'anyscribe', 'desktop', 'uninstall', '--json'], { env, cwd: home, timeoutMs: 60_000 })
+@@ -89,19 +140,24 @@ async function remove({ home, platform, python, pythonError, env, setStartAtLogi
+     menuBarIcon: after.menuBarIcon === 'not running' ? 'stopped' : 'still running',
+   };
+   let startAtLoginCarriedOver = false;
++  let loginNote = null;
+   if (before.loginItem === 'present' && after.loginItem === 'absent') {
+     setStartAtLogin(true);
+-    startAtLoginCarriedOver = true;
++    // Carried over only when the system says so (C5); macOS can hold it for approval.
++    const state = loginItemState();
++    if (state === 'enabled') startAtLoginCarriedOver = true;
++    else if (state === 'requires-approval') loginNote = 'This app is set to start at login, but macOS needs your approval: System Settings, General, Login Items.';
++    else loginNote = `This app couldn't be set to start at login (macOS says: ${state}).`;
+   }
+   const ok = result.launcher === 'removed' && result.loginItem === 'removed' && result.menuBarIcon === 'stopped';
+-  if (ok) return { ok, pieces: result, startAtLoginCarriedOver };
++  if (ok) return { ok, ...(loginNote ? { reason: loginNote } : {}), pieces: result, startAtLoginCarriedOver };
+   const left = [
+     result.launcher !== 'removed' && 'the launcher is still in ~/Applications',
+     result.loginItem !== 'removed' && 'its login item is still there',
+     result.menuBarIcon !== 'stopped' && 'the old menu bar icon is still running',
+   ].filter(Boolean);
+   const failed = r.code !== 0 ? ` The uninstall said: ${r.error?.message || lastLine(r.err) || lastLine(r.out) || (r.timedOut ? 'it took longer than a minute' : `exit ${r.code}`)}.` : '';
+-  return { ok, reason: `Cleanup didn't finish: ${left.join(', ')}.${failed}`, pieces: result, startAtLoginCarriedOver };
++  return { ok, reason: [`Cleanup didn't finish: ${left.join(', ')}.${failed}`, loginNote].filter(Boolean).join(' '), pieces: result, startAtLoginCarriedOver };
+ }
+ 
+-module.exports = { TRAY_COMMAND, files, trayRunning, pieces, status, remove };
++module.exports = { TRAY_COMMAND, ENGINE_DEFAULT_PORT, files, manifestPort, loginItemPort, uninstallTarget, recordedPorts, trayRunning, pieces, status, remove };
+diff --git a/desktop/src/preload.js b/desktop/src/preload.js
+index f5ea72a..54efc40 100644
+--- a/desktop/src/preload.js
++++ b/desktop/src/preload.js
+@@ -3,7 +3,26 @@
+ 
+ const { contextBridge, ipcRenderer, webUtils } = require('electron');
+ 
+-let openFileListeners = 0;
++// Opened files: each arrives with an id and is acknowledged only after this page's callbacks
++// ran. With no callback subscribed, it is not acknowledged and the app keeps it. An id already
++// handed over in this page is acknowledged again but not handed over twice: callbacks that come
++// and go before a file arrives make the app send an unacknowledged file again.
++const openFileCallbacks = new Set();
++const openFilesSeen = new Set();
++ipcRenderer.on('open-file', (_event, { id, file }) => {
++  if (!openFileCallbacks.size) return;
++  if (!openFilesSeen.has(id)) {
++    openFilesSeen.add(id);
++    for (const callback of [...openFileCallbacks]) {
++      try {
++        callback(file);
++      } catch (err) {
++        console.error(err); // handed over all the same: never sent again
++      }
++    }
++  }
++  ipcRenderer.invoke('openFile:ack', id).catch(() => {});
++});
+ 
+ const arg = (name) => (process.argv.find((a) => a.startsWith(`--${name}=`)) || '').split('=')[1] || null;
+ 
+@@ -40,15 +59,11 @@ contextBridge.exposeInMainWorld('anyscribeDesktop', {
+   },
+   // Files held by the app are sent as soon as the first callback subscribes.
+   onOpenFile: (callback) => {
+-    const listener = (_event, file) => callback(file);
+-    ipcRenderer.on('open-file', listener);
+-    if (openFileListeners++ === 0) ipcRenderer.invoke('openFile:subscribe').catch(() => {});
+-    let done = false;
++    const wrapped = (file) => callback(file); // its own entry, even for the same function twice
++    openFileCallbacks.add(wrapped);
++    if (openFileCallbacks.size === 1) ipcRenderer.invoke('openFile:subscribe').catch(() => {});
+     return () => {
+-      if (done) return;
+-      done = true;
+-      ipcRenderer.removeListener('open-file', listener);
+-      if (--openFileListeners === 0) ipcRenderer.invoke('openFile:unsubscribe').catch(() => {});
++      if (openFileCallbacks.delete(wrapped) && openFileCallbacks.size === 0) ipcRenderer.invoke('openFile:unsubscribe').catch(() => {});
+     };
+   },
+ });
+diff --git a/desktop/src/terminal.js b/desktop/src/terminal.js
+index 405e160..a5ff63f 100644
+--- a/desktop/src/terminal.js
++++ b/desktop/src/terminal.js
+@@ -184,8 +184,11 @@ function terminalState({ ours, shellKnown, foundOurs, foundOther }) {
+   return 'path-missing';
+ }
+ 
+-function skillState(f) {
++// "installed" only when the latest install attempt succeeded (or none was needed): an older
++// SKILL.md left behind by a failed --force install does not count (C3).
++function skillState(f, rec) {
+   if (!exists(f.claude)) return 'not-applicable';
++  if (rec.skillError) return 'missing';
+   return exists(path.join(f.skill, 'SKILL.md')) ? 'installed' : 'missing';
+ }
+ 
+@@ -201,7 +204,17 @@ async function status(ctx, sh = null) {
+   else if (sh.found && !sh.found.startsWith('/')) uses = { path: null, version: null, via: 'unknown' }; // an alias or function
+   else if (sh.found && ours && samePath(sh.found, f.command)) uses = { path: sh.found, version: ctx.appVersion, via: 'app' };
+   else if (sh.found) uses = { path: sh.found, version: await versionOf(sh.found, ctx), via: viaOf(sh.found) };
+-  const skill = skillState(f);
++  if (ours && uses && uses.via !== 'app') {
++    notes.push(uses.path ? `Terminal finds another anyscribe at ${uses.path} first.` : 'Terminal finds another anyscribe first (an alias or a shell function).');
++  }
++  // What sits at ~/.local/bin/anyscribe when it is not ours: the only copy "Switch" can replace (F1).
++  let occupant = null;
++  if (!ours && lexists(f.command)) {
++    occupant = uses?.path && samePath(uses.path, f.command)
++      ? { path: f.command, via: uses.via, version: uses.version }
++      : { path: f.command, via: viaOf(f.command), version: await versionOf(f.command, ctx) };
++  }
++  const skill = skillState(f, rec);
+   if (skill === 'missing' && rec.skillError) notes.push(rec.skillError);
+   return {
+     ok: true,
+@@ -209,6 +222,7 @@ async function status(ctx, sh = null) {
+     state: terminalState({ ours, shellKnown: sh.ok, foundOurs: uses?.via === 'app', foundOther: Boolean(uses) && uses.via !== 'app' }),
+     command: ours ? f.command : null,
+     uses,
++    occupant,
+     appVersion: ctx.appVersion,
+     claudeCode: exists(f.claude),
+     skill,
+@@ -218,22 +232,31 @@ async function status(ctx, sh = null) {
+ // `install-skill --force` (the engine's command for it): the skill matches the copy Terminal now runs (an older one left by
+ // another copy would otherwise stay). Records why it failed, for the status.
+ async function installSkill(ctx, f) {
++  const started = Date.now();
+   const r = await runCapture(ctx.python, ['-m', 'anyscribe', 'install-skill', '--force'], {
+     env: ctx.env,
+     cwd: ctx.home,
+     timeoutMs: SKILL_TIMEOUT_MS,
+   });
+   let error = null;
+-  if (r.code !== 0 || !exists(path.join(f.skill, 'SKILL.md'))) {
+-    const line = lastLine(r.err) || lastLine(r.out);
+-    if (/PermissionError|Permission denied/.test(line || '')) error = "Couldn't write to ~/.claude/skills (permission denied).";
+-    else if (r.timedOut) error = 'The Claude Code skill install took longer than a minute.';
+-    else error = `The Claude Code skill couldn't be installed: ${r.error?.message || line || `exit ${r.code}`}.`;
+-  }
++  const line = lastLine(r.err) || lastLine(r.out);
++  if (/PermissionError|Permission denied/.test(line || '')) error = "Couldn't write to ~/.claude/skills (permission denied).";
++  else if (r.timedOut) error = 'The Claude Code skill install took longer than a minute.';
++  else if (r.code !== 0) error = `The Claude Code skill couldn't be installed: ${r.error?.message || line || `exit ${r.code}`}.`;
++  else if (!writtenSince(path.join(f.skill, 'SKILL.md'), started)) error = "The Claude Code skill couldn't be installed: install-skill finished without writing it.";
+   writeRecord(f, { ...readRecord(f), skillError: error });
+   return error;
+ }
+ 
++// Written by this attempt (2 s of slack for coarse file times), not left over from an older one.
++function writtenSince(p, started) {
++  try {
++    return fs.statSync(p).mtimeMs >= started - 2000;
++  } catch {
++    return false;
++  }
++}
++
+ const OTHER_AT_PATH = 'Another anyscribe is already at ~/.local/bin/anyscribe. Keep it, or switch to this app\'s copy (the other one is kept in ~/.anyscribe/runtime/replaced).';
+ 
+ // Writes our command. Never overwrites a file that is not ours unless `replace`; with replace,
+@@ -249,28 +272,32 @@ async function turnOn(ctx, { replace = false } = {}) {
+   const text = commandScript(ctx);
+   let replaced = rec.replaced && lexists(f.backup) ? rec.replaced : null;
+   let movedAside = false;
++  let linked = false;
++  const tmp = `${f.command}.anyscribe-tmp`;
+   try {
+     fs.mkdirSync(f.bin, { recursive: true });
++    fs.writeFileSync(tmp, text, { mode: 0o755 });
++    fs.chmodSync(tmp, 0o755);
+     if (other) {
+       replaced = describe(f.command);
+       fs.mkdirSync(path.dirname(f.backup), { recursive: true });
+       if (lexists(f.backup)) fs.renameSync(f.backup, `${f.backup}.${Date.now()}`); // an older one, kept too
+-    }
+-    // Recorded before the file changes: a record whose file never got written is never "ours".
+-    writeRecord(f, { command: f.command, sha256: sha256(text), appVersion: ctx.appVersion, replaced, skillError: null });
+-    if (other) {
+       fs.renameSync(f.command, f.backup);
+       movedAside = true;
+     }
+     if (ours) {
+-      const tmp = `${f.command}.anyscribe-tmp`;
+-      fs.writeFileSync(tmp, text, { mode: 0o755 });
+       fs.renameSync(tmp, f.command);
+     } else {
+-      fs.writeFileSync(f.command, text, { mode: 0o755, flag: 'wx' }); // fails if anything appeared there
++      fs.linkSync(tmp, f.command); // fails if anything appeared there since
++      linked = true;
++      fs.unlinkSync(tmp);
+     }
+-    fs.chmodSync(f.command, 0o755);
++    // Recorded only once the new command is in place (C4): a failed write or rename keeps the
++    // previous record, so an untouched command of ours is still ours.
++    writeRecord(f, { command: f.command, sha256: sha256(text), appVersion: ctx.appVersion, replaced, skillError: null });
+   } catch (err) {
++    fs.rmSync(tmp, { force: true });
++    if (linked) fs.rmSync(f.command, { force: true }); // ours, never recorded: take it back out
+     if (movedAside && !lexists(f.command)) fs.renameSync(f.backup, f.command); // put theirs back
+     return { ...(await status(ctx)), ok: false, reason: `Couldn't write ~/.local/bin/anyscribe: ${err.message}` };
+   }
+@@ -334,7 +361,8 @@ async function retrySkill(ctx) {
+ }
+ 
+ // One line in the login shell's own profile file, never twice, never another shell's file.
+-function addToPath(ctx) {
++// Then the login shell is asked again: a later rc file can undo the line (F6).
++async function addToPath(ctx) {
+   const name = path.basename(ctx.shell || '');
+   const line = PATH_LINE;
+   const byHand = { ok: false, file: null, line, reason: `Add ~/.local/bin to your shell's PATH by hand: ${line}` };
+@@ -351,12 +379,19 @@ function addToPath(ctx) {
+   }
+   try {
+     const text = exists(file) ? fs.readFileSync(file, 'utf8') : '';
+-    if (text.split('\n').some((l) => l.trim() === line)) return { ok: true, file, line };
+-    fs.appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`);
+-    return { ok: true, file, line };
++    if (!text.split('\n').some((l) => l.trim() === line)) {
++      fs.appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`);
++    }
+   } catch (err) {
+     return { ok: false, file, line, reason: `Couldn't add the line to ${file}: ${err.message}` };
+   }
++  const sh = await askLoginShell(ctx);
++  const bin = files(ctx.home).bin;
++  if (sh.ok && !sh.pathDirs.some((d) => samePath(d, bin))) {
++    const rc = name === 'zsh' ? '~/.zshrc' : '~/.bashrc';
++    return { ok: true, file, line, reason: `The line is in ~/${path.basename(file)}, but your shell setup removes it again later (check ${rc}).` };
++  }
++  return { ok: true, file, line };
+ }
+ 
+ module.exports = {
+diff --git a/desktop/test/e2e.js b/desktop/test/e2e.js
+index ffe2a11..ae9a463 100644
+--- a/desktop/test/e2e.js
++++ b/desktop/test/e2e.js
+@@ -148,7 +148,7 @@ async function main() {
+   assert.deepEqual(await call('d.firstLaunch.get()'), { ok: true, oldLauncherAsked: false, terminalAsked: false });
+   assert.deepEqual(await call("d.firstLaunch.mark('terminalAsked')"), { ok: true });
+   assert.deepEqual(await call('d.firstLaunch.get()'), { ok: true, oldLauncherAsked: false, terminalAsked: true });
+-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')), { dockMode: 'dock', oldLauncherAsked: false, terminalAsked: true });
++  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')), { dockMode: 'dock', oldLauncherAsked: false, terminalAsked: true, port: 8470 });
+   assert.match(await call("d.firstLaunch.mark('bogus').then(() => 'accepted', (e) => e.message)"), /firstLaunch\.mark takes one of/);
+   assert.deepEqual(await call('d.oldLauncher.status()'), { ok: true, installed: false, pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'not running' } });
+   step('firstLaunch and oldLauncher answer; a marked question is saved in the app\'s settings');
+@@ -201,13 +201,24 @@ async function main() {
+   await waitFor(() => inMain(`${DASH_WINDOW}.isVisible()`), 5000, 'an opened file to show the window');
+   const dashNow = (await pages()).find((p) => p.url === 'http://127.0.0.1:8470/');
+   await sleep(300);
+-  await evaluate(dashNow, 'window.__opened = [], window.__unsubscribe = window.anyscribeDesktop.onOpenFile((p) => window.__opened.push(p)), true');
+-  await waitFor(() => evaluate(dashNow, 'window.__opened.length === 1'), 5000, 'the held file on subscribe');
++  // C2: subscribe and unsubscribe at once; the file was sent but never acknowledged, so it is kept.
++  await evaluate(dashNow, 'window.__lost = [], window.anyscribeDesktop.onOpenFile((p) => window.__lost.push(p))(), true');
++  await sleep(500);
++  // In one tick: subscribe, unsubscribe, subscribe again. The app sends the unacknowledged file
++  // twice; the page hands it over once.
++  await evaluate(
++    dashNow,
++    'window.__opened = [], window.anyscribeDesktop.onOpenFile((p) => window.__lost.push(p))(), window.__unsubscribe = window.anyscribeDesktop.onOpenFile((p) => window.__opened.push(p)), true'
++  );
++  await waitFor(() => evaluate(dashNow, 'window.__opened.length >= 1'), 5000, 'the held file on subscribe');
++  await sleep(500);
++  assert.deepEqual(await evaluate(dashNow, 'window.__opened'), [dropped], 'handed over once, though sent twice');
+   const third = launch([named]);
+   await waitFor(() => third.exitCode !== null, 15_000, 'the launch with a file to exit');
+   await waitFor(() => evaluate(dashNow, 'window.__opened.length === 2'), 5000, 'the file named on the second launch');
+   assert.deepEqual(await evaluate(dashNow, 'window.__opened'), [dropped, named]);
+-  step('opened files are held until the dashboard subscribes, then delivered in order (open-file and a second launch)', `${path.basename(dropped)}, ${path.basename(named)}`);
++  assert.deepEqual(await evaluate(dashNow, 'window.__lost'), [], 'the unsubscribed callback got nothing');
++  step('opened files are held until the dashboard acknowledges them, then delivered in order (open-file, an at-once unsubscribe, a second launch)', `${path.basename(dropped)}, ${path.basename(named)}`);
+ 
+   // 4. The engine dies: restarted automatically, and the window reloads the dashboard.
+   const page = (await pages()).find((p) => p.url === 'http://127.0.0.1:8470/');
+diff --git a/desktop/test/engine.test.js b/desktop/test/engine.test.js
+index fba21d9..c9a3176 100644
+--- a/desktop/test/engine.test.js
++++ b/desktop/test/engine.test.js
+@@ -154,15 +154,23 @@ function listen(port) {
+   });
+ }
+ 
+-test('pickPort: 8470, 8471 beside the old desktop mode, and a taken port', async () => {
++test('pickPort: 8470, never a port the old launcher records, the saved one kept, and a taken port', async () => {
+   const home = tempHome();
+   assert.deepEqual(await pickPort(home), { port: 8470, taken: false });
+   fs.mkdirSync(path.join(home, '.anyscribe'), { recursive: true });
+   fs.writeFileSync(path.join(home, '.anyscribe', 'desktop.json'), JSON.stringify({ port: 8470 }));
+   assert.deepEqual(await pickPort(home), { port: 8471, taken: false });
++  // C1: a partial install, no manifest, the login item on 8470.
++  fs.rmSync(path.join(home, '.anyscribe', 'desktop.json'));
++  const plist = path.join(home, 'Library', 'LaunchAgents', 'com.anyscribe.tray.plist');
++  fs.mkdirSync(path.dirname(plist), { recursive: true });
++  fs.writeFileSync(plist, '<plist><dict><key>ProgramArguments</key><array><string>/py</string><string>tray</string><string>--port</string><string>8470</string></array></dict></plist>');
++  assert.deepEqual(await pickPort(home), { port: 8471, taken: false });
++  fs.rmSync(plist);
++  assert.deepEqual(await pickPort(home, 8471), { port: 8471, taken: false }, 'F5: the saved port is kept');
+   const srv = await listen(8471);
+   try {
+-    assert.deepEqual(await pickPort(home), { port: 8471, taken: true });
++    assert.deepEqual(await pickPort(home, 8471), { port: 8471, taken: true }, 'taken: couldn\'t start, never a move');
+   } finally {
+     srv.close();
+   }
+diff --git a/desktop/test/logic.test.js b/desktop/test/logic.test.js
+index 348f9f3..ed87014 100644
+--- a/desktop/test/logic.test.js
++++ b/desktop/test/logic.test.js
+@@ -6,10 +6,13 @@ const logic = require('../src/logic');
+ 
+ const job = (status, extra = {}) => ({ job_id: Math.random().toString(36).slice(2), url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw', status, stage: null, title: null, completed_at: null, ...extra });
+ 
+-test('port: 8470 unless the old desktop mode records 8470', () => {
+-  assert.equal(logic.choosePort(null), 8470);
+-  assert.equal(logic.choosePort(8457), 8470);
+-  assert.equal(logic.choosePort(8470), 8471);
++test('port: the saved one is kept; a first choice avoids every port the old launcher records (C1, F5)', () => {
++  assert.equal(logic.choosePort(), 8470);
++  assert.equal(logic.choosePort({ avoid: [8457] }), 8470);
++  assert.equal(logic.choosePort({ avoid: [8470, 8457] }), 8471);
++  assert.equal(logic.choosePort({ avoid: [8470, 8471, 8457] }), 8472, 'manifest and login item on two ports');
++  assert.equal(logic.choosePort({ saved: 8471, avoid: [8457] }), 8471, 'kept after the old launcher is removed');
++  assert.equal(logic.choosePort({ saved: 8470, avoid: [8470, 8457] }), 8471, 'never a port the old launcher now records');
+ });
+ 
+ test('python: packaged uses the bundled one, dev needs ANYSCRIBE_DEV_PYTHON', () => {
+@@ -284,12 +287,15 @@ test('menu: the header says "not answering" from the third failed read in a row
+ });
+ 
+ test('settings: the first-launch questions are kept beside the Dock mode, true only once asked', () => {
+-  assert.deepEqual(logic.parseSettings(null), { dockMode: 'menubar', oldLauncherAsked: false, terminalAsked: false });
+-  assert.deepEqual(logic.parseSettings({ dockMode: 'dock', terminalAsked: true, oldLauncherAsked: 'yes' }), {
++  assert.deepEqual(logic.parseSettings(null), { dockMode: 'menubar', oldLauncherAsked: false, terminalAsked: false, port: null });
++  assert.deepEqual(logic.parseSettings({ dockMode: 'dock', terminalAsked: true, oldLauncherAsked: 'yes', port: 8471 }), {
+     dockMode: 'dock',
+     oldLauncherAsked: false,
+     terminalAsked: true,
++    port: 8471,
+   });
++  assert.equal(logic.parseSettings({ port: '8470' }).port, null);
++  assert.equal(logic.parseSettings({ port: 80 }).port, null);
+   assert.equal(logic.parseSettings({ dockMode: 'taskbar' }).dockMode, 'menubar');
+   assert.deepEqual(logic.FIRST_LAUNCH_KEYS, ['oldLauncherAsked', 'terminalAsked']);
+ });
+@@ -306,17 +312,38 @@ test('guard: files opened before the dashboard subscribes are held, then deliver
+   inbox.add('/a.m4a');
+   inbox.add('/b.m4a');
+   const got = [];
+-  inbox.subscribe((p) => got.push(p));
+-  assert.deepEqual(got, ['/a.m4a', '/b.m4a'], 'held ones, in order, on subscribe');
++  inbox.subscribe((item) => got.push(item));
++  assert.deepEqual(got.map((i) => i.file), ['/a.m4a', '/b.m4a'], 'held ones, in order, on subscribe');
+   inbox.add('/c.m4a');
+-  assert.deepEqual(got, ['/a.m4a', '/b.m4a', '/c.m4a'], 'then straight through');
++  assert.deepEqual(got.map((i) => i.file), ['/a.m4a', '/b.m4a', '/c.m4a'], 'then straight through');
++  for (const item of got) inbox.ack(item.id);
++  assert.deepEqual(inbox.held, [], 'acknowledged ones are dropped');
++});
++
++test('guard: a file is kept until the dashboard acknowledges it (C2)', () => {
++  // Subscribe, then unsubscribe at once: sent, never acknowledged, so the next subscriber gets it.
++  const inbox = new logic.OpenFiles();
++  inbox.add('/a.m4a');
++  const lost = [];
++  inbox.subscribe((item) => lost.push(item));
+   inbox.unsubscribe();
+-  inbox.add('/d.m4a');
+-  assert.deepEqual(got.length, 3, 'held again after unsubscribe');
+-  // A page that is gone: kept for the next subscriber, not lost.
+-  inbox.subscribe(() => false);
+-  assert.deepEqual(inbox.held, ['/d.m4a']);
+-  const later = [];
+-  inbox.subscribe((p) => later.push(p));
+-  assert.deepEqual(later, ['/d.m4a']);
++  const next = [];
++  inbox.subscribe((item) => next.push(item));
++  assert.deepEqual(next.map((i) => i.file), ['/a.m4a'], 'the next subscriber still gets it');
++  // A reload while it is being delivered: the new page gets it again.
++  inbox.add('/b.m4a');
++  inbox.unsubscribe(); // did-start-navigation before the ack
++  const reloaded = [];
++  inbox.subscribe((item) => reloaded.push(item));
++  assert.deepEqual(reloaded.map((i) => i.file), ['/a.m4a', '/b.m4a']);
++  // Acknowledged twice, or an unknown id: nothing else is dropped, nothing is sent again.
++  const [a, b] = reloaded;
++  inbox.ack(a.id);
++  inbox.ack(a.id);
++  inbox.ack(9999);
++  assert.deepEqual(inbox.held.map((i) => i.file), ['/b.m4a']);
++  inbox.ack(b.id);
++  const again = [];
++  inbox.subscribe((item) => again.push(item));
++  assert.deepEqual(again, [], 'no file is delivered twice once acknowledged');
+ });
+diff --git a/desktop/test/old-launcher.test.js b/desktop/test/old-launcher.test.js
+index 1d2b46a..fc12679 100644
+--- a/desktop/test/old-launcher.test.js
++++ b/desktop/test/old-launcher.test.js
+@@ -61,6 +61,7 @@ function ctx(setup, extra = {}) {
+       python: '/app/python3',
+       env: { HOME: setup.home },
+       setStartAtLogin: (on) => turnedOn.push(on),
++      loginItemState: () => (turnedOn.includes(true) ? 'enabled' : 'not-registered'),
+       ...extra,
+     },
+   };
+@@ -153,3 +154,62 @@ test('remove: a failed uninstall is reported with each piece; only a Mac removes
+   assert.equal(linux.ok, false);
+   assert.equal(ran, false, 'nothing run off a Mac');
+ });
++
++// The engine's own rule for the port `desktop uninstall` stops (core/desktop.py at b22df16).
++function writePlist(f, port) {
++  fs.mkdirSync(path.dirname(f.loginItem), { recursive: true });
++  fs.writeFileSync(
++    f.loginItem,
++    `<?xml version="1.0"?>\n<plist version="1.0"><dict><key>Label</key><string>com.anyscribe.tray</string><key>ProgramArguments</key><array><string>/py</string><string>-m</string><string>anyscribe</string><string>tray</string><string>--port</string><string>${port}</string></array></dict></plist>`
++  );
++}
++
++test('uninstall target: the manifest port, else the login item port, else 8457', async () => {
++  const s = await installed({ tray: false });
++  writePlist(s.f, 8470);
++  assert.equal(launcher.uninstallTarget(s.home), 8470, 'no manifest: the login item');
++  fs.writeFileSync(path.join(s.home, '.anyscribe', 'desktop.json'), JSON.stringify({ port: 8471 }));
++  assert.equal(launcher.uninstallTarget(s.home), 8471, 'the manifest wins');
++  assert.deepEqual(launcher.recordedPorts(s.home).sort(), [8457, 8470, 8471]);
++  fs.writeFileSync(path.join(s.home, '.anyscribe', 'desktop.json'), '{}');
++  assert.equal(launcher.uninstallTarget(s.home), 8470, 'an empty manifest counts as none, as in Python');
++  fs.rmSync(s.f.loginItem);
++  assert.equal(launcher.uninstallTarget(s.home), 8457);
++});
++
++test("guard: remove refuses, running nothing, when the uninstall would target this app's port (C1)", async () => {
++  const s = await installed();
++  writePlist(s.f, 8470); // a partial install: no manifest, the login item on 8470, a live tray
++  let ran = false;
++  const { ctx: c, turnedOn } = ctx(s, { enginePort: 8470, run: async () => ((ran = true), { code: 0 }) });
++  const r = await launcher.remove(c);
++  assert.equal(ran, false, 'desktop uninstall was never run');
++  assert.equal(r.ok, false);
++  assert.match(r.reason, /same port as this app.*Quit anyscribe, then run `anyscribe desktop uninstall` in Terminal/);
++  assert.deepEqual(turnedOn, []);
++  assert.equal((await launcher.status({ home: s.home, platform: 'darwin' })).pieces.menuBarIcon, 'running', 'nothing changed');
++  // Another port: removal goes ahead.
++  const other = ctx(s, { enginePort: 8471, run: uninstaller(s, ['launcher', 'loginItem', 'menuBarIcon']) });
++  assert.equal((await launcher.remove(other.ctx)).ok, true);
++});
++
++test('guard: Start at login counts as carried over only when the system reads it back enabled (C5)', async () => {
++  const s = await installed();
++  const { ctx: c, turnedOn } = ctx(s, { run: uninstaller(s, ['launcher', 'loginItem', 'menuBarIcon']), loginItemState: () => 'requires-approval' });
++  const r = await launcher.remove(c);
++  assert.deepEqual(turnedOn, [true], 'it was asked for');
++  assert.equal(r.ok, true, 'the old launcher is gone');
++  assert.equal(r.startAtLoginCarriedOver, false);
++  assert.equal(r.reason, 'This app is set to start at login, but macOS needs your approval: System Settings, General, Login Items.');
++});
++
++test('guard: a live old tray alone still counts as installed on a Mac (C6)', async () => {
++  const s = await installed();
++  fs.rmSync(s.f.launcher, { recursive: true });
++  fs.rmSync(s.f.loginItem);
++  assert.deepEqual(await launcher.status({ home: s.home, platform: 'darwin' }), {
++    ok: true,
++    installed: true,
++    pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'running' },
++  });
++});
+diff --git a/desktop/test/terminal.test.js b/desktop/test/terminal.test.js
+index 467bfce..5f5f12b 100644
+--- a/desktop/test/terminal.test.js
++++ b/desktop/test/terminal.test.js
+@@ -24,6 +24,7 @@ fs.writeFileSync(
+   `#!/bin/sh
+ echo "$*" >> '${CALLS}'
+ if [ "$3" = install-skill ]; then
++  if [ -f "$HOME/skill-noop" ]; then exit 0; fi
+   if [ -f "$HOME/skill-fails" ]; then printf '%s\n' "PermissionError: [Errno 13] Permission denied: '$HOME/.claude/skills/anyscribe'" '╰────╯' >&2; exit 1; fi
+   mkdir -p "$HOME/.claude/skills/anyscribe" && echo skill > "$HOME/.claude/skills/anyscribe/SKILL.md"
+   exit 0
+@@ -176,7 +177,7 @@ test('states: off, then path-missing, then on after addToPath', async () => {
+   s = await terminal.turnOn(ctx(h));
+   assert.equal(s.state, 'path-missing', 'written, but the login shell does not look in ~/.local/bin');
+   assert.equal(s.command, cmdPath(h));
+-  const added = terminal.addToPath(ctx(h));
++  const added = await terminal.addToPath(ctx(h));
+   assert.deepEqual(added, { ok: true, file: path.join(h, '.zprofile'), line: 'export PATH="$HOME/.local/bin:$PATH"' });
+   s = await terminal.status(ctx(h));
+   assert.equal(s.state, 'on');
+@@ -190,6 +191,7 @@ test('state other-copy: Terminal runs a copy installed with uv, named with its v
+   const s = await terminal.status(ctx(h));
+   assert.equal(s.state, 'other-copy');
+   assert.deepEqual(s.uses, { path: cmdPath(h), version: '0.19.0', via: 'uv' });
++  assert.deepEqual(s.occupant, { path: cmdPath(h), via: 'uv', version: '0.19.0' }, 'Switch can replace it');
+   assert.equal(s.command, null);
+ });
+ 
+@@ -201,6 +203,17 @@ test('ours is written but another anyscribe comes first on PATH: other-copy', as
+   assert.equal(s.state, 'other-copy');
+   assert.equal(s.command, cmdPath(h));
+   assert.equal(s.uses.via, 'pip');
++  assert.equal(s.reason, `Terminal finds another anyscribe at ${path.join(h, 'first', 'anyscribe')} first.`, 'F1: says which copy wins');
++  assert.equal(s.occupant, null, 'F1: nothing to switch: ~/.local/bin/anyscribe is already ours');
++});
++
++test('F1: a uv copy at ~/.local/bin while Terminal does not look there: off, and the occupant is named', async () => {
++  const h = home();
++  uvCopy(h);
++  const s = await terminal.status(ctx(h));
++  assert.equal(s.state, 'off');
++  assert.equal(s.uses, null);
++  assert.deepEqual(s.occupant, { path: cmdPath(h), via: 'uv', version: '0.19.0' });
+ });
+ 
+ test('the login shell cannot be asked: ours counts as on, and the reason says PATH is unknown', async () => {
+@@ -287,6 +300,29 @@ test('turning on again keeps what it replaced; an older backup is never deleted'
+   assert.equal(fs.readlinkSync(backupPath(h)), `${target}-new`);
+ });
+ 
++test('guard: a refresh that cannot be written keeps ours ours, and turnOff still restores the original (C4)', async () => {
++  const h = home({ dirs: ['.local/bin'] });
++  const target = uvCopy(h);
++  await terminal.turnOn(ctx(h), { replace: true });
++  const before = read(cmdPath(h));
++  const recorded = record(h).sha256;
++  const bin = path.dirname(cmdPath(h));
++  fs.chmodSync(bin, 0o555); // the new command cannot be written
++  let r;
++  try {
++    r = await terminal.turnOn(ctx(h, { python: '/a/moved/python3', appVersion: '0.20.1' }));
++  } finally {
++    fs.chmodSync(bin, 0o755);
++  }
++  assert.equal(r.ok, false);
++  assert.match(r.reason, /Couldn't write ~\/\.local\/bin\/anyscribe: EACCES/);
++  assert.equal(read(cmdPath(h)), before, 'the command is untouched');
++  assert.equal(record(h).sha256, recorded, 'and still recorded as ours');
++  const off = await terminal.turnOff(ctx(h));
++  assert.equal(off.ok, true, JSON.stringify(off));
++  assert.equal(fs.readlinkSync(cmdPath(h)), target, 'the uv copy is back');
++});
++
+ test('guard: turnOff refuses when ours was changed and something can be put back; then each choice', async () => {
+   for (const choice of ['restore', 'keep-current']) {
+     const h = home({ dirs: ['.local/bin'] });
+@@ -379,6 +415,28 @@ test('the skill could not be installed: Terminal is on, the skill is missing and
+   assert.equal(fixed.reason, null);
+ });
+ 
++test('guard: a failed update over an older skill reads missing, with the reason, until an install succeeds (C3)', async () => {
++  const h = home({ claude: true, dirs: ['.local/bin'] });
++  const skillFile = path.join(h, '.claude', 'skills', 'anyscribe', 'SKILL.md');
++  fs.mkdirSync(path.dirname(skillFile), { recursive: true });
++  fs.writeFileSync(skillFile, 'an older skill\n');
++  const old = new Date(Date.now() - 3600_000);
++  fs.utimesSync(skillFile, old, old);
++  fs.writeFileSync(path.join(h, 'skill-fails'), '');
++  const on = await terminal.turnOn(ctx(h));
++  assert.equal(on.skill, 'missing', 'the older SKILL.md does not make it installed');
++  assert.equal(on.reason, "Couldn't write to ~/.claude/skills (permission denied).");
++  assert.equal((await terminal.status(ctx(h))).skill, 'missing');
++  // Exit 0 without writing it: still not installed.
++  fs.renameSync(path.join(h, 'skill-fails'), path.join(h, 'skill-noop'));
++  const noop = await terminal.retrySkill(ctx(h));
++  assert.equal(noop.skill, 'missing');
++  assert.match(noop.reason, /finished without writing it/);
++  fs.rmSync(path.join(h, 'skill-noop'));
++  const fixed = await terminal.retrySkill(ctx(h));
++  assert.deepEqual([fixed.ok, fixed.skill, fixed.reason], [true, 'installed', null]);
++});
++
+ test('guard: turnOff removes the skill only when Terminal is left with no anyscribe', async () => {
+   // Another copy elsewhere on PATH: the skill stays.
+   const shared = home({ claude: true, dirs: ['otherbin', '.local/bin'] });
+@@ -413,37 +471,46 @@ test('guard: turnOff removes the skill only when Terminal is left with no anyscr
+ 
+ // ---- addToPath ----
+ 
+-test('guard: addToPath writes one line to the login shell\'s own file, never twice', () => {
++test('guard: addToPath writes one line to the login shell\'s own file, never twice', async () => {
+   const h = home();
+   fs.writeFileSync(path.join(h, '.zprofile'), 'export EDITOR=vim'); // no newline at the end
+   const line = 'export PATH="$HOME/.local/bin:$PATH"';
+-  assert.equal(terminal.addToPath(ctx(h)).ok, true);
+-  assert.equal(terminal.addToPath(ctx(h)).ok, true);
++  assert.equal((await terminal.addToPath(ctx(h))).ok, true);
++  assert.equal((await terminal.addToPath(ctx(h))).ok, true);
+   assert.equal(read(path.join(h, '.zprofile')), `export EDITOR=vim\n${line}\n`, 'once, on its own line');
+   assert.equal(fs.existsSync(path.join(h, '.bash_profile')), false, 'never another shell\'s file');
+   const b = home({ shell: BASH });
+   fs.rmSync(path.join(b, '.bash_profile'));
+-  const r = terminal.addToPath(ctx(b, { shell: BASH }));
++  const r = await terminal.addToPath(ctx(b, { shell: BASH }));
+   assert.deepEqual(r, { ok: true, file: path.join(b, '.bash_profile'), line });
+   assert.equal(read(path.join(b, '.bash_profile')), `${line}\n`, 'created when missing');
+   assert.equal(fs.existsSync(path.join(b, '.zprofile')), false);
+ });
+ 
+-test('addToPath: bash reading ~/.profile, and other shells, are left to the person', () => {
++test('addToPath: bash reading ~/.profile, and other shells, are left to the person', async () => {
+   const b = home({ shell: BASH });
+   fs.rmSync(path.join(b, '.bash_profile'));
+   fs.writeFileSync(path.join(b, '.profile'), 'export X=1\n');
+-  const r = terminal.addToPath(ctx(b, { shell: BASH }));
++  const r = await terminal.addToPath(ctx(b, { shell: BASH }));
+   assert.equal(r.ok, false);
+   assert.match(r.reason, /Your bash reads ~\/\.profile; add this line to it by hand/);
+   assert.equal(fs.existsSync(path.join(b, '.bash_profile')), false, 'not created: it would hide ~/.profile');
+   const f = home();
+-  const fish = terminal.addToPath(ctx(f, { shell: '/opt/homebrew/bin/fish' }));
++  const fish = await terminal.addToPath(ctx(f, { shell: '/opt/homebrew/bin/fish' }));
+   assert.equal(fish.ok, false);
+   assert.match(fish.reason, /Add ~\/\.local\/bin to your shell's PATH by hand/);
+   assert.deepEqual(fs.readdirSync(f).sort(), ['.zprofile', '.zshrc'], 'nothing written');
+ });
+ 
++test('guard: addToPath says when the line has no effect because a later rc file resets PATH (F6)', async () => {
++  const h = home();
++  fs.appendFileSync(path.join(h, '.zshrc'), 'export PATH=/usr/bin:/bin\n');
++  const r = await terminal.addToPath(ctx(h));
++  assert.equal(r.ok, true);
++  assert.equal(r.reason, 'The line is in ~/.zprofile, but your shell setup removes it again later (check ~/.zshrc).');
++  assert.equal(read(path.join(h, '.zprofile')).split('\n').filter((l) => l === terminal.PATH_LINE).length, 1, 'the line is there once');
++});
++
+ test('terminalState: every state the screens show', () => {
+   const s = terminal.terminalState;
+   assert.equal(s({ ours: false, shellKnown: true }), 'off');
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 6002f55..551a555 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -229,12 +229,27 @@ bridge contract.
+   launcher's three pieces (the `.app`, the LaunchAgent, a live tray named in
+   `tray.pid` with a tray's command line), removed by today's
+   `desktop uninstall --json` and then checked one by one; the old login item
+-  hands over to the app's own Start at login.
++  hands over to the app's own Start at login. The uninstall stops whatever
++  anyscribe answers on the old launcher's port (the manifest's, else the
++  login item's, else 8457), so the app never chooses any of those ports, keeps
++  the port it last ran on (userData `settings.json`, so the dashboard's
++  per-port storage stays put), and refuses to run the uninstall when its target
++  is the app engine's port. The engine-side protection (an uninstall that
++  never signals the app's port) is not built: `src/` was out of this slice, and
++  the app-side refusal covers every case the app can reach, because the app
++  itself starts the uninstall and knows its own port.
+ - First-launch questions are recorded in the app's own `settings.json`
+   (userData), never in `~/.anyscribe`. Files opened with the app (`open-file`,
+   a second launch's arguments) are held until the dashboard subscribes. On
+   macOS the dashboard window uses `hiddenInset`; the dashboard draws the drag
+   strip.
++- Open items (phase 3): the Claude Code skill is not refreshed when the app
++  updates (the command runs in app mode, which skips the engine's skill
++  auto-update; re-copy it after each update while the switch is on); the
++  Terminal command embeds the Python path, so moving the app breaks it until
++  the switch is turned on again (rewrite it at launch when the path changed).
++  2c-app and 2c-ui merge together: `hiddenInset` needs the dashboard's drag
++  strip.
+ - Tests: `npm test` (unit and supervisor, plus Terminal and old-launcher rules
+   against throwaway homes and the real zsh and bash), `npm run e2e` (the real
+   app, headless, against a real engine in a throwaway HOME).
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-app.md b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+index 6f81168..50e02aa 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-app.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+@@ -72,3 +72,44 @@ review packet's `proof.md`.
+ The traffic-light position against the real sidebar, `open-file` from a real
+ Dock drop, `desktop uninstall` removing a real LaunchAgent and tray, and the
+ login shell on macOS (`/etc/zprofile` and `path_helper`).
++
++## Round 1 review fixes
++
++- **The uninstall must never reach the app's engine (C1, F2, F5).** `desktop
++  uninstall` stops whatever anyscribe answers on the old launcher's port, read
++  as the engine reads it: the manifest's port, else the login item's last
++  argument, else 8457. A partial install (no manifest, a login item and a live
++  tray on 8470) made the app pick 8470 too. Now the app avoids every port the
++  old launcher records, keeps the port it last ran on in its own settings (so
++  the dashboard's per-port browser storage does not reset when the old
++  launcher goes), and `oldLauncher.remove()` refuses, running nothing, when
++  the uninstall's target is its engine's port. Not built: the engine-side
++  protection (an uninstall that never signals the app's port). The app starts
++  the uninstall itself and knows its port, so the refusal covers every path
++  the app can reach; a person running `anyscribe desktop uninstall` by hand in
++  Terminal while the app runs on the old port is the remaining case.
++- **Opened files need a receipt (C2).** `webContents.send` is not delivery:
++  a subscribe followed at once by an unsubscribe lost a held file. Each file
++  now carries an id and is kept until the page acknowledges it after its
++  callbacks ran.
++- **The status tells the truth after failures (C3, C4, C5, C6, F1, F6).** A
++  failed skill install reads "missing" even over an older skill folder; a
++  refreshed command's hash is recorded only after the file is in place; Start
++  at login counts as carried over only when macOS reads it back enabled; a live
++  old tray alone counts as the old launcher installed; `terminal.status()`
++  names the `occupant` that "Switch" would replace and which copy Terminal
++  finds first; `addToPath` says when a later rc file undoes its line.
++
++## Not done here
++
++- **The skill is not refreshed when the app updates.** The app's command
++  runs with `ANYSCRIBE_APP=1`, which skips the engine's skill auto-update; only
++  Turn on and Try again write it. Phase 3 re-copies it after each update while
++  the switch is on.
++- **The command embeds the Python path.** Moving the app breaks the Terminal
++  command until the switch is turned on again. Phase 3: rewrite the command at
++  launch when the path changed.
++- **2c-app and 2c-ui merge together, never alone (F4).** The `hiddenInset`
++  title bar needs the dashboard's drag strip and top padding from 2c-ui; on its
++  own the Mac window cannot be dragged and the sidebar's top row sits under the
++  traffic lights.

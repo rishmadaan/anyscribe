@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useEffectEvent } from "react";
+import { Link, useOutletContext } from "react-router-dom";
+import type { LayoutContext } from "../components/Layout";
+import { desktop, isDoomed, useEngineStatus } from "../desktop";
 import { useJob } from "../hooks/useJob";
 import { getConfig, getProviders } from "../api/client";
 import type { Config, Provider } from "../api/types";
@@ -61,6 +63,7 @@ export default function TranscribePage() {
   const [diarize, setDiarize] = useState(false);
   const [keepMedia, setKeepMedia] = useState(false);
   const [outputFormat, setOutputFormat] = useState("clean");
+  const { incoming, doneIncoming, setWatching } = useOutletContext<LayoutContext>();
 
   useEffect(() => {
     Promise.all([getConfig(), getProviders()]).then(([c, p]) => {
@@ -79,10 +82,10 @@ export default function TranscribePage() {
   const selectedProvider = providers.find((p) => p.name === provider);
 
   const handleSubmit = (url: string, force = false) => {
-    if (!config) return; // the input is disabled until config has loaded
+    if (!config) return Promise.resolve(false); // the input is disabled until config has loaded
     setLastUrl(url);
     // Quality only when picked here; provider only when overridden from "auto".
-    submit({
+    return submit({
       url,
       quality: qualityPicked ? quality : undefined,
       provider: provider || undefined,
@@ -101,6 +104,43 @@ export default function TranscribePage() {
     .filter((e) => e.step === "download" && e.status === "completed")
     .map((e) => e.message.replace(/^(Downloaded|Ready): /, ""))[0];
 
+  // Mac app: tell the engine banner which job this page follows.
+  useEffect(() => {
+    setWatching(phase === "running" ? downloadedTitle || lastUrl : null);
+  }, [setWatching, phase, downloadedTitle, lastUrl]);
+
+  // Mac app: a dropped or opened file starts only while the engine reads running and the page is
+  // idle or done. It leaves the stored queue only once the engine accepted it; on a failure it
+  // stays at the head, and the error screen is the pause (Try again resubmits it, New drops it).
+  const engine = useEngineStatus();
+  // a doomed page (it saw the engine leave running; the app will reload it) starts nothing (H1)
+  const engineUp = !desktop || (engine?.state === "running" && !isDoomed());
+  const next = incoming[0];
+  const startIncoming = useEffectEvent((path: string) => {
+    // with the options set on this page right now
+    void handleSubmit(path).then((ok) => ok && doneIncoming(path));
+  });
+  // the head is not "next" while it is being handed over or its error is on screen
+  const waiting = (phase === "running" || phase === "error") && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
+  // H2: files that wait for the engine are named in the idle, completed and cancelled views
+  const names = (list: string[]) => list.map((p) => p.split(/[\\/]/).pop()).join(", ");
+  // while the engine is down every Up next line says so, whatever view it sits in (H2, K3)
+  const onceUp = (n: number) => `${n === 1 ? "It starts" : "They start in turn"} once anyscribe's engine is running again.`;
+  // a failed dropped file stays at the head and is tried again first (E1)
+  const afterHead = (n: number) =>
+    `${n === 1 ? "It starts" : "They start in turn"} after ${names(incoming.slice(0, 1))}, which is tried again once anyscribe's engine is running again.`;
+  const waitingForEngine =
+    !engineUp && incoming.length > 0 ? (
+      <p className="mt-4 text-xs text-text-muted break-words">
+        Up next: {names(incoming)}. {onceUp(incoming.length)}
+      </p>
+    ) : null;
+  useEffect(() => {
+    if (!next || !config || phase === "running" || phase === "error" || !engineUp) return;
+    const id = window.setTimeout(() => startIncoming(next), 0);
+    return () => window.clearTimeout(id);
+  }, [next, config, phase, engineUp]);
+
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-8 py-16">
       {phase === "idle" && (
@@ -117,6 +157,7 @@ export default function TranscribePage() {
           </p>
 
           <URLInput onSubmit={handleSubmit} disabled={!config} />
+          {waitingForEngine}
 
           {/* Options accordion */}
           {config && (
@@ -284,6 +325,12 @@ export default function TranscribePage() {
         <div className="w-full max-w-2xl flex flex-col items-center">
           <ProgressTracker events={events} title={downloadedTitle} />
           <PlanNotes plan={plan} />
+          {waiting.length > 0 && (
+            <p className="mt-4 self-start text-xs text-text-muted break-words">
+              Up next: {names(waiting)}.{" "}
+              {engineUp ? `${waiting.length === 1 ? "It starts" : "They start in turn"} when this one finishes.` : onceUp(waiting.length)}
+            </p>
+          )}
           <button
             onClick={cancel}
             className="
@@ -314,6 +361,7 @@ export default function TranscribePage() {
               {result.file_path}
             </Link>
           </div>
+          {waitingForEngine}
           <div className="flex gap-2">
             <button
               onClick={() => handleSubmit(lastUrl, true)}
@@ -344,6 +392,7 @@ export default function TranscribePage() {
       {phase === "completed" && result && !result.cached && (
         <div className="w-full max-w-2xl flex flex-col items-center">
           <ResultCard result={result} onReset={reset} />
+          {waitingForEngine}
           <PlanNotes plan={plan} />
         </div>
       )}
@@ -354,6 +403,7 @@ export default function TranscribePage() {
             <p className="text-sm text-text font-medium mb-1">Transcription cancelled</p>
             <p className="text-xs text-text-secondary">You stopped this job.</p>
           </div>
+          {waitingForEngine}
           <div className="flex gap-2">
             <button
               onClick={() => handleSubmit(lastUrl)}
@@ -387,9 +437,17 @@ export default function TranscribePage() {
             <p className="text-sm text-red font-medium mb-1">Transcription failed</p>
             <p className="text-xs text-text-secondary font-mono whitespace-pre-line">{error}</p>
           </div>
+          {waiting.length > 0 && (
+            <p className="mb-4 text-xs text-text-muted break-words">
+              Up next: {names(waiting)}.{" "}
+              {engineUp
+                ? `${waiting.length === 1 ? "It waits" : "They wait"} until you try this one again or choose New.`
+                : incoming[0] === lastUrl ? afterHead(waiting.length) : onceUp(waiting.length)}
+            </p>
+          )}
           <div className="flex gap-2">
             <button
-              onClick={() => lastUrl && handleSubmit(lastUrl)}
+              onClick={() => lastUrl && void handleSubmit(lastUrl).then((ok) => ok && doneIncoming(lastUrl))}
               className="
                 flex-1 flex items-center justify-center gap-2
                 rounded-lg bg-amber/90 hover:bg-amber px-5 py-2.5
@@ -399,7 +457,10 @@ export default function TranscribePage() {
               Try again
             </button>
             <button
-              onClick={reset}
+              onClick={() => {
+                doneIncoming(lastUrl); // drops a waiting file only when it is the one that failed
+                reset();
+              }}
               className="
                 flex items-center justify-center gap-2
                 rounded-lg border border-border hover:border-border/80

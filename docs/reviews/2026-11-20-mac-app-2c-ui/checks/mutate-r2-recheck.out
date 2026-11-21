@@ -1,0 +1,4 @@
+OK  r1/removal-note-consumed: killed={'[component] C7: the note is kept while the result card is open, gone once it is closed': True} restored={'[component] C7: the note is kept while the result card is open, gone once it is closed': True} scenario_all_pass=True
+
+1 of 1 mutants killed and restored cleanly
+exit 0

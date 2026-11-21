@@ -1,0 +1,294 @@
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 52a5321..4a4409b 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -108,6 +108,8 @@ The Mac app (Electron, `desktop/`) loads this same dashboard and gives it a brid
+ 
+ "This restart is mine" (the banner's "Restarting anyscribe's engine.", and no outage) is true only while this page's own Restart engine or removal call is in flight: a module variable, not storage, because the app reloads the page only once the engine runs again.
+ 
++A page that has seen the engine leave running is **doomed**: the app will replace it. `desktop.ts` sets the flag from the first status read and from any status that is not running, and never resets it. Two things read it: the queue's start gate (a doomed page starts no waiting file; the reloaded page does) and the startup recovery claim. Startup recovery resolves only the removal note present when the page loaded (`noteAtLoad`, its `at` checked again just before anything is cleared or claimed), and the Terminal card waits for it.
++
+ **The reload after every restart.** The app loads the dashboard's `/` again each time the engine returns to running (2c-app `main.js`, the `loadURL` in the engine status handler). A restart keeps the port, so the page's origin and its storage survive; anything that must outlive a restart is written to storage before the reload can happen:
+ - the outage note (`OUTAGE` in sessionStorage, `{job, at}`): written when the engine stops by itself; the reloaded page shows "Running again" naming the job once;
+ - the queue of dropped and Dock files (sessionStorage), written inside the callback because the preload acknowledges a file as soon as it returns. A file starts only while the engine reads running and the page is idle or done; it leaves the queue only once the engine accepted it. On a failure it stays at the head and the error screen is the pause (Try again resubmits it; New drops it only when it is the one that failed);
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-ui.md b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+index e790cec..d08e351 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-ui.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-ui.md
+@@ -89,3 +89,28 @@ Documented limits (not built):
+ - Files waiting in Up next are lost if anyscribe quits before they start.
+ - Real Electron reload timing and sessionStorage across `loadURL`: no stub
+   proves them; they stay a check on a Mac.
++
++## Round 3 (review: NOT YET and CONDITIONAL)
++
++Two gaps in round 2's design, closed by two rules:
++- **A doomed page starts nothing new.** Every return to running reloads the
++  dashboard, so a page that has seen the engine leave running will be
++  replaced. Without the flag, the old page could start a waiting file just
++  before its reload, so the file ran twice or ran unseen. The flag has two
++  readers only: the queue start and the startup recovery claim.
++- **An async callback acts only on the state it started from.** The removal
++  note is read once at page load. Startup recovery resolves only that note,
++  so a slow recovery read can no longer clear the note of a Remove clicked
++  meanwhile.
++
++Also: the cleanup checklist shows the bridge's reason; files waiting for the
++engine are named in the idle, completed and cancelled views; the stub's
++removal now settles after "running", with the reload 300 ms later.
++
++Documented limits (not built):
++- A crash during a queued file's POST can run that file twice.
++- A click on a doomed page in the instant before its reload.
++- A removal result is lost if anyscribe quits before a page claims it
++  (`lastRemoval` is in the app's memory only).
++- A second Remove overwrites an unclaimed note.
++- Real Electron timing stays a check on a Mac.
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index 543ee28..38cf65a 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -9,7 +9,18 @@ import SettingsPage from "./pages/SettingsPage";
+ import { getOnboardingStatus } from "./api/client";
+ import Modal from "./components/Modal";
+ import { BTN_MAIN, Card, LauncherQuestion, RemovalAfterReload, TerminalFlow } from "./components/MacCards";
+-import { desktop, MARK_PROBLEM, MARK_PROBLEM_EVENT, markAsked, resolveRemoval, session, useEngineStatus } from "./desktop";
++import {
++  desktop,
++  engineRunningNow,
++  isDoomed,
++  MARK_PROBLEM,
++  MARK_PROBLEM_EVENT,
++  markAsked,
++  noteAtLoad,
++  resolveRemoval,
++  session,
++  useEngineStatus,
++} from "./desktop";
+ import type { FirstLaunch, LauncherStatus, MarkProblem, Removal } from "./desktop";
+ 
+ /**
+@@ -56,24 +67,30 @@ export default function App() {
+       .catch(() => undefined); // unanswered questions wait for the next launch
+   }, []);
+ 
+-  // A removal this page's predecessor started: settled against the app's saved lastRemoval on the
+-  // first status that reads running (never earlier: an unmatched note is cleared only then).
++  // A removal this page's predecessor started: only the note present when this page loaded
++  // (noteAtLoad), settled against the app's saved lastRemoval on the first status that reads
++  // running. A doomed page (the engine left running since; the app will reload it) does nothing.
++  // The Terminal card waits for this, or starts at once when there was no note (H3).
+   const engine = useEngineStatus();
+   const settled = useRef(false);
++  const [removalChecked, setRemovalChecked] = useState(!noteAtLoad);
+   useEffect(() => {
+-    if (!desktop || engine?.state !== "running" || settled.current) return;
++    if (!desktop || !noteAtLoad || engine?.state !== "running" || settled.current) return;
+     settled.current = true;
++    const at = noteAtLoad.at;
+     desktop.oldLauncher
+       .status()
+       .then((l) => {
+-        const r = resolveRemoval(l, true, true);
++        if (isDoomed()) return; // the reloaded page settles it; the Terminal card stays held here
++        const r = resolveRemoval(l, engineRunningNow(), true, at);
+         if (r && r !== "refused") setRemoved(r);
++        setRemovalChecked(true);
+       })
+-      .catch(() => undefined);
++      .catch(() => setRemovalChecked(!isDoomed()));
+   }, [engine?.state]);
+ 
+   const askLauncher = !!asked && !asked.oldLauncherAsked && !!launcher?.installed;
+-  const askTerminal = !!asked && !asked.terminalAsked && !askLauncher && !removed;
++  const askTerminal = !!asked && !asked.terminalAsked && !askLauncher && !removed && removalChecked;
+   const terminalAnswered = () => {
+     void markAsked("terminalAsked");
+     setAsked((a) => a && { ...a, terminalAsked: true });
+diff --git a/ui/src/components/MacCards.tsx b/ui/src/components/MacCards.tsx
+index a2954a9..54ba253 100644
+--- a/ui/src/components/MacCards.tsx
++++ b/ui/src/components/MacCards.tsx
+@@ -165,6 +165,7 @@ export function RemovalResult({
+           );
+         })}
+       </ul>
++      {reason && <p>{reason /* the bridge's own words, above the generic advice (B2) */}</p>}
+       <p>
+         {pieces.menuBarIcon === "still running"
+           ? "Log out and back in to stop it, or try again."
+diff --git a/ui/src/desktop.ts b/ui/src/desktop.ts
+index f807929..086d848 100644
+--- a/ui/src/desktop.ts
++++ b/ui/src/desktop.ts
+@@ -93,6 +93,24 @@ export const desktop: Bridge | null =
+ 
+ export const isMac = desktop?.platform === "darwin";
+ 
++// A doomed page (H1, B1): the app reloads the dashboard on every return to running (2c-app main.js),
++// so a page that has seen the engine leave running will be replaced. Set by the first status read
++// and by any status event that is not running; never reset. Exactly two readers: the queue's start
++// gate and the startup recovery claim. The first page after launch is loaded from a running engine.
++let doomed = false;
++let engineNow: EngineStatus["state"] | null = null;
++if (desktop) {
++  const seen = (s: EngineStatus) => {
++    engineNow = s.state;
++    if (s.state !== "running") doomed = true;
++  };
++  desktop.engineStatus().then(seen).catch(() => undefined);
++  desktop.onEngineStatus(seen);
++}
++export const isDoomed = () => doomed;
++/** The engine's state as this page last saw it (for decisions made in async callbacks). */
++export const engineRunningNow = () => engineNow === "running";
++
+ export const GUIDE_URL =
+   "https://github.com/rishmadaan/anyscribe/blob/main/docs/user/troubleshooting.md";
+ 
+@@ -254,6 +272,9 @@ function note(value: RemovalNote | null) {
+   }
+ }
+ 
++/** The note present when this page loaded: the only one startup recovery may resolve (B1). */
++export const noteAtLoad: { at: number } | null = readNote();
++
+ /** A refusal from the app, worded so he sees why a removal talks about the engine (F6). */
+ export const removalRefusal = (r: LauncherRemoval) =>
+   `Removing the old launcher restarts the engine. ${r.reason || "The old launcher couldn't be removed."}`;
+@@ -263,15 +284,17 @@ export function removalConsumed() {
+   note(null);
+ }
+ 
+-/** Resolve the note against the app's saved lastRemoval, only while the engine reads running.
+- * null: no note, or not yet decidable. "refused": nothing ran, and the note is gone. A reloaded
+- * page claims the result (the note goes); the live page keeps it until its card is closed. */
+-export function resolveRemoval(s: LauncherStatus, engineRunning: boolean, afterReload: boolean): Removal | "refused" | null {
++/** Resolve the note against the app's saved lastRemoval, only while the engine reads running, and
++ * only the note the caller started from (its `at`, checked again here, just before anything is
++ * cleared or claimed). null: no such note, or not yet decidable. "refused": nothing ran, and the
++ * note is gone. A reloaded page claims the result (the note goes); the live page keeps it until its
++ * card is closed. */
++export function resolveRemoval(s: LauncherStatus, engineRunning: boolean, afterReload: boolean, at: number): Removal | "refused" | null {
+   const n = readNote();
+-  if (!n || !engineRunning) return null;
++  if (!n || n.at !== at || !engineRunning) return null;
+   const r = s.lastRemoval;
+-  const at = r ? (typeof r.at === "number" ? r.at : Date.parse(r.at)) : NaN;
+-  if (r && at >= n.at) {
++  const savedAt = r ? (typeof r.at === "number" ? r.at : Date.parse(r.at)) : NaN;
++  if (r && savedAt >= n.at) {
+     if (afterReload) note(null);
+     return { result: r, before: n.before, afterReload };
+   }
+@@ -281,11 +304,13 @@ export function resolveRemoval(s: LauncherStatus, engineRunning: boolean, afterR
+ 
+ /** Remove the old launcher: what to show, the result or the refusal's words. */
+ export async function removeOldLauncher(before: Pieces | null): Promise<{ shown: Removal } | { refused: string }> {
+-  note({ at: Date.now(), before });
++  const mine = { at: Date.now(), before };
++  note(mine);
+   const r = await own(() => desktop!.oldLauncher.remove());
+   const engine = await desktop!.engineStatus().catch(() => null);
+   if (engine?.state === "running") {
+-    const res = resolveRemoval(await desktop!.oldLauncher.status(), true, false);
++    // its own note only (mine.at): a refusal clears the note this click wrote, never another
++    const res = resolveRemoval(await desktop!.oldLauncher.status(), engine.state === "running", false, mine.at);
+     if (res === "refused") return { refused: removalRefusal(r) };
+     if (res) return { shown: res };
+   }
+diff --git a/ui/src/pages/TranscribePage.tsx b/ui/src/pages/TranscribePage.tsx
+index 758a1d7..88317bb 100644
+--- a/ui/src/pages/TranscribePage.tsx
++++ b/ui/src/pages/TranscribePage.tsx
+@@ -1,7 +1,7 @@
+ import { useState, useEffect, useEffectEvent } from "react";
+ import { Link, useOutletContext } from "react-router-dom";
+ import type { LayoutContext } from "../components/Layout";
+-import { desktop, useEngineStatus } from "../desktop";
++import { desktop, isDoomed, useEngineStatus } from "../desktop";
+ import { useJob } from "../hooks/useJob";
+ import { getConfig, getProviders } from "../api/client";
+ import type { Config, Provider } from "../api/types";
+@@ -113,7 +113,8 @@ export default function TranscribePage() {
+   // idle or done. It leaves the stored queue only once the engine accepted it; on a failure it
+   // stays at the head, and the error screen is the pause (Try again resubmits it, New drops it).
+   const engine = useEngineStatus();
+-  const engineUp = !desktop || engine?.state === "running";
++  // a doomed page (it saw the engine leave running; the app will reload it) starts nothing (H1)
++  const engineUp = !desktop || (engine?.state === "running" && !isDoomed());
+   const next = incoming[0];
+   const startIncoming = useEffectEvent((path: string) => {
+     // with the options set on this page right now
+@@ -121,6 +122,15 @@ export default function TranscribePage() {
+   });
+   // the head is not "next" while it is being handed over or its error is on screen
+   const waiting = (phase === "running" || phase === "error") && incoming[0] === lastUrl ? incoming.slice(1) : incoming;
++  // H2: files that wait for the engine are named in the idle, completed and cancelled views
++  const names = (list: string[]) => list.map((p) => p.split(/[\\/]/).pop()).join(", ");
++  const waitingForEngine =
++    !engineUp && incoming.length > 0 ? (
++      <p className="mt-4 text-xs text-text-muted break-words">
++        Up next: {names(incoming)}.{" "}
++        {incoming.length === 1 ? "It starts" : "They start in turn"} once anyscribe's engine is running again.
++      </p>
++    ) : null;
+   useEffect(() => {
+     if (!next || !config || phase === "running" || phase === "error" || !engineUp) return;
+     const id = window.setTimeout(() => startIncoming(next), 0);
+@@ -143,6 +153,7 @@ export default function TranscribePage() {
+           </p>
+ 
+           <URLInput onSubmit={handleSubmit} disabled={!config} />
++          {waitingForEngine}
+ 
+           {/* Options accordion */}
+           {config && (
+@@ -311,8 +322,8 @@ export default function TranscribePage() {
+           <ProgressTracker events={events} title={downloadedTitle} />
+           <PlanNotes plan={plan} />
+           {waiting.length > 0 && (
+-            <p className="mt-4 self-start text-xs text-text-muted break-all">
+-              Up next: {waiting.map((p) => p.split(/[\\/]/).pop()).join(", ")}.{" "}
++            <p className="mt-4 self-start text-xs text-text-muted break-words">
++              Up next: {names(waiting)}.{" "}
+               {waiting.length === 1 ? "It starts" : "They start in turn"} when this one finishes.
+             </p>
+           )}
+@@ -346,6 +357,7 @@ export default function TranscribePage() {
+               {result.file_path}
+             </Link>
+           </div>
++          {waitingForEngine}
+           <div className="flex gap-2">
+             <button
+               onClick={() => handleSubmit(lastUrl, true)}
+@@ -376,6 +388,7 @@ export default function TranscribePage() {
+       {phase === "completed" && result && !result.cached && (
+         <div className="w-full max-w-2xl flex flex-col items-center">
+           <ResultCard result={result} onReset={reset} />
++          {waitingForEngine}
+           <PlanNotes plan={plan} />
+         </div>
+       )}
+@@ -386,6 +399,7 @@ export default function TranscribePage() {
+             <p className="text-sm text-text font-medium mb-1">Transcription cancelled</p>
+             <p className="text-xs text-text-secondary">You stopped this job.</p>
+           </div>
++          {waitingForEngine}
+           <div className="flex gap-2">
+             <button
+               onClick={() => handleSubmit(lastUrl)}
+@@ -420,9 +434,9 @@ export default function TranscribePage() {
+             <p className="text-xs text-text-secondary font-mono whitespace-pre-line">{error}</p>
+           </div>
+           {waiting.length > 0 && (
+-            <p className="mb-4 text-xs text-text-muted break-all">
+-              Up next: {waiting.map((p) => p.split(/[\\/]/).pop()).join(", ")}.{" "}
+-              {waiting.length === 1 ? "It starts" : "They start in turn"} once you try this one again or choose New.
++            <p className="mb-4 text-xs text-text-muted break-words">
++              Up next: {names(waiting)}.{" "}
++              {waiting.length === 1 ? "It waits" : "They wait"} until you try this one again or choose New.
+             </p>
+           )}
+           <div className="flex gap-2">

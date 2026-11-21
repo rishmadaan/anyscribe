@@ -1,0 +1,272 @@
+Traceback (most recent call last):
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 1254, in main
+    SCENARIOS[n](r)
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 732, in s_settings
+    check(not p.locator("#this-mac").get_by_role("button", name="Restart engine").is_disabled(), "Restart engine available when stopped")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/sync_api/_generated.py", line 12525, in is_disabled
+    self._sync(self._impl_obj.is_disabled(timeout=to_milliseconds(timeout)))
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 538, in is_disabled
+    return await self._frame.is_disabled(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_frame.py", line 410, in is_disabled
+    return await self._channel.send(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Locator.is_disabled: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#this-mac").get_by_role("button", name="Restart engine")
+
+engine A: pid 840818 port 33223 HOME /tmp/anyscribe-2c-ui-vam60apf/home-a
+engine C: pid 840832 port 33925 HOME /tmp/anyscribe-2c-ui-vam60apf/home-a
+engine B: pid 840845 port 35881 HOME /tmp/anyscribe-2c-ui-vam60apf/home-b
+engine B3: pid 840859 port 57347 HOME /tmp/anyscribe-2c-ui-vam60apf/home-b3
+engine B2: pid 840884 port 58577 HOME /tmp/anyscribe-2c-ui-vam60apf/home-b2
+== browser
+  PASS no bridge in the page
+  PASS Shutdown button present
+  PASS no drag strip
+  PASS no overlay or engine banner text
+  PASS dragging a file shows no overlay
+  PASS a drop submits nothing
+  PASS Browse uploads the file (today's behaviour)
+  PASS Browse does not submit by itself
+  PASS Startup section as today (supported=True)
+  PASS no This Mac section
+  PASS no 'Show anyscribe in'
+  PASS no 'Use from Terminal'
+  PASS no 'Restart engine'
+  PASS no 'Old browser launcher'
+  PASS no 'Removing anyscribe'
+== browser_pixels
+  PASS browser / at 1440px identical to main's bundle
+  PASS browser / at 1000px identical to main's bundle
+  PASS browser / at 390px identical to main's bundle
+  PASS browser /history at 1440px identical to main's bundle
+  PASS browser /history at 1000px identical to main's bundle
+  PASS browser /history at 390px identical to main's bundle
+  PASS browser /settings at 1440px identical to main's bundle
+  PASS browser /settings at 1000px identical to main's bundle
+  PASS browser /settings at 390px identical to main's bundle
+== app_layout
+  PASS app: no Shutdown button
+  PASS app on macOS: drag strip and logo row are drag regions
+  PASS drag strip computes app-region: drag
+  PASS top strip leaves room for the window buttons
+  PASS credits and KraftedX mark kept
+  PASS app on another OS: no drag strip, still no Shutdown
+== drop
+  PASS F11: the overlay says Drop to transcribe only
+  PASS the drop is taken by the page (no navigation to the file)
+  PASS drop submits the file's path
+  PASS no upload copy
+  PASS pathForFile asked once
+  PASS overlay gone after the drop
+  PASS dragging text shows no overlay
+== browse
+  PASS F7: Browse puts the picked file's path in the box and focuses it
+  PASS F7: nothing submitted and no upload copy until he clicks Transcribe
+  PASS F7: Transcribe then submits that path
+== open_file
+  PASS a Dock file opens Transcribe
+  PASS a Dock file is submitted by path
+  PASS a file opened before load is submitted once
+  PASS a file arriving mid-job waits and is named
+  PASS it does not replace the running job
+  PASS C3: B survives the reload and is submitted by its path
+  PASS C3: B leaves the stored queue once the engine accepted it
+== banner
+  PASS no banner while running
+  PASS restarting banner
+  PASS R1: the stub reloaded the page to / when the engine came back
+  PASS C1: after the reload, running again names the watched job
+  PASS Open History goes to History and closes the banner
+  PASS C1: the note is used once (not shown after another reload)
+  PASS running again with no job watched: no job wording
+  PASS Dismiss closes it
+  PASS a normal start never shows Running again
+  PASS keeps stopping: code, reason not reported
+  PASS F10: no hidden log path in the banner
+  PASS Troubleshooting guide link
+  PASS F10: Open log folder in the banner calls openLogFolder()
+  PASS refused restart shows the bridge's reason
+  PASS Copy details copies the exit and log location
+  PASS F2: a restart he asked for says so, not the crash words
+  PASS F2: after his restart, the earlier outage (not his restart) is what Running again reports
+  PASS F2: Restart engine in Settings, the asked-for words
+  PASS F2: no Running again after Settings' restart
+  PASS keeps stopping: signal and reported reason
+== settings
+  PASS This Mac replaces Startup
+  PASS menu bar help
+  PASS login help, menu bar
+  PASS terminal on line
+  PASS version line
+  PASS engine running line
+  PASS no launcher row when not installed
+  PASS removal help names the real workspace
+  PASS Dock calls setDockMode('dock')
+  PASS Dock help and login help follow
+  PASS both
+  PASS back to menu bar
+  PASS Start at login on
+  PASS Start at login off
+  PASS Open log folder
+  PASS switch off calls turnOff()
+  PASS F8: right after a turnOff that removed the skill, the off line says so
+  PASS switch on calls turnOn({replace:false})
+  PASS login waiting for approval
+  PASS other copy line
+  PASS switch on with another copy asks first (no turnOn)
+  PASS other copy card
+  PASS other copy note names uv
+  PASS Switch calls turnOn({replace:true})
+  PASS ready card
+  PASS Done closes and the row reads On
+  PASS skill missing line
+  PASS Try again still missing: the row says so, with the reason
+  PASS Try again succeeding
+  PASS path missing line
+  PASS GUARD addToPath: the row's button only asks
+  PASS the ask shows the exact line
+  PASS GUARD addToPath: I'll do it myself adds nothing
+  PASS the person's yes adds the line, then ready
+  PASS turnOff conflict asks keep or restore
+  PASS AMEND 1: the two answers reach turnOff({choice})
+  PASS conflict closes once settled
+  PASS AMEND 2: ok with a reason shows as information, not an error
+  PASS no Claude Code line
+  PASS ours written but another first: the status reason
+  PASS AMEND occupant: other copy elsewhere, reason shown
+  PASS AMEND occupant: no Switch without an occupant
+  PASS AMEND occupant: the switch writes ours without replacing anything
+  PASS AMEND uses: no 'runs this app's' claim when the shell wasn't asked; the reason instead
+  PASS C5: Settings row for a shell not asked
+  PASS C5: shell not asked and skill missing: no 'Terminal is ready', Try again offered
+  PASS F8: plain off line when nothing was removed here
+  PASS F5: Settings row names the copy at our spot and offers Switch
+  PASS F5: the switch asks first when a copy sits there
+  PASS F5: Switch replaces it
+  PASS AMEND launcher/F6: a refusal shows its reason, prefixed, no checklist
+  FAIL AMEND carry-over: not confirmed, the reason instead  []
+  PASS engine with jobs line
+  PASS GUARD restart: disabled while transcriptions run
+  PASS GUARD restart: a click while disabled calls nothing
+  PASS enabled again when the jobs finish
+  PASS a refused restart shows the reason
+  FAIL engine stopped row and banner  []
+  FAIL scenario ran to the end  [TimeoutError: Locator.is_disabled: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#this-mac").get_by_role("button", name="Restart engine")
+]
+== first_launch
+  PASS launcher question
+  PASS launcher note
+  PASS Keep both marks and removes nothing
+  PASS question closes
+  PASS GUARD repeat: not asked again after reload
+  PASS Remove marks and removes
+  FAIL removed card  []
+  PASS OK closes
+  FAIL cleanup checklist  []
+  FAIL Try again, removed, no carry-over sentence  []
+  PASS no login item: no login words
+  PASS launcher first
+  PASS then the Terminal card, One more option
+  PASS Turn on, ready
+  PASS F12: with Claude Code, its sentence only
+  PASS Done marks Terminal asked
+  PASS GUARD repeat: neither question again after reload
+  PASS Skip for now marks, turns nothing on
+  PASS other copy card on first launch
+  PASS Keep the one I have changes nothing
+  PASS skill card
+  PASS Try again, ready
+  PASS Continue marks and closes
+  PASS path card after Turn on
+  PASS GUARD addToPath: not called before the yes
+  PASS added, still missing
+  PASS addToPath refusal shows its reason
+  PASS I'll do it myself marks
+  PASS AMEND 3/F4: bash refusal shows its reason and only its line, selectable (same line)
+  PASS F4: no stale offer to add the line; the reason is guidance, not red
+  PASS AMEND 3: no second Add it for me after a refusal
+  PASS AMEND 3/F4: bash refusal shows its reason and only its line, selectable (own line)
+  PASS F4: no stale offer to add the line; the reason is guidance, not red
+  PASS AMEND 3: no second Add it for me after a refusal
+  PASS F3: the app's reason replaces the generic sentence
+  PASS F5: the offer names the copy and offers Switch instead of Turn on
+  PASS F5: Switch calls turnOn({replace:true})
+  PASS F12: without Claude Code, its note only
+  PASS AMEND 2: Turn on ok with a reason: ready card carries the reason
+  PASS Turn on refused stays on the offer with the reason
+  PASS AMEND occupant: first-launch card without Switch, with the reasonTraceback (most recent call last):
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 1254, in main
+    SCENARIOS[n](r)
+  File "~/labs/projects/anyscribe-wt/mac-2c-ui/docs/reviews/2026-11-20-mac-app-2c-ui/checks/check_ui.py", line 1125, in s_removal_reload
+    kept = p.evaluate("localStorage.getItem('anyscribe_launcher_removing')")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/sync_api/_generated.py", line 16843, in evaluate
+    self._sync(
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_page.py", line 476, in evaluate
+    return await self._main_frame.evaluate(expression, arg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_frame.py", line 346, in evaluate
+    await self._channel.send(
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "~/.local/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.evaluate: Execution context was destroyed, most likely because of a navigation
+
+  PASS F16: its only button reads OK
+  PASS C5: shell not asked: 'The anyscribe command is added', the reason, how to check
+  PASS C5: the skill card's title when the shell wasn't asked
+  PASS AMEND launcher/F6: first-launch refusal shows its reason, prefixed, on the question
+  FAIL AMEND carry-over: first-launch card shows the reason  []
+  PASS AMEND2/F2: the restarting banner covers the gap, in the asked-for words
+  PASS AMEND2: the app reloaded the page to / during remove()
+  PASS AMEND2: after the reload the result card comes from lastRemoval
+  PASS AMEND2: one removal, one mark
+  PASS AMEND2: the result never repeats after another reload
+  PASS AMEND2: the checklist after the reload
+  PASS AMEND2: Try again reloads again and shows Removed
+  PASS AMEND2: an older lastRemoval is never shown
+  PASS AMEND2: Settings Remove it, result after the reload
+  PASS AMEND2/F6: a refusal answers at once, says the removal restarts the engine, no reload
+  PASS C7: a refusal clears the note at once
+  PASS C6: Escape on the Terminal card is Skip for now (marked, nothing turned on)
+  PASS C6: and it is not asked again
+  PASS C6: a click outside the launcher question is Keep both (marked, nothing removed)
+  PASS C6: a failed save is shown with its reason
+  PASS C6: OK closes the notice
+  PASS C6: with the save failing, the removal still runs and its result shows
+  PASS C6: then the failed save is explained (kept across the reload)
+== removal_reload
+  PASS C7: settled before the reload, the reloaded page still shows the result
+  PASS C7: claimed, the note is gone
+  PASS C7: closed with Escape, not shown again after another reload
+  FAIL scenario ran to the end  [Error: Page.evaluate: Execution context was destroyed, most likely because of a navigation]
+== first_launch_marked
+  PASS GUARD repeat: both marked, nothing asked
+== wizard
+  PASS new person: the wizard, not the separate card
+  PASS Terminal is the wizard's last step, titled One last thing (F13)
+  PASS Skip for now marks and closes the wizard, no second card
+== wizard_escape
+  PASS C6: Escape on the wizard's Terminal step is Skip for now: marked, nothing turned on
+== wizard_browser
+  PASS browser: Finish closes the wizard (no Terminal step)
+
+192 passed, 8 failed

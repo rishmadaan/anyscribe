@@ -1,0 +1,39 @@
+[
+ {
+  "type": "dragenter",
+  "types": [
+   "Files"
+  ],
+  "files": 0,
+  "name": null,
+  "size": null
+ },
+ {
+  "type": "dragover",
+  "types": [
+   "Files"
+  ],
+  "files": 0,
+  "name": null,
+  "size": null
+ },
+ {
+  "type": "dragover",
+  "types": [
+   "Files"
+  ],
+  "files": 0,
+  "name": null,
+  "size": null
+ },
+ {
+  "type": "drop",
+  "types": [
+   "Files"
+  ],
+  "files": 1,
+  "name": "team-sync-recording.m4a",
+  "size": 4096
+ }
+]
+chromium 156.0.8078.4

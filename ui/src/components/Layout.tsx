@@ -1,9 +1,92 @@
-import { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
-import { Mic, Clock, Settings, Waves, Power, Share2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Mic, Clock, Settings, Waves, Power, Share2, FileAudio } from "lucide-react";
 import SetupBanner from "./SetupBanner";
+import EngineBanner from "./EngineBanner";
+import { desktop, isMac, session } from "../desktop";
 import { TailnetLink } from "./TailnetShare";
 import { REMOTE, useTailnet } from "../hooks/useTailnet";
+
+/** What the Transcribe page gets from the layout (Mac app: files dropped or opened with the app). */
+export type LayoutContext = {
+  incoming: string[];
+  /** The engine accepted the file at the head of the queue (or he chose New on its error): it leaves. */
+  doneIncoming: (path: string) => void;
+  /** The job the page is following, so the engine banner can name it after a restart. */
+  setWatching: (job: string | null) => void;
+};
+
+// Files waiting to be transcribed, kept in sessionStorage: the app acknowledges an opened file as
+// soon as the callback returns (preload), and reloads this page whenever the engine comes back.
+const QUEUE = "anyscribe_incoming";
+
+/** Mac app only: files dragged onto the window or opened with the app become paths to transcribe. */
+function useIncomingFiles() {
+  const navigate = useNavigate();
+  const [incoming, setIncoming] = useState<string[]>(() => session.get<string[]>(QUEUE) ?? []);
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+
+  const add = useCallback(
+    (paths: string[]) => {
+      if (!paths.length) return;
+      // stored before this callback returns, so a reload after the app's acknowledgement keeps them
+      const q = [...(session.get<string[]>(QUEUE) ?? []), ...paths];
+      session.set(QUEUE, q);
+      setIncoming(q);
+      navigate("/");
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    if (!desktop) return;
+    const bridge = desktop;
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current += 1;
+      setDragging(true); // a browser gives the file's name only on the drop (drag_probe.out)
+    };
+    const over = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault(); // allows the drop
+    };
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth.current = Math.max(0, depth.current - 1);
+      if (!depth.current) setDragging(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); // never let the window navigate to the file
+      depth.current = 0;
+      setDragging(false);
+      add(Array.from(e.dataTransfer?.files ?? []).map((f) => bridge.pathForFile(f)).filter(Boolean));
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    const off = bridge.onOpenFile((path) => add([path]));
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+      off();
+    };
+  }, [add]);
+
+  const doneIncoming = useCallback((path: string) => {
+    const q = session.get<string[]>(QUEUE) ?? [];
+    if (q[0] !== path) return; // only the head: a failed typed link never takes a waiting file
+    q.shift();
+    session.set(QUEUE, q);
+    setIncoming(q);
+  }, []);
+  return { incoming, doneIncoming, dragging };
+}
 
 const NAV = [
   { to: "/", icon: Mic, label: "Transcribe" },
@@ -15,6 +98,11 @@ export default function Layout() {
   const [confirmShutdown, setConfirmShutdown] = useState(false);
   const [stopped, setStopped] = useState(false);
   const { state: tailnet } = useTailnet();
+  const { incoming, doneIncoming, dragging } = useIncomingFiles();
+  const watching = useRef<string | null>(null);
+  const setWatching = useCallback((job: string | null) => {
+    watching.current = job;
+  }, []);
 
   const handleShutdown = async () => {
     try {
@@ -49,8 +137,10 @@ export default function Layout() {
     <div className="flex flex-col sm:flex-row min-h-dvh">
       {/* Sidebar; on a phone it stacks above the page instead of eating its width */}
       <aside className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-border-subtle bg-surface flex flex-col">
+        {/* Mac app: the window's coloured buttons sit here; dragging this strip moves the window */}
+        {isMac && <div className="app-drag h-7 shrink-0" />}
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-5">
+        <div className={`flex items-center gap-2.5 px-5 py-5 ${isMac ? "app-drag" : ""}`}>
           <Waves className="w-5 h-5 text-amber" />
           <span
             className="text-lg font-semibold tracking-tight text-text"
@@ -132,8 +222,8 @@ export default function Layout() {
             />
           </a>
 
-          {/* Shutdown */}
-          {!confirmShutdown ? (
+          {/* Shutdown (browser only: in the Mac app, quitting is the app's job) */}
+          {desktop ? null : !confirmShutdown ? (
             <button
               onClick={() => setConfirmShutdown(true)}
               className="
@@ -171,8 +261,18 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto relative">
+        <EngineBanner watching={watching} />
         <SetupBanner />
-        <Outlet />
+        <Outlet context={{ incoming, doneIncoming, setWatching } satisfies LayoutContext} />
+
+        {dragging && (
+          <div className="pointer-events-none fixed inset-3.5 sm:left-[calc(14rem+0.875rem)] z-50 grid place-items-center rounded-2xl border-2 border-dashed border-amber bg-[#1a140e]/90 text-center">
+            <div className="flex flex-col items-center gap-1.5">
+              <FileAudio className="w-6.5 h-6.5 text-amber" />
+              <p className="font-semibold text-text">Drop to transcribe</p>
+            </div>
+          </div>
+        )}
 
         {/* Decorative doodle — bottom of content area */}
         <div

@@ -103,6 +103,25 @@ the Obsidian vault at `~/anyscribe/` stays pure markdown.
 - Tailnet sharing (optional, `settings.tailnet`, default off; `ui --tailnet` / `--local-only` per run via `core.tailnet.run_override`): the bind stays `127.0.0.1`; `web.app.run` registers a startup handler that starts a short thread: it waits for `server.started` (uvicorn runs startup handlers before it binds, and runs shutdown handlers on a bind failure), then calls `core/tailnet.py` `Share.apply(True)` (runs `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` for the port actually chosen). The shutdown handler calls `Share.close()`, and `/api/shutdown` calls it before setting `should_exit`. Uvicorn runs shutdown handlers on SIGINT and SIGTERM before re-raising the signal, so every clean stop removes the rule; SIGKILL leaves it (documented limit). `run()` also installs `HostCheck`, a pure ASGI middleware that answers only Host `127.0.0.1` / `localhost` / `[::1]` and, only while this server holds a share (`share.held`, set when `start()` succeeds and cleared on switch-off, "removed outside anyscribe" and close; it stays set while the display reads failed because Tailscale is down), the exact host of `share.held` (403 otherwise, setting on or off; blocks DNS rebinding, and keeps a leftover or hand-made serve rule from exposing the page while sharing is off). It also refuses an `Origin` header that names any other host (see Mac app hooks). It is not in `create_app()` so TestClient tests keep their "testserver" Host. The `Share` object lives on `app.state.tailnet`; `PUT /api/tailnet` (and `PUT /api/config` with `tailnet`) saves the setting and applies it live. The tray and desktop mode start the server as `python -m anyscribe ui`, so they inherit this with no extra code
 - Web tests: `tests/test_web*.py`, `test_autostart_route.py`, `test_keys_status.py`, `test_ui_port.py`, `test_tailnet.py` (FastAPI TestClient; the tailscale CLI faked)
 
+#### The dashboard inside the Mac app (`ui/src/desktop.ts`)
+The Mac app (Electron, `desktop/`) loads this same dashboard and gives it a bridge, `window.anyscribeDesktop` (contract: `desktop/README.md`, bridge v2 with its amendments). `ui/src/desktop.ts` is the one module that reads it: typed bridge, `desktop` (null in a browser), `isMac`, `useEngineStatus()`, `runningJobs()` (reads `GET /api/jobs`, counts pending and running), and the notes below. Every Mac screen renders only when `desktop` is set, so a browser gets today's dashboard pixel for pixel (checked against the previous bundle in `docs/reviews/2026-11-20-mac-app-2c-ui/checks/`).
+
+"This restart is mine" (the banner's "Restarting anyscribe's engine.", and no outage) is true only while this page's own Restart engine or removal call is in flight: a module variable, not storage, because the app reloads the page only once the engine runs again.
+
+A page that has seen the engine leave running is **doomed**: the app will replace it. `desktop.ts` sets the flag from the first status read and from any status that is not running, and never resets it. Two things read it: the queue's start gate (a doomed page starts no waiting file; the reloaded page does) and the startup recovery claim. Startup recovery resolves only the removal note present when the page loaded (`noteAtLoad`, its `at` checked again just before anything is cleared or claimed), and the Terminal card waits for it.
+
+**The reload after every restart.** The app loads the dashboard's `/` again each time the engine returns to running (2c-app `main.js`, the `loadURL` in the engine status handler). A restart keeps the port, so the page's origin and its storage survive; anything that must outlive a restart is written to storage before the reload can happen:
+- the outage note (`OUTAGE` in sessionStorage, `{job, at}`): written when the engine stops by itself; the reloaded page shows "Running again" naming the job once;
+- the queue of dropped and Dock files (sessionStorage), written inside the callback because the preload acknowledges a file as soon as it returns. A file starts only while the engine reads running and the page is idle or done; it leaves the queue only once the engine accepted it. On a failure it stays at the head and the error screen is the pause (Try again resubmits it; New drops it only when it is the one that failed);
+- the removal note (localStorage, `{at, before}`): resolved in one place (`resolveRemoval`) against the app's own saved `oldLauncher.status().lastRemoval`, and only while the engine reads running. A `lastRemoval` at or after the note means the removal ran (the reloaded page claims it; the live page keeps the note until the card is closed); anything else means nothing ran, and the note goes. The shape of a result never decides it;
+- a first-launch answer the app couldn't save (`firstLaunch.mark` gave `{ok: false, reason}`), shown once things are quiet.
+
+- `components/Layout.tsx`: no Shutdown in the app; on macOS a 28 px drag strip (`.app-drag`, CSS `app-region: drag`) above the logo so the window's buttons clear it; drops and Dock files go to the stored queue and open Transcribe, which starts them one at a time and names those waiting. The overlay reads "Drop to transcribe" only: a browser gives the dragged file's name only on the drop.
+- `components/EngineBanner.tsx`: the engine trouble banner on every page (restarting, in his words while his own call runs; running again naming the watched job; keeps stopping, or stopped without restarting, in one red card with Restart engine, Copy details, Open log folder and the troubleshooting guide).
+- `components/ThisMac.tsx`: Settings "This Mac" in place of Startup (Show anyscribe in, Start at login, Terminal and Claude Code, version, Engine with Restart engine disabled while `runningJobs()` is above zero, the old launcher while installed, how to remove the app).
+- `components/MacCards.tsx`: the old-launcher question and the Terminal cards, used by `App.tsx` on first launch (launcher first, then Terminal) and as the setup wizard's optional last step ("One last thing"). Each question is asked once: Escape or a click outside is the quiet answer (Keep both, Skip for now). "Ready in Terminal" only when the login shell found this app's command (`runsOurs`); "Switch to this app's copy" whenever a copy sits at `~/.local/bin/anyscribe` unused (`occupant`). `terminal.addToPath()` is called only from the card that shows the exact line.
+- Browse in the app puts `pathForFile(file)` in the box (no upload copy); he starts it as in the browser (`components/URLInput.tsx`).
+
 ### Desktop surface (`cli/desktop_cmd.py` + `core/desktop.py`, `core/launcher.py`, `core/service.py`)
 
 Desktop mode makes the Web UI reachable without a terminal, using only the
@@ -295,8 +314,66 @@ bridge contract.
   browser, outside frames are blocked), and the preload bridge `window.anyscribeDesktop`
   (contextIsolation, sandbox, no Node; IPC accepted only from the dashboard's
   origin and the start page).
-- Tests: `npm test` (unit and supervisor), `npm run e2e` (the real app,
-  headless, against a real engine in a throwaway HOME).
+- `src/terminal.js` (bridge `terminal.*`, Node only): "Use from Terminal and
+  Claude Code". Our command is a POSIX sh script at `~/.local/bin/anyscribe`
+  that sets the engine's app-mode environment and execs the app's Python; it
+  is ours only while its marker line and the hash recorded in
+  `~/.anyscribe/runtime/terminal.json` match. What Terminal runs is asked of
+  the login shell (`$SHELL -lic`, random markers, 5 s), never guessed from
+  profile files. A foreign file is never overwritten without `replace`, and is
+  moved to `~/.anyscribe/runtime/replaced/`, never deleted; turning off puts
+  it back only while the path holds exactly our file, else asks. The skill
+  (`install-skill --force`, only when `~/.claude` exists) is removed only when
+  the login shell then finds no anyscribe. `addToPath` writes one line to the
+  login shell's own profile, never twice. A command write is committed by the
+  record: exclusive-create temp names, the record first (the new hash, still
+  accepting the current one), then the file moves; a crash at any point leaves
+  ours ours.
+- `src/old-launcher.js` (bridge `oldLauncher.*`, Node only): the old browser
+  launcher's three pieces (the `.app`, the LaunchAgent, a live tray named in
+  `tray.pid` with a tray's command line), removed by today's
+  `desktop uninstall --json` and then checked one by one; the old login item
+  hands over to the app's own Start at login. The uninstall stops whatever
+  anyscribe answers on the old launcher's port and whatever its `server.pid`
+  names, and the app's engine can be either; no check of the app's can tell
+  them apart. So removal pauses the engine: the uninstall runs inside
+  `Engine.restart({between})`, after the engine and its group have exited and
+  before the next spawn (the step runs at the start of the next run's
+  `_start`, so a stop or quit during it is caught by the one gate after the
+  port check). It refuses exactly like Restart engine, and the result is kept
+  in the main process as `lastRemoval` because the dashboard reloads. While the
+  step runs the engine holds `stepRunning` (for the step's whole life, not the
+  run's), so no start or restart begins even after a stop; quitting calls
+  `killHelpers()` (`run.js`), which SIGKILLs the uninstaller's process group at
+  once, so it cannot outlive the app. Known limit, accepted: a force quit,
+  crash or power loss during the uninstall, then reopening anyscribe within
+  about 25 seconds, can let that orphaned uninstaller stop the new engine once;
+  the crash supervisor restarts it. A durable reservation across app instances
+  (a lock-file protocol) is not built. The app
+  never chooses a port the old launcher records or serves: the manifest's, the
+  login item's (read exactly with `/usr/bin/plutil -extract ProgramArguments
+  json` on macOS, else the XML read, else unknown), 8457, and a live old tray's
+  own port from its command line (`--port N` or `-p N`, else 8457), because
+  the tray's teardown, which the uninstall's SIGTERM starts and quitting does
+  not stop, posts a shutdown to that port. It keeps the port it last ran on
+  (userData `settings.json`, so per-port browser storage stays put). Known
+  limit: an old tray started after the app, on the app's own port, can still
+  reach the app's engine during its own teardown.
+- First-launch questions are recorded in the app's own `settings.json`
+  (userData), never in `~/.anyscribe`. Files opened with the app (`open-file`,
+  a second launch's arguments) are held until the dashboard subscribes. On
+  macOS the dashboard window uses `hiddenInset`; the dashboard draws the drag
+  strip.
+- Open items (phase 3): the Claude Code skill is not refreshed when the app
+  updates (the command runs in app mode, which skips the engine's skill
+  auto-update; re-copy it after each update while the switch is on); the
+  Terminal command embeds the Python path, so moving the app breaks it until
+  the switch is turned on again (rewrite it at launch when the path changed).
+  2c-app and 2c-ui merge together: `hiddenInset` needs the dashboard's drag
+  strip.
+- Tests: `npm test` (unit and supervisor, plus Terminal and old-launcher rules
+  against throwaway homes and the real zsh and bash), `npm run e2e` (the real
+  app, headless, against a real engine in a throwaway HOME).
 
 ### Skill Layer (`skill/`)
 - Claude Code skill files bundled in package, auto-installed to `~/.claude/skills/anyscribe/`
@@ -468,6 +545,7 @@ Not every feature lives on every surface. The asymmetry is intentional per-featu
 | Login auto-start | ✓ (`install-service`/`uninstall-service`) | ✓ (Settings → Startup → "Start at login", macOS/Windows/Linux, needs `[tray]` extra) | Same `core/service.py` (`GET/PUT /api/autostart`); the route writes the dashboard's own port |
 | Legacy config migration | ✓ (`anyscribe migrate`, `--dry-run`) | — | CLI-only. Automatic app-home migration is guarded once per process and invoked by load_config(), load_env() and ensure_app_dirs(); direct path reads do not trigger it. |
 | Drag-and-drop upload | — | ✓ | UI-only |
+| Mac app screens (This Mac, engine banner, Terminal and old-launcher questions, drop and Dock files by path) | — | ✓ (only inside the Mac app) | UI-only by nature: they drive the app through `window.anyscribeDesktop` (`ui/src/desktop.ts`). The Terminal switch writes the same command a CLI install would use; the old-launcher removal runs `anyscribe desktop uninstall --json` |
 | API key management | ✓ (`anyscribe config set <prov>_api_key`) | ✓ (inline per-provider with Test) | UI has richer UX |
 
 ### When to place a feature on which surface

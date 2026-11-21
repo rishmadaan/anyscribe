@@ -1,0 +1,364 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index 9c089ad..16f9119 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -69,9 +69,10 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+ 
+ - **Port**: the port the app last ran on (saved in `settings.json`, so the
+   dashboard's per-port browser storage stays put), else 8470 or the next port
+-  up; never a port the older desktop mode records (its `desktop.json` port,
+-  its login item's port, or 8457), since its uninstall stops whatever answers
+-  there. If the port answers or cannot be bound, the app shows
++  up; never a port the older desktop mode records or serves (its
++  `desktop.json` port, its login item's port read exactly with `plutil` on
++  macOS, 8457, and a live old tray's own `--port`/`-p`), since its uninstall
++  and the old tray's teardown stop whatever answers there. If the port answers or cannot be bound, the app shows
+   "couldn't start" and never connects to or stops whatever holds it. The
+   engine is ready only when `/api/health` reports the pid the app spawned;
+   any other answer is treated as another program on the port, and nothing
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index 372dc38..31cf7f0 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -94,8 +94,9 @@ function portTaken(port, host = '127.0.0.1') {
+ }
+ 
+ // saved: the port the app last ran on. Never one the old launcher's uninstall could target.
+-async function pickPort(home, saved = null) {
+-  const port = logic.choosePort({ saved, avoid: recordedPorts(home) });
++// note(message): written to the app log.
++async function pickPort(home, saved = null, note = () => {}) {
++  const port = logic.choosePort({ saved, avoid: await recordedPorts(home, { note }) });
+   return { port, taken: await portTaken(port) };
+ }
+ 
+@@ -232,7 +233,7 @@ class Engine extends EventEmitter {
+     if (this.pythonError) return this._failBeforeSpawn(run, 'python', { reason: this.pythonError });
+     const logError = this.log.probe(); // every launch, so Try again sees a repaired log
+     if (logError) return this._failBeforeSpawn(run, 'log', { reason: `Can't write the log file: ${logError}` });
+-    const { port, taken } = await pickPort(this.home, this.savedPort());
++    const { port, taken } = await pickPort(this.home, this.savedPort(), (m) => this.log.shell(m));
+     if (!this._current(run)) return;
+     this.port = port;
+     // Never attach to, or stop, whatever already holds the port.
+diff --git a/desktop/src/old-launcher.js b/desktop/src/old-launcher.js
+index a1c86e4..8f894fb 100644
+--- a/desktop/src/old-launcher.js
++++ b/desktop/src/old-launcher.js
+@@ -3,6 +3,7 @@
+ // piece ourselves. Node only; tested in test/old-launcher.test.js with a throwaway HOME.
+ 'use strict';
+ 
++const { execFileSync } = require('node:child_process');
+ const fs = require('node:fs');
+ const path = require('node:path');
+ const { runCapture, lastLine } = require('./run');
+@@ -35,19 +36,38 @@ function manifestPort(home) {
+   }
+ }
+ 
+-// shortcut: reads the XML plist the engine writes; a binary plist reads as no port. Use plutil if
+-// one ever turns up.
+-function loginItemPort(home) {
++// Reading the login item's ProgramArguments exactly, as Python's plistlib does (XML or binary):
++// macOS's own plutil. A seam, so tests can stand in for it off a Mac. Returns its JSON text, or
++// null where plutil is not there.
++const readers = {
++  plutil: (file) =>
++    process.platform === 'darwin'
++      ? execFileSync('/usr/bin/plutil', ['-extract', 'ProgramArguments', 'json', '-o', '-', file], { timeout: 5000 }).toString()
++      : null,
++};
++
++function programArguments(file) {
+   try {
+-    const xml = fs.readFileSync(files(home).loginItem, 'utf8');
+-    const args = xml.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/)[1];
+-    const port = Number([...args.matchAll(/<string>([^<]*)<\/string>/g)].pop()[1]);
+-    return Number.isInteger(port) ? port : null;
++    const args = JSON.parse(readers.plutil(file));
++    if (Array.isArray(args)) return args.map(String);
+   } catch {
+-    return null;
++    // plutil missing or failed: the XML read below
++  }
++  try {
++    const xml = fs.readFileSync(file, 'utf8');
++    const body = xml.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/)[1];
++    return [...body.matchAll(/<string>([^<]*)<\/string>/g)].map((m) => m[1]);
++  } catch {
++    return null; // unknown
+   }
+ }
+ 
++// The login item's port: its last argument, as the engine reads it.
++function loginItemPort(home) {
++  const port = Number(programArguments(files(home).loginItem)?.at(-1));
++  return Number.isInteger(port) ? port : null;
++}
++
+ // The port `desktop uninstall` would stop a server on.
+ function uninstallTarget(home) {
+   const m = manifestPort(home);
+@@ -55,9 +75,24 @@ function uninstallTarget(home) {
+   return loginItemPort(home) ?? ENGINE_DEFAULT_PORT;
+ }
+ 
+-// Every port the old launcher records, which the app never chooses.
+-function recordedPorts(home) {
+-  return [manifestPort(home), loginItemPort(home), ENGINE_DEFAULT_PORT].filter(Number.isInteger);
++// The port a live old tray serves, from its own command line (its teardown posts a shutdown
++// there, whatever the files say now): --port N, --port=N or -p N, else the tray's default 8457.
++// null when no live tray; {port, readable: false} when it names a port that does not parse.
++async function trayPort(home, cmdline = commandLine) {
++  const line = await liveTrayCommand(home, cmdline);
++  if (line == null) return null;
++  const m = line.match(/\stray\b.*?(?:\s--port(?:=|\s+)|\s-p\s+)(\S+)/);
++  if (!m) return { port: ENGINE_DEFAULT_PORT, readable: true };
++  const port = Number(m[1]);
++  return Number.isInteger(port) ? { port, readable: true } : { port: ENGINE_DEFAULT_PORT, readable: false };
++}
++
++// Every port the old launcher records or a live old tray serves: the app never chooses one.
++// note(message): a live tray whose port could not be read (8457 is avoided; the start goes ahead).
++async function recordedPorts(home, { note = () => {}, cmdline } = {}) {
++  const tray = await trayPort(home, cmdline);
++  if (tray && !tray.readable) note("the old menu bar icon's port couldn't be read from its command line; avoiding 8457");
++  return [manifestPort(home), loginItemPort(home), ENGINE_DEFAULT_PORT, tray?.port].filter(Number.isInteger);
+ }
+ 
+ function lexists(p) {
+@@ -83,20 +118,26 @@ async function commandLine(pid) {
+ }
+ 
+ // The old menu bar icon: tray.pid names a live process that is an anyscribe tray.
+-async function trayRunning(home, cmdline = commandLine) {
++// The live old tray's command line, or null (no tray.pid, a dead pid, or not a tray).
++async function liveTrayCommand(home, cmdline = commandLine) {
+   let pid;
+   try {
+     pid = Number.parseInt(fs.readFileSync(files(home).pidFile, 'utf8').trim(), 10);
+   } catch {
+-    return false;
++    return null;
+   }
+-  if (!(pid > 0)) return false;
++  if (!(pid > 0)) return null;
+   try {
+     process.kill(pid, 0);
+   } catch (err) {
+-    if (err.code !== 'EPERM') return false; // EPERM: alive, someone else's
++    if (err.code !== 'EPERM') return null; // EPERM: alive, someone else's
+   }
+-  return TRAY_COMMAND.test(await cmdline(pid));
++  const line = await cmdline(pid);
++  return TRAY_COMMAND.test(line) ? line : null;
++}
++
++async function trayRunning(home, cmdline = commandLine) {
++  return (await liveTrayCommand(home, cmdline)) != null;
+ }
+ 
+ async function pieces(home, cmdline) {
+@@ -187,4 +228,4 @@ async function removePausingEngine(engine, ctx, onResult = () => {}) {
+   return final;
+ }
+ 
+-module.exports = { TRAY_COMMAND, ENGINE_DEFAULT_PORT, files, manifestPort, loginItemPort, uninstallTarget, recordedPorts, trayRunning, pieces, status, remove, removePausingEngine };
++module.exports = { TRAY_COMMAND, ENGINE_DEFAULT_PORT, readers, files, manifestPort, loginItemPort, uninstallTarget, recordedPorts, trayPort, trayRunning, pieces, status, remove, removePausingEngine };
+diff --git a/desktop/test/old-launcher.test.js b/desktop/test/old-launcher.test.js
+index ed46f7b..6771584 100644
+--- a/desktop/test/old-launcher.test.js
++++ b/desktop/test/old-launcher.test.js
+@@ -170,7 +170,7 @@ test('uninstall target: the manifest port, else the login item port, else 8457',
+   assert.equal(launcher.uninstallTarget(s.home), 8470, 'no manifest: the login item');
+   fs.writeFileSync(path.join(s.home, '.anyscribe', 'desktop.json'), JSON.stringify({ port: 8471 }));
+   assert.equal(launcher.uninstallTarget(s.home), 8471, 'the manifest wins');
+-  assert.deepEqual(launcher.recordedPorts(s.home).sort(), [8457, 8470, 8471]);
++  assert.deepEqual((await launcher.recordedPorts(s.home)).sort(), [8457, 8470, 8471]);
+   fs.writeFileSync(path.join(s.home, '.anyscribe', 'desktop.json'), '{}');
+   assert.equal(launcher.uninstallTarget(s.home), 8470, 'an empty manifest counts as none, as in Python');
+   fs.rmSync(s.f.loginItem);
+@@ -197,3 +197,73 @@ test('guard: a live old tray alone still counts as installed on a Mac (C6)', asy
+     pieces: { launcher: 'absent', loginItem: 'absent', menuBarIcon: 'running' },
+   });
+ });
++
++// ---- round 5: the exact plist read and the live tray's own port ----
++
++const logic = require('../src/logic');
++
++function withPlutil(fake, fn) {
++  const real = launcher.readers.plutil;
++  launcher.readers.plutil = fake;
++  return Promise.resolve(fn()).finally(() => (launcher.readers.plutil = real));
++}
++
++test('guard: a binary plist is read exactly through plutil: 8470, so the app picks 8471 (round 5)', async () => {
++  const s = await installed({ tray: false });
++  fs.writeFileSync(s.f.loginItem, Buffer.from('bplist00 not xml at all'));
++  const seen = [];
++  await withPlutil(
++    (file) => (seen.push(file), JSON.stringify(['/py', '-m', 'anyscribe', 'tray', '--port', '8470'])),
++    async () => {
++      assert.equal(launcher.loginItemPort(s.home), 8470);
++      assert.equal(launcher.uninstallTarget(s.home), 8470);
++      assert.equal(logic.choosePort({ avoid: await launcher.recordedPorts(s.home) }), 8471);
++    }
++  );
++  assert.equal(seen[0], s.f.loginItem, 'plutil was asked about the login item');
++});
++
++test('plutil failing: the XML read, then unknown (round 5)', async () => {
++  const s = await installed({ tray: false });
++  await withPlutil(
++    () => {
++      throw new Error('plutil: no such file');
++    },
++    async () => {
++      writePlist(s.f, 8470);
++      assert.equal(launcher.loginItemPort(s.home), 8470, 'the XML read');
++      fs.writeFileSync(s.f.loginItem, Buffer.from('bplist00 not xml at all'));
++      assert.equal(launcher.loginItemPort(s.home), null, 'unknown');
++      assert.equal(logic.choosePort({ avoid: await launcher.recordedPorts(s.home) }), 8470);
++    }
++  );
++});
++
++for (const args of [['--port', '8470'], ['-p', '8470'], ['--port=8470']]) {
++  test(`guard: no files, a live old tray started with ${args.join(' ')}: the app picks 8471 (round 5)`, async () => {
++    const s = await installed({ tray: false });
++    fs.rmSync(s.f.launcher, { recursive: true });
++    fs.rmSync(s.f.loginItem);
++    const tray = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)', '--', '-m', 'anyscribe', 'tray', ...args], { stdio: 'ignore' });
++    started.push(tray);
++    await new Promise((r) => tray.once('spawn', r));
++    fs.writeFileSync(s.f.pidFile, String(tray.pid));
++    assert.deepEqual(await launcher.trayPort(s.home), { port: 8470, readable: true });
++    assert.equal(logic.choosePort({ avoid: await launcher.recordedPorts(s.home) }), 8471);
++    tray.kill('SIGKILL');
++  });
++}
++
++test("a live tray whose port can't be read: 8457 avoided, a note, and the start goes ahead (round 5)", async () => {
++  const s = await installed({ tray: false });
++  const tray = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)', '--', '-m', 'anyscribe', 'tray', '--port', 'abc'], { stdio: 'ignore' });
++  started.push(tray);
++  await new Promise((r) => tray.once('spawn', r));
++  fs.writeFileSync(s.f.pidFile, String(tray.pid));
++  const notes = [];
++  const ports = await launcher.recordedPorts(s.home, { note: (m) => notes.push(m) });
++  assert.ok(ports.includes(8457));
++  assert.equal(logic.choosePort({ avoid: ports }), 8470);
++  assert.match(notes[0], /couldn't be read/);
++  tray.kill('SIGKILL');
++});
+diff --git a/desktop/test/removal.e2e.js b/desktop/test/removal.e2e.js
+index 75b7464..2f7e6f6 100644
+--- a/desktop/test/removal.e2e.js
++++ b/desktop/test/removal.e2e.js
+@@ -103,10 +103,9 @@ test('A1: a stale server.pid that names the app engine; the manifest on 8457', {
+   assert.equal(fs.existsSync(path.join(home, '.anyscribe', 'server.pid')), false, 'and so is server.pid');
+ });
+ 
+-// The A2 collision: a binary LaunchAgent plist on 8470 (the engine's plistlib reads it, the app's
+-// XML reading does not, so the app's engine also takes 8470), no manifest, and a live process with
+-// a tray's command line named in tray.pid.
+-async function binaryPlistFixture(home) {
++// A binary LaunchAgent plist on 8470 (the engine's plistlib reads it), no manifest, and a live
++// process with a tray's command line (trayArgs after `tray`) named in tray.pid.
++async function binaryPlistFixture(home, trayArgs = []) {
+   const plist = launcher.files(home).loginItem;
+   fs.mkdirSync(path.dirname(plist), { recursive: true });
+   execFileSync(python, ['-c', 'import plistlib, sys; open(sys.argv[1], "wb").write(plistlib.dumps({"Label": "com.anyscribe.tray", "ProgramArguments": ["/py", "-m", "anyscribe", "tray", "--port", "8470"]}, fmt=plistlib.FMT_BINARY))', plist]);
+@@ -114,19 +113,19 @@ async function binaryPlistFixture(home) {
+   const env = { ...process.env, HOME: home };
+   const enginePort = execFileSync(python, ['-c', 'from anyscribe.core.desktop import installed_port; print(installed_port())'], { env }).toString().trim();
+   assert.equal(enginePort, '8470', "the engine's own reading: the old launcher is on 8470");
+-  assert.equal(launcher.uninstallTarget(home), launcher.ENGINE_DEFAULT_PORT, "the app's XML reading misses it (the shortcut)");
+-  const tray = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)', '--', '-m', 'anyscribe', 'tray'], { stdio: 'ignore' });
++  const tray = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)', '--', '-m', 'anyscribe', 'tray', ...trayArgs], { stdio: 'ignore' });
+   started.push(tray);
+   await new Promise((r) => tray.once('spawn', r));
+   fs.writeFileSync(path.join(home, '.anyscribe', 'tray.pid'), String(tray.pid));
+   return tray;
+ }
+ 
+-test('A2: a binary LaunchAgent plist on the app\'s port with a live old tray, no manifest', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async () => {
++test('A2: a binary LaunchAgent plist on 8470 with a live old tray on 8470, no manifest', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async () => {
+   const { home } = await realEngine();
+-  await binaryPlistFixture(home);
++  // The old tray as desktop mode starts it, with its port: the app now avoids 8470 (round 5).
++  await binaryPlistFixture(home, ['--port', '8470']);
+   const engine = await start(home);
+-  assert.equal(engine.port, 8470, "the app's engine is on the old launcher's port");
++  assert.equal(engine.port, 8471, "the app's engine avoids the old launcher's port");
+   const oldPid = engine.run.child.pid;
+   const { result, during } = await removeWithRealUninstaller(engine, home);
+   await assertSurvived(engine, oldPid, during);
+@@ -144,9 +143,15 @@ test('A2: a binary LaunchAgent plist on the app\'s port with a live old tray, no
+ 
+ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+ 
+-test('B2: quitting during a slow uninstall ends it; anyscribe reopened on the same home keeps its engine', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async () => {
++test('B2: quitting during a slow uninstall ends it; anyscribe reopened on the same home keeps its engine', { skip: !python && 'set ANYSCRIBE_DEV_PYTHON' }, async (t) => {
+   const { home } = await realEngine();
++  // This test is about quitting, not ports: it keeps the collision on purpose. The tray names no
++  // port, and the plist is treated as unreadable (as on a machine with neither plutil nor XML), so
++  // the app's engine lands on the uninstall's target, 8470.
+   await binaryPlistFixture(home);
++  const realPlutil = launcher.readers.plutil;
++  launcher.readers.plutil = () => null;
++  t.after(() => (launcher.readers.plutil = realPlutil));
+   const first = await start(home);
+   assert.equal(first.port, 8470);
+   // The real uninstaller, held back: the helper process itself waits until the test says go (at
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index 8796114..2988167 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -249,9 +249,15 @@ bridge contract.
+   about 25 seconds, can let that orphaned uninstaller stop the new engine once;
+   the crash supervisor restarts it. A durable reservation across app instances
+   (a lock-file protocol) is not built. The app
+-  still avoids the old launcher's ports and keeps the port it last ran on
+-  (userData `settings.json`, so per-port browser storage stays put), but only
+-  as tidiness.
++  never chooses a port the old launcher records or serves: the manifest's, the
++  login item's (read exactly with `/usr/bin/plutil -extract ProgramArguments
++  json` on macOS, else the XML read, else unknown), 8457, and a live old tray's
++  own port from its command line (`--port N` or `-p N`, else 8457), because
++  the tray's teardown, which the uninstall's SIGTERM starts and quitting does
++  not stop, posts a shutdown to that port. It keeps the port it last ran on
++  (userData `settings.json`, so per-port browser storage stays put). Known
++  limit: an old tray started after the app, on the app's own port, can still
++  reach the app's engine during its own teardown.
+ - First-launch questions are recorded in the app's own `settings.json`
+   (userData), never in `~/.anyscribe`. Files opened with the app (`open-file`,
+   a second launch's arguments) are held until the dashboard subscribes. On
+diff --git a/docs/building/journal/2026-11-20-mac-app-2c-app.md b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+index c83a71f..3a42a9b 100644
+--- a/docs/building/journal/2026-11-20-mac-app-2c-app.md
++++ b/docs/building/journal/2026-11-20-mac-app-2c-app.md
+@@ -161,3 +161,21 @@ app instances would be a hand-made lock-file protocol, so it is not built.
+ 
+ The integration test holds the real uninstaller until the new engine answers;
+ without `killHelpers()` it stops that engine every time.
++
++## Round 5: the old tray's own port
++
++The uninstall's SIGTERM starts the real old tray's teardown, which posts a
++shutdown to the port in the tray's own command line. That request lives in the
++tray's process group, so quitting (which kills only the uninstaller's group)
++does not stop it, and a reopened app on that port could be shut down (D1, a
++normal quit, not the accepted force-quit case). Files and the live tray can
++disagree (an edited or deleted plist, a reinstall with another `--port`, a tray
++started by hand), so the app now avoids the live tray's own port too (`--port
++N`, `--port=N` or `-p N`, else 8457; unreadable: avoid 8457, log it, start
++anyway), and reads the login item exactly with `/usr/bin/plutil -extract
++ProgramArguments json -o -` on macOS (a reader seam in tests), falling back to
++the XML read, then unknown. The real plutil call runs only on a Mac; it is
++checked in the Mac walk.
++
++**Known limit, accepted:** an old tray started after the app, on the app's own
++port, can still reach the app's engine during its own teardown.

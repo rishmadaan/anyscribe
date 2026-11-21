@@ -189,7 +189,7 @@ The rule chosen: where the wizard is when the reply lands decides what the
 reply may do. The local step never shown: as before (set the form, route,
 watch from the first render). Showing now: the reply is handed to the step,
 and the step watches it only if nothing newer has spoken (no accepted status
-read of its own and no start sent), doing what its own running read does.
+read of its own yet), doing what its own running read does.
 Shown and since left: dropped, because the step's own reads and any start it
 sent are newer. "Left" stays left for the rest of that wizard, so a second
 visit does not take a reply older than the first. Where the wizard is comes
@@ -198,8 +198,8 @@ saw when it was sent. The step stays the one writer of "a setup is watched".
 
 Proof: three new tab-harness cases, one per ordering above plus "the step
 already read not running", each failing on the previous build and passing on
-the new one, and the existing cases still pass. Each new guard was removed in
-turn and a named case failed; one half of the step's check (no start sent) is
-unreachable while the other half and the "left stays left" rule hold, and is
-kept as the decision wrote it
-(`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).
+the new one, and the existing cases still pass. Each guard was removed in
+turn and a named case failed. A second half of the step's check, "no start
+sent", was removed: no case could tell it apart, because a start needs a pick
+and the pick comes only from the step's own accepted read, so the first half
+already covers it (`docs/reviews/2026-11-21-wizard-opening-read/proof.md`).

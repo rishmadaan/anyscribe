@@ -187,10 +187,12 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
   // hands the step what it read; the step reports whether a setup is watched.
   // What the wizard has heard when the reply lands decides what it may do (L1).
   useEffect(() => {
-    limited(getLocalStatus)
+    let live = true; // false once this wizard closed (or StrictMode replays the effect)
+    const ctl = new AbortController();
+    limited(getLocalStatus, ctl)
       .then((s) => {
         // heard: the step's own accepted read, or a start it sent, is newer
-        if (!s.setup_running || heardRef.current) return;
+        if (!live || !s.setup_running || heardRef.current) return;
         // shown before: the step takes it, now if mounted, else at its next
         // mount; the form and the route stay
         if (localShownRef.current) return setAdopt(s);
@@ -204,6 +206,10 @@ export default function OnboardingWizard({ onClose, offerTerminal }: Props) {
         setStep("offline_opt_in");
       })
       .catch(() => undefined);
+    return () => {
+      live = false;
+      ctl.abort();
+    };
   }, [setStep]);
 
   // Dismissing (Skip for now) sets the localStorage flag so we don't pop the

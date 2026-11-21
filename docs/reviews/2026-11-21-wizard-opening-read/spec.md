@@ -17,7 +17,7 @@ Read Sol's L1 section in full, and the lead's verdict line for L1 in that packet
    - **The local step has never been shown in this wizard** (still on Welcome, Provider or API key): exactly as today. Set the form (local, enabled, the running model), hand the reply to the step, and route to `offline_opt_in`.
    - **The local step is showing now:** hand the reply to the mounted step. The wizard shell changes neither the form nor the route; the step decides (rule 2).
    - **The local step was shown and has since been left:** drop the reply. The step's own reads, and any start it sent, are newer than the reply.
-   
+
    "Has been shown" is known when the reply lands, so read it from a ref or equivalent, never from a closure captured when the read was sent.
 2. **The step accepts a handed reply only if nothing newer has spoken.** Nothing newer means no accepted status read of its own yet (`status` is still null) and no start request sent in this mount (`startGenRef.current === 0`). On accepting, it does what its own running read does: turn local on, select `setup_last_model` when it is set, and start watching. Otherwise it ignores the reply. A reply present when the step mounts is accepted at mount, as today: watching starts true on the first render, with no render where closing doesn't ask.
    - *Lead decision, 2026-11-21 (round 0):* the "no start sent" half is dropped. It was an equivalent mutant (Mii_start): a start needs a pick, and the pick comes only from the step's own accepted read, so `status` is already set. The check is `status === null` alone.

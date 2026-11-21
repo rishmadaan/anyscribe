@@ -1,0 +1,1380 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index 0f6f3ab..8c40a62 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -80,8 +80,11 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+   blocked.
+ - **Crash**: an exit after ready restarts the engine and reloads the dashboard;
+   the third exit within 60 s stops retrying ("Engine stopped · couldn't restart").
+-- **Stop**: close stdin, `POST /api/shutdown`, wait up to 10 s, then kill the
+-  child by the pid the app started.
++  Any exit, before or after ready, also kills what is left of the engine's
++  process group (its helpers: pip, yt-dlp, ffmpeg).
++- **Stop**: close stdin and send SIGTERM to the engine's process group (it is
++  spawned as its own group); if it has not exited after 10 s, SIGKILL the
++  group. No HTTP request: whoever answers on the port later may not be ours.
+ - **Windows**: closing hides; a second launch or reopening shows the window;
+   a launch with `--hidden`, or one macOS reports as a login launch
+   (`wasOpenedAtLogin`), opens no window. Not yet checked on macOS 13 and later.
+@@ -91,12 +94,16 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+   SIGTERM. Jobs pending or running: the question "Transcriptions are still
+   running" with Quit When Done (default), Stop and Quit, Cancel. Job list
+   unknown (the last read timed out, failed or had the wrong shape): "anyscribe
+-  couldn't check for running transcriptions" with Quit Anyway and Cancel
+-  (default). Quit When Done quits only on a known list with nothing left.
+-  A job started in the 2 s before quitting may not be asked about.
+-- **Menu bar**: polls `GET /api/jobs` every 2 s (a failed read keeps the last list) and shows
+-  Ready, Transcribing with each job's stage, Finished while the window was
+-  closed, or Engine stopped. Dock mode: `menubar` (default), `both`, `dock`.
++  couldn't check which transcriptions are running" with the same three
++  buttons. Quit When Done quits only on a known list with nothing left.
++  A job started in the 2 s before quitting may not be asked about. During a
++  logout, any question cancels the logout (macOS is told before the answer
++  comes); after Stop and Quit, log out again.
++- **Menu bar**: polls `GET /api/jobs` every 2 s (a failed read keeps the last
++  list; from the third failed read in a row the header ends "· not answering")
++  and shows Ready, Transcribing with each job's stage, Finished while the
++  window was closed (failed first, then newest), or Engine stopped. Waiting
++  and finished rows are capped at 5 plus "and N more"; running rows always show. Dock mode: `menubar` (default), `both`, `dock`.
+ 
+ ## The bridge: `window.anyscribeDesktop`
+ 
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index f05da08..8dbe498 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -1,8 +1,8 @@
+ // Starts, watches and stops the anyscribe engine (`python -m anyscribe ui`).
+-// Node only (no Electron), so the tests drive it with a fake engine.
++// Node only (no Electron), so the tests drive it with a fake engine or with seams.
+ 'use strict';
+ 
+-const { spawn } = require('node:child_process');
++const childProcess = require('node:child_process');
+ const EventEmitter = require('node:events');
+ const fs = require('node:fs');
+ const net = require('node:net');
+@@ -35,8 +35,8 @@ function trimLog(file, max = LOG_MAX, keep = LOG_KEEP) {
+ }
+ 
+ // ~/.anyscribe/logs/app.log: the engine's output plus one [app] line per start, stop, crash, restart.
+-// Never throws: if the file cannot be written, `error` says why and the in-memory tail
+-// (Copy details) still works.
++// Never throws. `probe()` (before every launch) says whether the file can be appended to now;
++// a failed write keeps the in-memory tail (Copy details) and the next good write clears it.
+ class AppLog {
+   constructor(file) {
+     this.file = file;
+@@ -49,11 +49,21 @@ class AppLog {
+       this.error = err.message;
+     }
+   }
++  probe() {
++    try {
++      fs.mkdirSync(path.dirname(this.file), { recursive: true });
++      fs.appendFileSync(this.file, '');
++      this.error = null;
++    } catch (err) {
++      this.error = err.message;
++    }
++    return this.error;
++  }
+   write(text) {
+     this.recent = (this.recent + text).slice(-32_768);
+-    if (this.error) return;
+     try {
+       fs.appendFileSync(this.file, text);
++      this.error = null;
+     } catch (err) {
+       this.error = err.message;
+     }
+@@ -95,39 +105,52 @@ async function pickPort(home) {
+   return { port, taken: await portTaken(port) };
+ }
+ 
+-function exited(child) {
+-  return child.exitCode !== null || child.signalCode !== null;
++// Signal a process group (the engine's pid, negated) so its helpers (pip, yt-dlp, ffmpeg) go
++// with it; if the group cannot be signalled for another reason, the pid alone. "No such
++// process" means it is already gone.
++function killGroup(pid, signal) {
++  try {
++    process.kill(-pid, signal);
++  } catch (err) {
++    if (err.code === 'ESRCH') return;
++    try {
++      process.kill(pid, signal);
++    } catch {
++      // already gone
++    }
++  }
+ }
+ 
+-function waitExit(child, ms) {
+-  if (exited(child)) return Promise.resolve(true);
+-  return new Promise((resolve) => {
+-    const timer = setTimeout(() => resolve(false), ms);
+-    child.once('exit', () => {
+-      clearTimeout(timer);
+-      resolve(true);
+-    });
+-  });
++// GET /api/health: the parsed body, or null when nothing answers with JSON.
++async function health(port) {
++  try {
++    const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
++    return res.ok ? await res.json() : null;
++  } catch {
++    return null;
++  }
+ }
+ 
+-// Signal the engine's process group (its pid, negated), so its helpers go with it; if that
+-// fails, the engine's own pid.
+-function killGroup(child, signal) {
++// GET /api/jobs, validated; null when the list cannot be known (timeout, error status, bad
++// JSON, wrong shape): a slow engine may still be transcribing.
++async function jobs(port) {
+   try {
+-    process.kill(-child.pid, signal);
++    const res = await fetch(`http://127.0.0.1:${port}/api/jobs`, { signal: AbortSignal.timeout(2000) });
++    return res.ok ? logic.validJobs(await res.json()) : null;
+   } catch {
+-    try {
+-      child.kill(signal);
+-    } catch {
+-      // already gone
+-    }
++    return null;
+   }
+ }
+ 
+ const lastLine = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean).pop() || null;
+ 
++// The supervisor decides from the child process, not from remembered facts. `this.run` is the
++// one current launch, set when a start or restart is accepted and cleared only by that child's
++// exit (or a failure before spawn). Every late continuation passes one gate:
++// `run === this.run && !run.cancelled`.
+ class Engine extends EventEmitter {
+   // python: the interpreter; prefixArgs: what goes before `ui ...` (tests swap in a fake engine).
++  // spawn, health, jobs, killGroup: seams for the tests, defaulting to the real ones.
+   constructor({
+     python,
+     prefixArgs = ['-m', 'anyscribe'],
+@@ -138,21 +161,23 @@ class Engine extends EventEmitter {
+     stopWaitMs = 10_000,
+     pythonError = null,
+     packaged = false,
++    spawn = childProcess.spawn,
++    health: healthSeam = health,
++    jobs: jobsSeam = jobs,
++    killGroup: killSeam = killGroup,
+   }) {
+     super();
+     Object.assign(this, { python, prefixArgs, home, env, log, readyTimeoutMs, stopWaitMs, pythonError, packaged });
++    Object.assign(this, { spawn, health: healthSeam, readJobs: jobsSeam, killGroup: killSeam });
+     this.state = 'stopped';
+     this.port = null;
+     this.lastExit = null;
+     this.stoppedRestarting = false;
+-    this.failure = null; // {kind: 'exited'|'port'|'timeout'|'crashes'|'python', reason, lines} for the start window
+-    this.child = null;
+-    this.verified = null; // the child whose pid /api/health reported
++    this.failure = null; // {kind: 'exited'|'port'|'timeout'|'crashes'|'python'|'log', reason, lines} for the start window
++    this.run = null;
++    this.restartPending = false;
++    this.quitting = false; // set at quit: never spawn again
+     this.crashes = new logic.CrashWindow();
+-    // Start, stop and restart run one at a time, in call order. A stop bumps `gen` the moment it
+-    // is called, so a launch already under way (or a crash restart not yet run) stands down.
+-    this.queue = Promise.resolve();
+-    this.gen = 0;
+   }
+ 
+   status() {
+@@ -165,133 +190,150 @@ class Engine extends EventEmitter {
+     this.emit('status', this.status());
+   }
+ 
+-  _enqueue(operation) {
+-    const run = this.queue.then(operation);
+-    this.queue = run.catch(() => {});
+-    return run;
+-  }
+-
+-  _stale(gen) {
+-    return gen !== this.gen;
+-  }
+-
+-  _fail(kind, { code = null, signal = null, reason = null, lines = [] } = {}) {
+-    this.child = null;
+-    this.lastExit = { code, signal, reason };
+-    this.failure = { kind, reason, lines };
+-    this.log.shell(`engine not started: ${kind}${reason ? ` (${reason})` : ''}`);
+-    this._set('stopped');
+-    return false;
++  _current(run) {
++    return run === this.run && !run.cancelled;
+   }
+ 
+   // User-initiated start: launch, Try again. Clears the crash count.
+   start() {
+-    const gen = this.gen;
+-    return this._enqueue(() => {
+-      if (this._stale(gen)) return false;
+-      this.crashes.reset();
+-      this.stoppedRestarting = false;
+-      return this._launch('starting', false, gen);
+-    });
++    if (this.run || this.quitting) return Promise.resolve(false);
++    this.crashes.reset();
++    this.stoppedRestarting = false;
++    return this._launch('starting', false);
+   }
+ 
+-  async _launch(state, auto, gen) {
+-    if (this._stale(gen)) return false;
++  // Resolves true once this run is ready, false when it ends first.
++  _launch(state, auto) {
++    let settle;
++    const done = new Promise((resolve) => (settle = resolve));
++    let exited;
++    const exitedPromise = new Promise((resolve) => (exited = resolve));
++    const run = { child: null, cancelled: false, restartRequested: false, ready: false, failure: null, auto, stdout: '', stderr: '', settle, exited, exitedPromise, next: null };
++    this.run = run;
+     this.failure = null;
+     if (this.state !== state) this._set(state);
+-    if (this.pythonError) return this._fail('python', { reason: this.pythonError });
+-    if (this.log.error) return this._fail('log', { reason: `Can't write the log file: ${this.log.error}` });
++    this._start(run).catch((err) => this._failBeforeSpawn(run, 'exited', { reason: err.message }));
++    return done;
++  }
++
++  async _start(run) {
++    if (this.pythonError) return this._failBeforeSpawn(run, 'python', { reason: this.pythonError });
++    const logError = this.log.probe(); // every launch, so Try again sees a repaired log
++    if (logError) return this._failBeforeSpawn(run, 'log', { reason: `Can't write the log file: ${logError}` });
+     const { port, taken } = await pickPort(this.home);
+-    if (this._stale(gen)) return false; // stopped during the port check: spawn nothing
++    if (!this._current(run)) return;
+     this.port = port;
+     // Never attach to, or stop, whatever already holds the port.
+-    if (taken) return this._fail('port', { reason: `another program is using port ${port}` });
++    if (taken) return this._failBeforeSpawn(run, 'port', { reason: `another program is using port ${port}` });
+     let child;
+     try {
+       // The packaged Python's add-ons folder; a dev venv ignores user site-packages.
+       if (this.packaged) fs.mkdirSync(logic.userSitePackages(this.home), { recursive: true });
+       const args = [...this.prefixArgs, ...logic.engineArgs(port).slice(2)];
+       // detached: the engine leads its own process group from birth (not unref'd: the app still
+-      // holds it and its stdin), so stopping the group also stops its helpers (pip, yt-dlp, ffmpeg).
+-      child = spawn(this.python, args, { env: this.env, cwd: this.home, stdio: 'pipe', detached: true });
++      // holds it and its stdin), so signalling the group also reaches its helpers.
++      child = this.spawn(this.python, args, { env: this.env, cwd: this.home, stdio: 'pipe', detached: true });
+     } catch (err) {
+-      return this._fail('exited', { reason: err.message, lines: [`engine couldn't run: ${err.message}`] });
++      return this._failBeforeSpawn(run, 'exited', { reason: err.message, lines: [`engine couldn't run: ${err.message}`] });
+     }
+-    const attempt = { child, gen, ready: false, exit: null, stdout: '', stderr: '', startedAt: Date.now() };
+-    this.child = child;
++    run.child = child;
++    run.port = port;
++    run.startedAt = Date.now();
+     child.stdin.on('error', () => {}); // EPIPE once the engine is gone
+     child.stdout.on('data', (d) => {
+       this.log.write(d.toString());
+-      attempt.stdout = (attempt.stdout + d).slice(-8192);
++      run.stdout = (run.stdout + d).slice(-8192);
+     });
+     child.stderr.on('data', (d) => {
+       this.log.write(d.toString());
+-      attempt.stderr = (attempt.stderr + d).slice(-8192);
+-    });
+-    child.on('error', (error) => {
+-      attempt.exit ??= { code: null, signal: null, error };
+-    });
+-    child.on('exit', (code, signal) => {
+-      attempt.exit ??= { code, signal };
+-      if (attempt.ready) this._onExit(attempt);
++      run.stderr = (run.stderr + d).slice(-8192);
+     });
++    child.on('error', (error) => this._onExit(run, { code: null, signal: null, error }));
++    child.on('exit', (code, signal) => this._onExit(run, { code, signal }));
+     this.log.shell(`engine started (pid ${child.pid}, port ${port})`);
+-    return this._waitReady(attempt, port, state, auto);
++    this._waitReady(run);
+   }
+ 
+-  async _waitReady(attempt, port, state, auto) {
++  async _waitReady(run) {
+     const deadline = Date.now() + this.readyTimeoutMs;
++    const pid = run.child.pid;
+     for (;;) {
+-      if (this._stale(attempt.gen)) return false; // a stop was asked for; it stops this child
+-      if (attempt.exit) return this._exitedEarly(attempt, state, auto);
+-      const health = await this._health(port, attempt.child.pid);
+-      if (this._stale(attempt.gen)) return false;
+-      // anyscribe answered, but not our child: another program holds the port. Send it nothing.
+-      if (health === 'other') {
+-        await this._kill(attempt.child);
+-        return this._fail('port', { reason: `another program is using port ${port}` });
+-      }
+-      if (health === 'ours') {
+-        attempt.ready = true;
+-        this.verified = attempt.child;
+-        this.log.shell(`engine ready (pid ${attempt.child.pid}, port ${port})`);
+-        this.lastExit = null;
+-        this._set('running');
+-        return true;
++      if (!this._current(run)) return;
++      const body = await this.health(run.port);
++      if (!this._current(run)) return; // the child exited (or a stop came) while we asked: drop the answer
++      if (body?.app === 'anyscribe') {
++        if (body.pid === pid) {
++          run.ready = true;
++          this.log.shell(`engine ready (pid ${pid}, port ${run.port})`);
++          this.lastExit = null;
++          this._set('running');
++          run.settle(true);
++          return;
++        }
++        // anyscribe answered, but not our child: another program holds the port. Send it nothing.
++        run.failure = { kind: 'port', reason: `another program is using port ${run.port}` };
++        this.killGroup(pid, 'SIGKILL');
++        return;
+       }
+       if (Date.now() > deadline) {
+-        await this._kill(attempt.child);
+-        return this._fail('timeout', { reason: null });
++        run.failure = { kind: 'timeout', reason: null };
++        this.killGroup(pid, 'SIGKILL');
++        return;
+       }
+       await sleep(100);
+     }
+   }
+ 
+-  _exitedEarly(attempt, state, auto) {
+-    const { code, signal, error } = attempt.exit;
+-    const reason = error ? error.message : lastLine(attempt.stderr);
+-    if (auto) return this._crashed({ code, signal, reason, child: attempt.child });
+-    const secs = ((Date.now() - attempt.startedAt) / 1000).toFixed(1);
+-    const head = error ? `engine couldn't run: ${error.message}` : `engine exited with ${signal ? `signal ${signal}` : `code ${code}`} after ${secs} s`;
+-    const lines = [head, ...attempt.stderr.split('\n').filter((l) => l.trim()).slice(-8), `log: ${this._tilde(this.log.file)}`];
+-    return this._fail('exited', { code, signal, reason, lines });
++  _failBeforeSpawn(run, kind, { reason = null, lines = [] } = {}) {
++    if (this.run !== run) return;
++    this.run = null;
++    this._stopped(kind, { reason, lines });
++    run.settle(false);
++    run.exited();
+   }
+ 
+-  // An exit nobody asked for, after the engine was ready.
+-  _onExit(attempt) {
+-    if (this._stale(attempt.gen) || this.child !== attempt.child) return;
+-    const { code, signal } = attempt.exit;
+-    this._crashed({ code, signal, reason: lastLine(attempt.stderr), child: attempt.child });
++  _stopped(kind, { code = null, signal = null, reason = null, lines = [] }) {
++    this.lastExit = { code, signal, reason };
++    this.failure = { kind, reason, lines };
++    this.log.shell(`engine not started: ${kind}${reason ? ` (${reason})` : ''}`);
++    this._set('stopped');
+   }
+ 
+-  _crashed({ code, signal, reason, child }) {
+-    // Whatever the dead engine left in its group (pip, yt-dlp, ffmpeg) goes with it, once.
+-    try {
+-      process.kill(-child.pid, 'SIGKILL');
+-    } catch (err) {
+-      if (err.code !== 'ESRCH') this.log.shell(`couldn't stop the engine's helpers: ${err.message}`);
++  // The one exit handler: every end of a spawned run comes here once, and decides what next.
++  _onExit(run, { code, signal, error }) {
++    if (run.done) return;
++    run.done = true;
++    clearTimeout(run.killTimer);
++    if (this.run === run) this.run = null; // first, so a late health or jobs answer is dropped
++    const pid = run.child.pid;
++    // Whatever the dead engine left in its group goes with it, once (every exit: a helper may
++    // have ignored the SIGTERM that a stop sent).
++    this.killGroup(pid, 'SIGKILL');
++    const reason = error ? error.message : lastLine(run.stderr);
++    if (run.failure) {
++      this._stopped(run.failure.kind, { code, signal, reason: run.failure.reason });
++    } else if (run.cancelled) {
++      this.log.shell(`engine stopped (pid ${pid})`);
++      if (run.restartRequested && !this.quitting) {
++        run.next = this._launch('restarting', false);
++      } else {
++        this.lastExit = null;
++        this._set('stopped');
++      }
++    } else if (run.ready || run.auto) {
++      this._crashed({ code, signal, reason });
++    } else {
++      const secs = ((Date.now() - run.startedAt) / 1000).toFixed(1);
++      const head = error ? `engine couldn't run: ${error.message}` : `engine exited with ${signal ? `signal ${signal}` : `code ${code}`} after ${secs} s`;
++      const lines = [head, ...run.stderr.split('\n').filter((l) => l.trim()).slice(-8), `log: ${this._tilde(this.log.file)}`];
++      this._stopped('exited', { code, signal, reason, lines });
+     }
+-    this.child = null;
++    run.settle(false);
++    run.exited();
++  }
++
++  // An exit nobody asked for: after ready, or an automatic restart that died early.
++  _crashed({ code, signal, reason }) {
+     this.lastExit = { code, signal, reason };
+     this.log.shell(`engine stopped unexpectedly (code ${code}, signal ${signal})`);
+     if (this.crashes.record(Date.now())) {
+@@ -303,121 +345,98 @@ class Engine extends EventEmitter {
+       };
+       this.log.shell('engine stopped 3 times in a minute; not restarting it');
+       this._set('stopped');
+-      return false;
++      return;
+     }
++    if (this.quitting) return this._set('stopped');
+     this.log.shell('restarting the engine');
+-    this._set('restarting');
+-    const gen = this.gen;
+-    this._enqueue(() => this._launch('restarting', true, gen));
+-    return false;
+-  }
+-
+-  // 'ours' when anyscribe answers with our child's pid (slice 2a's /api/health "pid"), 'other'
+-  // when it answers with any other pid or none, null while nothing answers as anyscribe.
+-  async _health(port, pid) {
+-    try {
+-      const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
+-      if (!res.ok) return null;
+-      const body = await res.json();
+-      if (body?.app !== 'anyscribe') return null;
+-      return body.pid === pid ? 'ours' : 'other';
+-    } catch {
+-      return null;
+-    }
+-  }
+-
+-  async _kill(child) {
+-    if (exited(child)) return;
+-    killGroup(child, 'SIGKILL'); // the group this shell started, never a name match
+-    await waitExit(child, 2000);
++    this._launch('restarting', true);
+   }
+ 
+-  _url(p) {
+-    return `http://127.0.0.1:${this.port}${p}`;
++  // The one stop: stdin closed, SIGTERM to the group, SIGKILL to the group if no exit comes in
++  // time. No HTTP request: whoever answers on the port later may not be ours. Resolves on exit.
++  stop() {
++    return this._cancel(this.run, 'stopping the engine');
+   }
+ 
+-  // Close stdin, ask politely, wait up to 10 s, then kill the child by its pid.
+-  stop() {
+-    this.gen++; // claimed now: anything already under way stands down
+-    return this._enqueue(() => this._stopNow());
++  // At quit: the same stop, without waiting (a logout will not wait), and never spawn again.
++  stopForQuit() {
++    this.quitting = true;
++    this._cancel(this.run, 'quitting: stopping the engine');
+   }
+ 
+-  async _stopNow() {
+-    this.gen++;
+-    const child = this.child;
+-    if (!child) {
++  _cancel(run, words) {
++    if (!run) {
+       if (this.state !== 'stopped') this._set('stopped');
+-      return;
++      return Promise.resolve();
+     }
+-    this.log.shell(`stopping the engine (pid ${child.pid})`);
+-    child.stdin.end();
+-    // Only a server proven to be this child is asked to shut down; anything else on the port is
+-    // not ours to stop. The child is stopped by its pid regardless.
+-    if (this.verified === child) {
+-      try {
+-        await fetch(this._url('/api/shutdown'), { method: 'POST', signal: AbortSignal.timeout(2000) });
+-      } catch {
+-        // already gone, or not answering: the wait below decides
+-      }
++    run.cancelled = true;
++    if (!run.child) {
++      // Not spawned yet: the late port check sees it is no longer current and spawns nothing.
++      this.run = null;
++      this.lastExit = null;
++      this._set('stopped');
++      run.settle(false);
++      run.exited();
++      return run.exitedPromise;
+     }
+-    if (!(await waitExit(child, this.stopWaitMs))) {
+-      this.log.shell(`engine still running after ${this.stopWaitMs / 1000} s; killing pid ${child.pid}`);
+-      await this._kill(child);
++    if (!run.terminating) {
++      run.terminating = true;
++      const pid = run.child.pid;
++      this.log.shell(`${words} (pid ${pid})`);
++      run.child.stdin.end();
++      this.killGroup(pid, 'SIGTERM');
++      run.killTimer = setTimeout(() => {
++        this.log.shell(`engine still running after ${this.stopWaitMs / 1000} s; killing pid ${pid}`);
++        this.killGroup(pid, 'SIGKILL');
++      }, this.stopWaitMs);
+     }
+-    this.log.shell(`engine stopped (pid ${child.pid})`);
+-    this.child = null; // the queue lets nothing else set it while this stop runs
+-    this.lastExit = null;
+-    this._set('stopped');
++    return run.exitedPromise;
+   }
+ 
+-  // Refused while any job is pending or running, or while that cannot be known.
+-  // Queued like start and stop, so two restarts run one after the other.
+-  restart() {
++  // Refused while any job is pending or running, or while that cannot be known, and while
++  // another restart is pending (not queued).
++  async restart() {
++    if (this.restartPending) return { ok: false, reason: 'A restart is already under way.' };
+     if (this.state === 'starting' || this.state === 'restarting') {
+-      return Promise.resolve({ ok: false, reason: 'The engine is already starting.' });
++      return { ok: false, reason: 'The engine is already starting.' };
+     }
+-    return this._enqueue(async () => {
+-      const refusal = logic.restartRefusal(await this.jobs());
++    if (this.quitting) return { ok: false, reason: 'anyscribe is quitting.' };
++    this.restartPending = true;
++    try {
++      const run = this.run;
++      const list = run ? await this.jobs() : [];
++      if (run !== this.run || run?.cancelled || this.quitting) {
++        return { ok: false, reason: 'The engine was stopped while the restart was being checked.' };
++      }
++      const refusal = logic.restartRefusal(list);
+       if (refusal) return { ok: false, reason: refusal };
+-      await this._stopNow();
+       this.crashes.reset();
+       this.stoppedRestarting = false;
+       this.log.shell('restarting the engine (asked for)');
+-      await this._launch('restarting', false, this.gen);
+-      return this.state === 'running'
+-        ? { ok: true, reason: null }
+-        : { ok: false, reason: this.lastExit?.reason ?? "The engine didn't start." };
+-    });
+-  }
+-
+-  // GET /api/jobs, validated. [] when no engine is running (nothing can be transcribing);
+-  // null when the list cannot be known (timeout, error status, bad JSON, wrong shape):
+-  // a slow engine may still be transcribing.
+-  async jobs() {
+-    if (this.state !== 'running') return [];
+-    try {
+-      const res = await fetch(this._url('/api/jobs'), { signal: AbortSignal.timeout(2000) });
+-      if (!res.ok) return null;
+-      return logic.validJobs(await res.json());
+-    } catch {
+-      return null;
++      this._set('restarting');
++      let ready;
++      if (run) {
++        run.restartRequested = true;
++        await this._cancel(run, 'stopping the engine');
++        ready = await (run.next ?? false);
++      } else {
++        ready = await this._launch('restarting', false);
++      }
++      return ready ? { ok: true, reason: null } : { ok: false, reason: this.lastExit?.reason ?? "The engine didn't start." };
++    } finally {
++      this.restartPending = false;
+     }
+   }
+ 
+-  // At quit, without waiting (a logout will not wait): close stdin and SIGTERM our own child.
+-  // The engine shuts down on either (slice 2a) and exits hard if that takes over 10 s.
+-  stopForQuit() {
+-    this.gen++;
+-    const child = this.child;
+-    if (!child || exited(child)) return;
+-    this.log.shell(`quitting: stopping the engine (pid ${child.pid})`);
+-    child.stdin.end();
+-    killGroup(child, 'SIGTERM');
++  // [] when no engine is running (nothing can be transcribing); else the validated list, or null.
++  async jobs() {
++    if (this.state !== 'running' || !this.run) return [];
++    return this.readJobs(this.port);
+   }
+ 
+   async cancelJob(jobId) {
+     try {
+-      await fetch(this._url(`/api/jobs/${encodeURIComponent(jobId)}/cancel`), {
++      await fetch(`http://127.0.0.1:${this.port}/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
+         method: 'POST',
+         signal: AbortSignal.timeout(2000),
+       });
+@@ -431,4 +450,4 @@ class Engine extends EventEmitter {
+   }
+ }
+ 
+-module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, readManifestPort };
++module.exports = { Engine, AppLog, trimLog, portTaken, pickPort, readManifestPort, killGroup, health, jobs };
+diff --git a/desktop/src/logic.js b/desktop/src/logic.js
+index 9e7088e..5bbd354 100644
+--- a/desktop/src/logic.js
++++ b/desktop/src/logic.js
+@@ -114,15 +114,28 @@ function rememberFinished(memory, jobs, hiddenSince) {
+   return memory;
+ }
+ 
+-const FINISHED_ROWS = 5;
++const ROW_CAP = 5; // finished rows, and waiting rows
++
++const NOT_ANSWERING_AFTER = 3; // failed job reads in a row
+ 
+ // What the menu (tray or Dock) says. `actions` are ids main.js turns into menu items.
+-// finished: rememberFinished's jobs.
+-function menuModel({ engineState, stoppedRestarting, jobs = [], finished = [], quitWhenDone = false }) {
++// finished: rememberFinished's jobs. failedReads: job reads that failed in a row; from three on,
++// the header says the engine is not answering (the rows are the last list it gave).
++function menuModel(input) {
++  const model = menuState(input);
++  if (input.engineState === 'running' && (input.failedReads ?? 0) >= NOT_ANSWERING_AFTER) model.header += ' · not answering';
++  return model;
++}
++
++function menuState({ engineState, stoppedRestarting, jobs = [], finished = [], quitWhenDone = false }) {
+   const active = jobs.filter(isActive);
+   const running = active.filter((j) => j.status === 'running').length;
+   const waiting = active.length - running;
+-  const activeRows = active.map((j) => ({ label: jobName(j), stage: stageWord(j) }));
++  // Running rows always (at most two run at once); waiting rows capped like finished ones.
++  const row = (j) => ({ label: jobName(j), stage: stageWord(j) });
++  const queued = active.filter((j) => j.status !== 'running');
++  const activeRows = [...active.filter((j) => j.status === 'running').map(row), ...queued.slice(0, ROW_CAP).map(row)];
++  if (queued.length > ROW_CAP) activeRows.push({ label: `and ${queued.length - ROW_CAP} more`, stage: null });
+ 
+   if (quitWhenDone) {
+     return {
+@@ -148,13 +161,17 @@ function menuModel({ engineState, stoppedRestarting, jobs = [], finished = [], q
+     return { icon: 'plain', header, rows: [], actions: ['open', 'startAtLogin', 'quit'] };
+   }
+ 
+-  // The 5 newest, then one "and N more" line; the header still counts them all.
+-  const newest = [...finished].sort((a, b) => (toMillis(b.completed_at) ?? 0) - (toMillis(a.completed_at) ?? 0));
+-  const finishedRows = newest.slice(0, FINISHED_ROWS).map((j) => ({
++  // Failed first (the row he needs), then newest; 5 rows, then one "and N more" line. The header
++  // still counts them all.
++  const failedFirst = (j) => (j.status === 'failed' ? 1 : 0);
++  const newest = [...finished].sort(
++    (a, b) => failedFirst(b) - failedFirst(a) || (toMillis(b.completed_at) ?? 0) - (toMillis(a.completed_at) ?? 0)
++  );
++  const finishedRows = newest.slice(0, ROW_CAP).map((j) => ({
+     label: jobName(j),
+     stage: j.status === 'completed' ? 'Saved' : 'Failed',
+   }));
+-  if (newest.length > FINISHED_ROWS) finishedRows.push({ label: `and ${newest.length - FINISHED_ROWS} more`, stage: null });
++  if (newest.length > ROW_CAP) finishedRows.push({ label: `and ${newest.length - ROW_CAP} more`, stage: null });
+   const failed = finished.some((j) => j.status === 'failed');
+   const actions = ['open', 'startAtLogin', 'quit'];
+ 
+@@ -215,13 +232,15 @@ function quitQuestion(jobs) {
+   };
+ }
+ 
++// The job list is unknown: the approved three buttons, Quit When Done first (it waits for a
++// known list with nothing left).
+ const UNKNOWN_QUIT = {
+-  type: 'warning',
+-  message: "anyscribe couldn't check for running transcriptions",
+-  detail: 'Quitting now stops any transcription that is still running.',
+-  buttons: ['Quit Anyway', 'Cancel'],
+-  defaultId: 1,
+-  cancelId: 1,
++  type: 'question',
++  message: "anyscribe couldn't check which transcriptions are running",
++  detail: 'Quit when they finish, or stop them now? To finish a stopped one later, transcribe it again.',
++  buttons: ['Quit When Done', 'Stop and Quit', 'Cancel'],
++  defaultId: 0,
++  cancelId: 2,
+ };
+ 
+ // Every quit path (Cmd Q, the menus, logout, shutdown), decided at once from the last poll so
+@@ -229,7 +248,7 @@ const UNKNOWN_QUIT = {
+ // button means. An unknown job list is never read as "no jobs".
+ function quitDecision({ running, known, jobs }) {
+   if (!running) return null;
+-  if (!known) return { box: UNKNOWN_QUIT, choices: ['quit', 'cancel'] };
++  if (!known) return { box: UNKNOWN_QUIT, choices: ['whenDone', 'stopAndQuit', 'cancel'] };
+   const box = quitQuestion(jobs);
+   return box && { box, choices: ['whenDone', 'stopAndQuit', 'cancel'] };
+ }
+diff --git a/desktop/src/main.js b/desktop/src/main.js
+index 7c8bdf2..b08bca1 100644
+--- a/desktop/src/main.js
++++ b/desktop/src/main.js
+@@ -58,6 +58,7 @@ function run() {
+   let tray = null;
+   let latestJobs = []; // the last job list read; kept when a read fails
+   let jobsKnown = true; // false while the last read failed
++  let failedReads = 0; // job reads that failed in a row
+   let hiddenSince = null; // when the dashboard window was last closed; null while it is shown
+   let finished = new Map(); // jobs that finished while it was hidden, by id
+   let quitWhenDone = false;
+@@ -239,6 +240,7 @@ function run() {
+       jobs: latestJobs,
+       finished: [...finished.values()],
+       quitWhenDone,
++      failedReads,
+     });
+     const key = JSON.stringify([model, settings, startsAtLogin(), nativeTheme.shouldUseDarkColors, Boolean(tray)]);
+     if (key === lastMenuKey) return;
+@@ -338,6 +340,7 @@ function run() {
+   async function poll() {
+     const jobs = await engine.jobs();
+     jobsKnown = jobs !== null;
++    failedReads = jobsKnown ? 0 : failedReads + 1;
+     if (jobsKnown) latestJobs = jobs;
+     finished = logic.rememberFinished(finished, latestJobs, hiddenSince);
+     if (quitWhenDone && !quitting && logic.quitWhenDoneReady({ known: jobsKnown, jobs: latestJobs })) return finalQuit();
+diff --git a/desktop/test/engine.test.js b/desktop/test/engine.test.js
+index 4c0edf2..4edc22d 100644
+--- a/desktop/test/engine.test.js
++++ b/desktop/test/engine.test.js
+@@ -1,9 +1,14 @@
+-// The supervisor against a fake engine (test/fake-engine.js) on the real ports 8470/8471.
+-// Tests in this file run one after another; they need both ports free.
++// The supervisor two ways: against a real fake engine process (test/fake-engine.js) on the
++// real ports 8470/8471, and through its seams (spawn, health, jobs, killGroup) with fake
++// children whose fake pids never reach the real process.kill. Tests in this file run one after
++// another; they need both ports free. After every test: at most one live child, and no
++// "running" status was ever emitted for a child that had exited.
+ 'use strict';
+ 
+ const test = require('node:test');
+ const assert = require('node:assert/strict');
++const childProcess = require('node:child_process');
++const EventEmitter = require('node:events');
+ const fs = require('node:fs');
+ const http = require('node:http');
+ const net = require('node:net');
+@@ -22,15 +27,32 @@ function tempHome() {
+   return fs.mkdtempSync(path.join(TMP, 'home-'));
+ }
+ 
+-// Every engine a test made is stopped afterwards, even when its assertions failed.
++const hasExited = (child) => child.exitCode !== null || child.signalCode !== null;
++
++// Every engine a test made is checked against the invariants, then stopped.
+ const made = [];
+ test.afterEach(async () => {
+-  for (const engine of made.splice(0)) await engine.stop();
++  for (const { engine, children, violations } of made.splice(0)) {
++    const live = children.filter((c) => !hasExited(c));
++    await engine.stop();
++    assert.ok(live.length <= 1, `at most one live child, saw ${live.length}`);
++    assert.deepEqual(violations, [], '"running" only while its child is alive');
++  }
+ });
+ 
++function watch(engine, children) {
++  const violations = [];
++  engine.on('status', (s) => {
++    if (s.state === 'running' && (!engine.run?.child || hasExited(engine.run.child))) violations.push('running with no live child');
++  });
++  made.push({ engine, children, violations });
++}
++
++// A real fake engine process.
+ function makeEngine(fakeEnv = {}, opts = {}) {
+   const home = tempHome();
+   const log = new AppLog(path.join(home, '.anyscribe', 'logs', 'app.log'));
++  const children = [];
+   const engine = new Engine({
+     python: process.execPath,
+     prefixArgs: [FAKE],
+@@ -38,10 +60,68 @@ function makeEngine(fakeEnv = {}, opts = {}) {
+     env: { HOME: home, PATH: process.env.PATH, ...fakeEnv },
+     log,
+     stopWaitMs: 1000,
++    spawn: (...args) => {
++      const child = childProcess.spawn(...args);
++      children.push(child);
++      return child;
++    },
+     ...opts,
+   });
+-  made.push(engine);
+-  return { engine, home, log };
++  watch(engine, children);
++  return { engine, home, log, children };
++}
++
++// Fake children and seams: nothing real is spawned, fetched or signalled.
++let nextFakePid = 90_000_000; // above any real pid_max
++class FakeChild extends EventEmitter {
++  constructor() {
++    super();
++    this.pid = nextFakePid++;
++    this.exitCode = null;
++    this.signalCode = null;
++    this.stdin = Object.assign(new EventEmitter(), { ended: false, end() { this.ended = true; } });
++    this.stdout = new EventEmitter();
++    this.stderr = new EventEmitter();
++  }
++  exit(code, signal = null) {
++    if (hasExited(this)) return;
++    this.exitCode = code;
++    this.signalCode = signal;
++    this.emit('exit', code, signal);
++  }
++}
++
++function deferred() {
++  let resolve;
++  const promise = new Promise((r) => (resolve = r));
++  return { promise, resolve };
++}
++
++function makeSeamEngine({ ignoreSignals = false, health, jobs, home = tempHome(), log, ...opts } = {}) {
++  const children = [];
++  const kills = [];
++  const engine = new Engine({
++    python: '/nonexistent/python',
++    home,
++    env: {},
++    log: log ?? new AppLog(path.join(home, '.anyscribe', 'logs', 'app.log')),
++    stopWaitMs: 50,
++    spawn: () => {
++      const child = new FakeChild();
++      children.push(child);
++      return child;
++    },
++    health: health ?? (async () => ({ app: 'anyscribe', pid: children.at(-1)?.pid })),
++    jobs: jobs ?? (async () => []),
++    killGroup: (pid, signal) => {
++      kills.push([pid, signal]);
++      const child = children.find((c) => c.pid === pid);
++      if (child && !ignoreSignals) setImmediate(() => child.exit(null, signal));
++    },
++    ...opts,
++  });
++  watch(engine, children);
++  return { engine, children, kills, home };
+ }
+ 
+ const alive = (pid) => {
+@@ -92,7 +172,7 @@ test('starts, answers, and stops by its own pid', async () => {
+   const { engine, log } = makeEngine();
+   assert.equal(await engine.start(), true);
+   assert.deepEqual(engine.status(), { state: 'running', port: 8470, lastExit: null, stoppedRestarting: false });
+-  const pid = engine.child.pid;
++  const pid = engine.run.child.pid;
+   assert.ok(alive(pid));
+   await engine.stop();
+   assert.equal(engine.status().state, 'stopped');
+@@ -127,24 +207,14 @@ test('an engine that exits early: reason and log lines for the start window', as
+ test('no answer within the time limit: stopped with no reason, child killed', async () => {
+   const { engine } = makeEngine({ FAKE_MODE: 'silent' }, { readyTimeoutMs: 600 });
+   const started = engine.start();
+-  await waitFor(() => engine.child);
+-  const pid = engine.child.pid;
++  await waitFor(() => engine.run?.child);
++  const pid = engine.run.child.pid;
+   assert.equal(await started, false);
+   assert.equal(engine.failure.kind, 'timeout');
+   assert.equal(engine.lastExit.reason, null);
+   await waitFor(() => !alive(pid), 3000);
+ });
+ 
+-test('with --watch-stdin, closing stdin alone stops the engine', async () => {
+-  const { engine } = makeEngine();
+-  await engine.start();
+-  const child = engine.child;
+-  engine.gen++; // a stop: not a crash
+-  child.stdin.end();
+-  await waitFor(() => child.exitCode !== null, 3000);
+-  engine.child = null;
+-});
+-
+ test('guard: three unexpected exits within a minute stop the retries', async () => {
+   const { engine, log } = makeEngine({ FAKE_MODE: 'crash' });
+   const states = [];
+@@ -163,32 +233,23 @@ test('guard: Restart engine is refused while a job is pending or running', async
+   const jobs = [{ job_id: 'a', status: 'running', stage: 'transcribe', url: 'u', title: null }];
+   const { engine } = makeEngine({ FAKE_JOBS: JSON.stringify(jobs) });
+   await engine.start();
+-  const pid = engine.child.pid;
++  const pid = engine.run.child.pid;
+   assert.deepEqual(await engine.restart(), { ok: false, reason: RESTART_REFUSED });
+-  assert.equal(engine.child.pid, pid, 'the same engine is still running');
++  assert.equal(engine.run.child.pid, pid, 'the same engine is still running');
+   await engine.stop();
+ });
+ 
+ test('Restart engine with no jobs restarts it', async () => {
+   const { engine } = makeEngine({ FAKE_JOBS: '[]' });
+   await engine.start();
+-  const pid = engine.child.pid;
++  const pid = engine.run.child.pid;
+   assert.deepEqual(await engine.jobs(), []);
+   assert.deepEqual(await engine.restart(), { ok: true, reason: null });
+-  assert.notEqual(engine.child.pid, pid);
++  assert.notEqual(engine.run.child.pid, pid);
+   assert.equal(alive(pid), false);
+   await engine.stop();
+ });
+ 
+-test('stop kills the engine by pid when it ignores shutdown', async () => {
+-  const { engine, log } = makeEngine({ FAKE_MODE: 'stubborn' }, { stopWaitMs: 500 });
+-  await engine.start();
+-  const pid = engine.child.pid;
+-  await engine.stop();
+-  assert.equal(alive(pid), false);
+-  assert.ok(log.tail().some((l) => l.includes(`killing pid ${pid}`)));
+-});
+-
+ test('log: over 5 MB at launch keeps the last 1 MB from a whole line', () => {
+   const file = path.join(tempHome(), 'app.log');
+   const line = `${'x'.repeat(99)}\n`;
+@@ -237,15 +298,15 @@ test('jobs: a list that cannot be read is unknown (null), never empty (C1)', asy
+ test('Restart engine is refused while the job list is unknown', async () => {
+   const { engine } = makeEngine({ FAKE_JOBS: '[]', FAKE_JOBS_STATUS: '500' });
+   await engine.start();
+-  const pid = engine.child.pid;
++  const pid = engine.run.child.pid;
+   assert.deepEqual(await engine.restart(), { ok: false, reason: RESTART_UNKNOWN });
+-  assert.equal(engine.child.pid, pid);
++  assert.equal(engine.run.child.pid, pid);
+ });
+ 
+ test('stopForQuit: closes stdin and SIGTERMs its own child at once', async () => {
+   const { engine } = makeEngine();
+   await engine.start();
+-  const child = engine.child;
++  const child = engine.run.child;
+   engine.stopForQuit();
+   await waitFor(() => child.exitCode !== null || child.signalCode !== null, 3000);
+ });
+@@ -253,20 +314,20 @@ test('stopForQuit: closes stdin and SIGTERMs its own child at once', async () =>
+ test('guard: a server answering with another pid is not ours (C2)', async () => {
+   const { engine, log } = makeEngine({ FAKE_MODE: 'impostor' });
+   const started = engine.start();
+-  await waitFor(() => engine.child);
+-  const pid = engine.child.pid;
++  await waitFor(() => engine.run?.child);
++  const pid = engine.run.child.pid;
+   assert.equal(await started, false);
+   assert.equal(engine.failure.kind, 'port');
+   assert.equal(engine.lastExit.reason, 'another program is using port 8470');
+-  assert.equal(engine.child, null);
++  assert.equal(engine.run, null);
+   await waitFor(() => !alive(pid), 3000);
+   assert.ok(!log.tail().some((l) => l.includes('engine ready')));
+ });
+ 
+-test('guard: a stop during start sends nothing to a server that is not ours (C2)', async () => {
++test('a stop during start sends nothing to a server that is not ours (C2, A2)', async () => {
+   const { engine } = makeEngine({ FAKE_MODE: 'silent' });
+   const started = engine.start();
+-  await waitFor(() => engine.child);
++  await waitFor(() => engine.run?.child);
+   const requests = [];
+   const other = http.createServer((req, res) => {
+     requests.push(`${req.method} ${req.url}`);
+@@ -278,7 +339,7 @@ test('guard: a stop during start sends nothing to a server that is not ours (C2)
+     await sleep(300);
+     await engine.stop();
+     await started;
+-    assert.ok(!requests.includes('POST /api/shutdown'), requests.join(', '));
++    assert.ok(!requests.some((r) => r.startsWith('POST')), requests.join(', '));
+   } finally {
+     other.close();
+   }
+@@ -286,14 +347,14 @@ test('guard: a stop during start sends nothing to a server that is not ours (C2)
+ 
+ const startedPids = (log) => log.tail(400).flatMap((l) => [...l.matchAll(/engine started \(pid (\d+)/g)].map((m) => Number(m[1])));
+ 
+-test('guard: two restarts at once leave exactly one engine, and it is ours (C4)', async () => {
++test('guard: a second restart while one is pending is refused; one engine, and it is ours (C4, A4)', async () => {
+   const { engine, log } = makeEngine({ FAKE_JOBS: '[]' });
+   await engine.start();
+   const results = await Promise.all([engine.restart(), engine.restart()]);
+-  assert.deepEqual(results, [{ ok: true, reason: null }, { ok: true, reason: null }]);
++  assert.deepEqual(results, [{ ok: true, reason: null }, { ok: false, reason: 'A restart is already under way.' }]);
+   const pids = startedPids(log);
+-  assert.equal(pids.length, 3);
+-  assert.deepEqual(pids.filter(alive), [engine.child.pid], 'only the last engine is alive, and the shell holds it');
++  assert.equal(pids.length, 2);
++  assert.deepEqual(pids.filter(alive), [engine.run.child.pid], 'only the last engine is alive, and the shell holds it');
+ });
+ 
+ test('guard: a stop while restarting after a crash starts nothing new (F3)', async () => {
+@@ -307,7 +368,7 @@ test('guard: a stop while restarting after a crash starts nothing new (F3)', asy
+   await stopped;
+   await sleep(1000);
+   assert.equal(engine.status().state, 'stopped');
+-  assert.equal(engine.child, null);
++  assert.equal(engine.run, null);
+   assert.deepEqual(startedPids(log).filter(alive), [], 'no engine left running');
+   assert.equal(startedPids(log).length, 1, 'no engine started after the stop');
+ });
+@@ -335,11 +396,11 @@ test("guard: an unwritable log folder shows couldn't start, never throws (C9)",
+   log.shell('still kept in memory');
+   assert.match(log.tail().at(-1), /still kept in memory/);
+   const engine = new Engine({ python: process.execPath, prefixArgs: [FAKE], home, env: { HOME: home, PATH: process.env.PATH }, log });
+-  made.push(engine);
++  watch(engine, []);
+   assert.equal(await engine.start(), false);
+   assert.equal(engine.failure.kind, 'log');
+   assert.match(engine.lastExit.reason, /^Can't write the log file: /);
+-  assert.equal(engine.child, null, 'no engine started without a log');
++  assert.equal(engine.run, null, 'no engine started without a log');
+ });
+ 
+ test('guard: stop takes the engine\'s helpers with it (its process group) (S-design-C)', async () => {
+@@ -349,7 +410,7 @@ test('guard: stop takes the engine\'s helpers with it (its process group) (S-des
+     await engine.start();
+     await waitFor(() => /grandchild pid (\d+)/.test(log.tail().join('\n')), 3000);
+     grandchild = Number(log.tail().join('\n').match(/grandchild pid (\d+)/)[1]);
+-    const pid = engine.child.pid;
++    const pid = engine.run.child.pid;
+     assert.ok(alive(grandchild));
+     await engine.stop();
+     assert.equal(alive(pid), false, 'the engine is gone');
+@@ -373,3 +434,99 @@ test("guard: a crashed engine's helpers are stopped with its group (S-open-3)",
+     for (const pid of helpers()) if (alive(pid)) process.kill(pid, 'SIGKILL'); // pids this test read
+   }
+ });
++
++// ---- round 3: the design's tests, through the seams ----
++
++test('guard: a health answer that arrives after the child exited is dropped (A1)', async () => {
++  const reply = deferred();
++  const { engine, children } = makeSeamEngine({ health: () => reply.promise });
++  const states = [];
++  engine.on('status', (s) => states.push(s.state));
++  const started = engine.start();
++  await waitFor(() => children.length === 1);
++  await sleep(20); // the health request is now held open
++  children[0].exit(1);
++  reply.resolve({ app: 'anyscribe', pid: children[0].pid }); // "ours", too late
++  assert.equal(await started, false);
++  await sleep(20);
++  assert.ok(!states.includes('running'), `states: ${states.join(', ')}`);
++  assert.equal(engine.state, 'stopped');
++  assert.equal(engine.failure.kind, 'exited');
++});
++
++for (const how of ['stop', 'stopForQuit']) {
++  test(`guard: a restart whose job read is overtaken by ${how}() starts nothing (A4)`, async () => {
++    const list = deferred();
++    let held = false;
++    const { engine, children } = makeSeamEngine({ jobs: () => ((held = true), list.promise) });
++    assert.equal(await engine.start(), true);
++    const restarting = engine.restart();
++    await waitFor(() => held);
++    const stopped = how === 'stop' ? engine.stop() : engine.stopForQuit();
++    list.resolve([]);
++    assert.deepEqual(await restarting, { ok: false, reason: 'The engine was stopped while the restart was being checked.' });
++    await stopped;
++    await sleep(20);
++    assert.equal(children.length, 1, 'no second engine');
++    assert.equal(engine.state, 'stopped');
++  });
++}
++
++test('guard: stop sends no HTTP; stdin, SIGTERM to the group, then SIGKILL after the wait (A2)', async () => {
++  const { engine, children, kills } = makeSeamEngine({ ignoreSignals: true });
++  assert.equal(await engine.start(), true);
++  const child = children[0];
++  const realFetch = globalThis.fetch;
++  const fetched = [];
++  globalThis.fetch = (...args) => (fetched.push(String(args[0])), realFetch(...args));
++  try {
++    const stopped = engine.stop();
++    assert.equal(child.stdin.ended, true, 'stdin closed');
++    assert.deepEqual(kills, [[child.pid, 'SIGTERM']], 'SIGTERM to the group at once');
++    await sleep(120);
++    assert.deepEqual(kills, [[child.pid, 'SIGTERM'], [child.pid, 'SIGKILL']], 'SIGKILL to the group after the wait');
++    child.exit(null, 'SIGKILL');
++    await stopped;
++    assert.deepEqual(fetched, [], 'no request at all during the stop');
++    assert.equal(engine.state, 'stopped');
++  } finally {
++    globalThis.fetch = realFetch;
++  }
++});
++
++test('guard: an unwritable app.log stops the start; Try again after a repair starts it (A3, G6)', async () => {
++  const home = tempHome();
++  const file = path.join(home, '.anyscribe', 'logs', 'app.log');
++  fs.mkdirSync(path.dirname(file), { recursive: true });
++  fs.writeFileSync(file, '');
++  fs.chmodSync(file, 0o444);
++  const log = new AppLog(file);
++  assert.equal(log.error, null, 'the folder and size checks pass: only an append can tell');
++  const { engine, children } = makeSeamEngine({ home, log });
++  try {
++    assert.equal(await engine.start(), false);
++    assert.equal(children.length, 0, 'nothing spawned');
++    assert.equal(engine.failure.kind, 'log');
++    assert.match(engine.lastExit.reason, /^Can't write the log file: EACCES/);
++    fs.chmodSync(file, 0o644);
++    assert.equal(await engine.start(), true, 'Try again');
++    assert.equal(children.length, 1);
++    assert.match(fs.readFileSync(file, 'utf8'), /engine started \(pid \d+, port 8470\)/);
++  } finally {
++    fs.chmodSync(file, 0o644);
++  }
++});
++
++test('guard: an engine that dies before it is ready leaves no helper behind (R2)', async () => {
++  const { engine, log } = makeEngine({ FAKE_MODE: 'die-before-ready', FAKE_GRANDCHILD: '1' });
++  let helper;
++  try {
++    assert.equal(await engine.start(), false);
++    helper = Number(log.tail().join('\n').match(/grandchild pid (\d+)/)[1]);
++    assert.equal(engine.failure.kind, 'exited');
++    await waitFor(() => !alive(helper), 2000).catch(() => {});
++    assert.equal(alive(helper), false, `helper pid ${helper} is gone`);
++  } finally {
++    if (helper && alive(helper)) process.kill(helper, 'SIGKILL'); // the pid this test read
++  }
++});
+diff --git a/desktop/test/fake-engine.js b/desktop/test/fake-engine.js
+index c498164..0306b23 100644
+--- a/desktop/test/fake-engine.js
++++ b/desktop/test/fake-engine.js
+@@ -1,5 +1,6 @@
+ // A stand-in for `python -m anyscribe ui --port N --no-open [--watch-stdin]`, for the tests.
+-// FAKE_MODE: ok | exit-early | crash | silent | stubborn | impostor (answers health with another pid). FAKE_JOBS: JSON for /api/jobs
++// FAKE_MODE: ok | exit-early | crash | silent | stubborn (ignores stdin and SIGTERM) | impostor (answers
++// health with another pid) | die-before-ready (starts its helpers, then exits 1 without serving). FAKE_JOBS: JSON for /api/jobs
+ // (unset: 404). FAKE_GRANDCHILD=1: start a helper that ignores SIGTERM and print its pid.
+ // FAKE_JOBS_STATUS: its HTTP status; FAKE_JOBS_DELAY_MS: answer that late.
+ 'use strict';
+@@ -36,11 +37,6 @@ function serve(listenPort) {
+       res.writeHead(302, { location: 'http://example.invalid/away' });
+       return res.end();
+     }
+-    if (req.method === 'POST' && req.url === '/api/shutdown') {
+-      res.end('{"ok":true}');
+-      if (mode !== 'stubborn') setTimeout(() => process.exit(0), 20);
+-      return;
+-    }
+     res.statusCode = 404;
+     res.end('{}');
+   });
+@@ -49,11 +45,12 @@ function serve(listenPort) {
+ }
+ 
+ console.log(`anyscribe ui → http://127.0.0.1:${port}`);
+-if (mode !== 'silent') serve(port);
++if (mode !== 'silent' && mode !== 'die-before-ready') serve(port);
+ if (process.env.FAKE_GRANDCHILD) {
+   const helper = require('node:child_process').spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1 << 30)"], { stdio: 'ignore' });
+   console.log(`grandchild pid ${helper.pid}`);
+ }
++if (mode === 'die-before-ready') setTimeout(() => process.exit(1), 200);
+ if (mode === 'crash') setTimeout(() => process.exit(1), 300);
+ if (watch && mode !== 'stubborn') process.stdin.on('end', () => process.exit(0)).resume();
+ if (mode === 'stubborn' || mode === 'silent') process.on('SIGTERM', () => {});
+diff --git a/desktop/test/logic.test.js b/desktop/test/logic.test.js
+index 58d2f0b..ab59ecf 100644
+--- a/desktop/test/logic.test.js
++++ b/desktop/test/logic.test.js
+@@ -154,14 +154,14 @@ test('quit: decided at once from the last poll (C1, F1, F2)', () => {
+   assert.deepEqual(busy.choices, ['whenDone', 'stopAndQuit', 'cancel']);
+   const unknown = logic.quitDecision({ running: true, known: false, jobs: [] });
+   assert.deepEqual(unknown.box, {
+-    type: 'warning',
+-    message: "anyscribe couldn't check for running transcriptions",
+-    detail: 'Quitting now stops any transcription that is still running.',
+-    buttons: ['Quit Anyway', 'Cancel'],
+-    defaultId: 1,
+-    cancelId: 1,
++    type: 'question',
++    message: "anyscribe couldn't check which transcriptions are running",
++    detail: 'Quit when they finish, or stop them now? To finish a stopped one later, transcribe it again.',
++    buttons: ['Quit When Done', 'Stop and Quit', 'Cancel'],
++    defaultId: 0,
++    cancelId: 2,
+   });
+-  assert.deepEqual(unknown.choices, ['quit', 'cancel']);
++  assert.deepEqual(unknown.choices, ['whenDone', 'stopAndQuit', 'cancel'], 'G4: the approved three buttons');
+ });
+ 
+ test('Quit When Done waits while the list is unknown', () => {
+@@ -240,7 +240,7 @@ test('menu layout matches mockup section 6: separators and header (F6)', () => {
+   );
+ });
+ 
+-test('menu: finished-while-closed shows the 5 newest, then "and N more" (S-open-4)', () => {
++test('menu: finished-while-closed shows failed first, then the newest, 5 rows, then "and N more" (S-open-4, G1)', () => {
+   const hiddenSince = Date.parse('2026-11-20T14:00:00Z');
+   const done = Array.from({ length: 7 }, (_, i) =>
+     job(i === 0 ? 'failed' : 'completed', { title: `Job ${i}`, completed_at: hiddenSince / 1000 + 10 * (i + 1) })
+@@ -249,12 +249,35 @@ test('menu: finished-while-closed shows the 5 newest, then "and N more" (S-open-
+   assert.equal(m.header, 'anyscribe · 6 saved, 1 failed', 'the header counts all seven');
+   assert.equal(m.icon, 'alert');
+   assert.deepEqual(m.rows, [
++    { label: 'Job 0', stage: 'Failed' }, // the oldest, but the one he needs
+     { label: 'Job 6', stage: 'Saved' },
+     { label: 'Job 5', stage: 'Saved' },
+     { label: 'Job 4', stage: 'Saved' },
+     { label: 'Job 3', stage: 'Saved' },
+-    { label: 'Job 2', stage: 'Saved' },
+     { label: 'and 2 more', stage: null },
+   ]);
+   assert.equal(logic.menuLayout(m).filter((x) => x === 'row').length, 6);
+ });
++
++test('menu: waiting rows are capped at 5 plus "and N more"; running rows always shown (G3)', () => {
++  const jobs = [job('running', { title: 'A', stage: 'transcribe' }), job('running', { title: 'B', stage: 'download' })];
++  for (let i = 0; i < 10; i++) jobs.push(job('pending', { title: `W${i}` }));
++  const expected = [
++    { label: 'A', stage: 'Transcribing' },
++    { label: 'B', stage: 'Downloading' },
++    ...[0, 1, 2, 3, 4].map((i) => ({ label: `W${i}`, stage: 'Waiting' })),
++    { label: 'and 5 more', stage: null },
++  ];
++  const m = logic.menuModel({ engineState: 'running', jobs });
++  assert.equal(m.header, 'Transcribing · 2 running, 10 waiting');
++  assert.deepEqual(m.rows, expected);
++  assert.deepEqual(logic.menuModel({ engineState: 'running', jobs, quitWhenDone: true }).rows, expected);
++});
++
++test('menu: the header says "not answering" from the third failed read in a row (G4)', () => {
++  const jobs = [job('running', { title: 'A', stage: 'transcribe' })];
++  assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 2 }).header, 'Transcribing · 1 running');
++  assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 3 }).header, 'Transcribing · 1 running · not answering');
++  assert.equal(logic.menuModel({ engineState: 'running', jobs: [], failedReads: 5 }).header, 'anyscribe · Ready · not answering');
++  assert.equal(logic.menuModel({ engineState: 'stopped', stoppedRestarting: true, failedReads: 5 }).header, "Engine stopped · couldn't restart");
++});
+diff --git a/docs/building/architecture.md b/docs/building/architecture.md
+index f2900f3..0a71412 100644
+--- a/docs/building/architecture.md
++++ b/docs/building/architecture.md
+@@ -187,23 +187,28 @@ bridge contract.
+   it is shown), the menu layout, the quit decision, the navigation rule, the
+   three-exits-in-60-s crash window.
+ - `src/engine.js`: the supervisor (Node only, tested against
+-  `test/fake-engine.js`). Start, stop and restart run one at a time through a
+-  queue; a stop claims itself at once (a generation number) so a launch under
+-  way stands down. Refuses a port something already answers on or holds; polls
+-  `/api/health` every 100 ms for 60 s and is ready only when its `pid` is the
+-  spawned child's (anything else is another program on the port, sent
+-  nothing); restarts after an unexpected exit until the crash window says
+-  stop; stops by closing stdin, `POST /api/shutdown` (only to its verified
+-  child), 10 s, then a kill of its own child's pid; at quit, closes stdin and
+-  sends SIGTERM without waiting. `jobs()` returns null when the list cannot be
+-  read, never an empty list. Output and `[app]` lines go to
+-  `~/.anyscribe/logs/app.log`; if it cannot be written the start window says so.
++  `test/fake-engine.js`, and through its seams: `spawn`, `health`, `jobs`,
++  `killGroup`). It decides from the child process, not remembered facts: one
++  current run record (`this.run`), set when a start or restart is accepted and
++  cleared only by that child's exit (or a failure before spawn); every late
++  continuation passes one gate (`run === this.run && !run.cancelled`); one exit
++  handler kills the group and decides what next (failure, stop, restart,
++  exited early, crash). Refuses a port something already answers on or holds;
++  polls `/api/health` every 100 ms for 60 s and is ready only when its `pid` is
++  the spawned child's (anything else is another program on the port, sent
++  nothing). The engine is spawned as its own process group; one stop closes
++  stdin, sends SIGTERM to the group and SIGKILLs it after 10 s, with no HTTP
++  request; at quit the same, without waiting, and never spawning again. A
++  second restart while one is pending is refused. `jobs()` returns null when
++  the list cannot be read, never an empty list. Output and `[app]` lines go to
++  `~/.anyscribe/logs/app.log`, probed before every launch; if it cannot be
++  written the start window says so, and Try again probes it again.
+ - `src/main.js`: windows (a local start window, never served by the engine;
+   the dashboard window, which hides on close), single instance, the menu bar
+   (polls `GET /api/jobs` every 2 s; a failed read keeps the last list) and
+   Dock modes, the login item (read from the system), the quit decision on
+   every quit path (made at once from the last poll, so an idle logout goes
+-  through; an unknown list asks Quit Anyway / Cancel), one navigation rule for
++  through; an unknown list asks the same three buttons as a known busy one), one navigation rule for
+   navigations, frames, redirects and popups (outside pages open in the
+   browser, outside frames are blocked), and the preload bridge `window.anyscribeDesktop`
+   (contextIsolation, sandbox, no Node; IPC accepted only from the dashboard's
+diff --git a/docs/building/journal/2026-11-20-mac-app-shell.md b/docs/building/journal/2026-11-20-mac-app-shell.md
+index 523fda1..4ef68c5 100644
+--- a/docs/building/journal/2026-11-20-mac-app-shell.md
++++ b/docs/building/journal/2026-11-20-mac-app-shell.md
+@@ -20,8 +20,9 @@ them `window.anyscribeDesktop` (contract in `desktop/README.md`).
+ - **Three files of logic, split by what they need.** `logic.js` is pure (unit
+   tests), `engine.js` needs only Node (tested against a fake engine, a Node
+   script that answers `/api/health` and `/api/jobs` and can crash, hang, ignore
+-  shutdown or roll forward), `main.js` needs Electron (covered by the
+-  end-to-end run). The quit decision (`decideQuit`) lives in `logic.js` so the
++  stdin and SIGTERM, answer with another pid or die before it is ready, and
++  through seams with fake children), `main.js` needs Electron (covered by the
++  end-to-end run). The quit decision (`quitDecision`) lives in `logic.js` so the
+   "never quit silently during jobs" guard is unit-tested.
+ - **Port guards.** The app refuses a port that answers or cannot be bound.
+   (Round 0 also refused an engine announcing another port; round 1 replaced
+@@ -65,24 +66,57 @@ ones that changed the design:
+   body, so a slow engine read as idle and quitting or restarting went ahead
+   during a transcription. It now validates the list and returns null when it
+   cannot know; Quit When Done and Restart engine wait, and an unknown list at
+-  quit asks "anyscribe couldn't check for running transcriptions" (Quit Anyway,
+-  Cancel).
++  quit asks a question (round 3: "anyscribe couldn't check which transcriptions
++  are running", with Quit When Done, Stop and Quit, Cancel).
+ - **Quit decided at once.** `before-quit` was always prevented and decided
+   later, which on a Mac would cancel every logout. It now decides from the last
+   poll (at most 2 s old): idle quits go ahead and `will-quit` closes stdin and
+   sends SIGTERM. Accepted limit: a job started in those 2 s is not asked about
+-  (the engine has one submitter, its own window; declined C5).
++  (the engine has one submitter, its own window; declined C5). During a
++  logout, any question cancels the logout, because macOS is told before the
++  answer comes (an Electron limit); after Stop and Quit, log out again.
+ - **One lifecycle at a time.** Overlapping restarts or a stop during a crash
+-  restart could orphan or double-start engines. Start, stop and restart now run
+-  through a queue, with a generation number every continuation checks.
++  restart could orphan or double-start engines. Round 1 ran start, stop and
++  restart through a queue with a generation number; round 3 replaced both (see
++  below).
+ - **Ownership by pid.** Readiness needs slice 2a's `/api/health` `pid` to
+-  equal the spawned child; only that child is ever sent `/api/shutdown`.
++  equal the spawned child. (Round 1 also sent `/api/shutdown` only to that
++  child; round 3 removed the HTTP shutdown.)
+ - **Frames and redirects.** `will-frame-navigate` and `will-redirect` now
+   apply the same origin rule as navigation and popups.
+ - **Login item from the system**, finished jobs remembered by id while
+   hidden, logs that never throw, the default title bar for the dashboard
+   window until 2c, and the menu laid out as the mockup draws it.
+ 
++## Round 3: the supervisor rebuilt
++
++The round 2 re-check found four more lifecycle gaps (a health answer accepted
++after the child had exited, a shutdown request that could reach a server that
++took the port after verification, a log error that never cleared and was never
++checked by an append, a restart that adopted a stop's generation). A diagnosis
++found the cause: the supervisor decided from remembered snapshots that each
++needed a hand-placed re-check after every await, and its tests could not hold
++a reply open while an event fired.
++
++The rebuild decides from the child process. One current run record
++(`this.run`) is set when a start or restart is accepted and cleared only by
++that child's exit (or a failure before spawn). Every late continuation (port
++check, health answer, readiness timeout, the jobs read inside restart) passes
++one gate, `run === this.run && !run.cancelled`, and the exit handler clears
++`this.run` first, so a late "ours" is dropped. One exit handler kills the dead
++engine's process group and decides what next. One stop closes stdin, sends
++SIGTERM to the group and SIGKILLs it after 10 s, with no HTTP request (closing
++stdin already does what `/api/shutdown` did). A second restart while one is
++pending is refused, not queued. The log is probed with an empty append before
++every launch, so Try again sees a repair. The constructor takes seams
++(`spawn`, `health`, `jobs`, `killGroup`), and every supervisor test ends with
++an invariant check: at most one live child, and "running" only while its child
++is alive.
++
++The same round: failed jobs sort first in the "finished while closed" rows,
++waiting and quitting rows are capped at 5 plus "and N more", and the menu
++header ends "· not answering" after three failed job reads in a row.
++
+ ## Left for later
+ 
+ - Phase 3: packaging and the bundled Python; stamp the app version from

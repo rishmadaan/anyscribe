@@ -1,0 +1,283 @@
+diff --git a/desktop/README.md b/desktop/README.md
+index 8c40a62..83c99c7 100644
+--- a/desktop/README.md
++++ b/desktop/README.md
+@@ -95,15 +95,18 @@ ANYSCRIBE_DEV_PYTHON=... npm run e2e`) so nothing reaches your desktop session.
+   running" with Quit When Done (default), Stop and Quit, Cancel. Job list
+   unknown (the last read timed out, failed or had the wrong shape): "anyscribe
+   couldn't check which transcriptions are running" with the same three
+-  buttons. Quit When Done quits only on a known list with nothing left.
++  buttons. Quit When Done quits only on a known list with nothing left. Stop
++  and Quit quits straight away: the engine's stop ends every job.
+   A job started in the 2 s before quitting may not be asked about. During a
+   logout, any question cancels the logout (macOS is told before the answer
+   comes); after Stop and Quit, log out again.
+ - **Menu bar**: polls `GET /api/jobs` every 2 s (a failed read keeps the last
+-  list; from the third failed read in a row the header ends "· not answering")
++  list; from the third failed read in a row the header ends "· not answering",
++  or reads "anyscribe · Not answering" when no job is active)
+   and shows Ready, Transcribing with each job's stage, Finished while the
+   window was closed (failed first, then newest), or Engine stopped. Waiting
+-  and finished rows are capped at 5 plus "and N more"; running rows always show. Dock mode: `menubar` (default), `both`, `dock`.
++  and finished rows are capped at 5 plus "and N more waiting" / "and N more
++  finished"; running rows always show. Dock mode: `menubar` (default), `both`, `dock`.
+ 
+ ## The bridge: `window.anyscribeDesktop`
+ 
+diff --git a/desktop/src/engine.js b/desktop/src/engine.js
+index 8dbe498..faa81a2 100644
+--- a/desktop/src/engine.js
++++ b/desktop/src/engine.js
+@@ -355,6 +355,9 @@ class Engine extends EventEmitter {
+   // The one stop: stdin closed, SIGTERM to the group, SIGKILL to the group if no exit comes in
+   // time. No HTTP request: whoever answers on the port later may not be ours. Resolves on exit.
+   stop() {
++    // An explicit stop also revokes a restart's pending relaunch (not in _cancel: restart() sets
++    // the flag and then cancels through it).
++    if (this.run) this.run.restartRequested = false;
+     return this._cancel(this.run, 'stopping the engine');
+   }
+ 
+@@ -434,16 +437,6 @@ class Engine extends EventEmitter {
+     return this.readJobs(this.port);
+   }
+ 
+-  async cancelJob(jobId) {
+-    try {
+-      await fetch(`http://127.0.0.1:${this.port}/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
+-        method: 'POST',
+-        signal: AbortSignal.timeout(2000),
+-      });
+-    } catch {
+-      // the engine stop that follows ends it either way
+-    }
+-  }
+ 
+   _tilde(p) {
+     return p.startsWith(this.home) ? `~${p.slice(this.home.length)}` : p;
+diff --git a/desktop/src/logic.js b/desktop/src/logic.js
+index 5bbd354..bab86cb 100644
+--- a/desktop/src/logic.js
++++ b/desktop/src/logic.js
+@@ -123,7 +123,10 @@ const NOT_ANSWERING_AFTER = 3; // failed job reads in a row
+ // the header says the engine is not answering (the rows are the last list it gave).
+ function menuModel(input) {
+   const model = menuState(input);
+-  if (input.engineState === 'running' && (input.failedReads ?? 0) >= NOT_ANSWERING_AFTER) model.header += ' · not answering';
++  if (input.engineState === 'running' && (input.failedReads ?? 0) >= NOT_ANSWERING_AFTER) {
++    // Idle: "Not answering" replaces "Ready" (they contradict); otherwise it is added.
++    model.header = model.header === 'anyscribe · Ready' ? 'anyscribe · Not answering' : `${model.header} · not answering`;
++  }
+   return model;
+ }
+ 
+@@ -135,7 +138,7 @@ function menuState({ engineState, stoppedRestarting, jobs = [], finished = [], q
+   const row = (j) => ({ label: jobName(j), stage: stageWord(j) });
+   const queued = active.filter((j) => j.status !== 'running');
+   const activeRows = [...active.filter((j) => j.status === 'running').map(row), ...queued.slice(0, ROW_CAP).map(row)];
+-  if (queued.length > ROW_CAP) activeRows.push({ label: `and ${queued.length - ROW_CAP} more`, stage: null });
++  if (queued.length > ROW_CAP) activeRows.push({ label: `and ${queued.length - ROW_CAP} more waiting`, stage: null });
+ 
+   if (quitWhenDone) {
+     return {
+@@ -171,7 +174,7 @@ function menuState({ engineState, stoppedRestarting, jobs = [], finished = [], q
+     label: jobName(j),
+     stage: j.status === 'completed' ? 'Saved' : 'Failed',
+   }));
+-  if (newest.length > ROW_CAP) finishedRows.push({ label: `and ${newest.length - ROW_CAP} more`, stage: null });
++  if (newest.length > ROW_CAP) finishedRows.push({ label: `and ${newest.length - ROW_CAP} more finished`, stage: null });
+   const failed = finished.some((j) => j.status === 'failed');
+   const actions = ['open', 'startAtLogin', 'quit'];
+ 
+diff --git a/desktop/src/main.js b/desktop/src/main.js
+index b08bca1..fa7d075 100644
+--- a/desktop/src/main.js
++++ b/desktop/src/main.js
+@@ -215,7 +215,7 @@ function run() {
+       startAtLogin: { label: 'Start at login', type: 'checkbox', checked: startsAtLogin(), click: (item) => setStartAtLogin(item.checked) },
+       quit: { label: 'Quit anyscribe', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
+       dontQuit: { label: "Don't quit", click: () => ((quitWhenDone = false), refreshMenu()) },
+-      stopAndQuit: { label: 'Stop and quit now', click: () => stopAndQuit() },
++      stopAndQuit: { label: 'Stop and quit now', click: () => finalQuit() },
+     };
+     const rows = [...model.rows];
+     return logic
+@@ -285,20 +285,15 @@ function run() {
+     setImmediate(() => app.quit());
+   }
+ 
+-  async function stopAndQuit() {
+-    const jobs = (await engine.jobs()) ?? latestJobs;
+-    for (const job of jobs) if (logic.isActive(job)) await engine.cancelJob(job.job_id);
+-    finalQuit();
+-  }
+-
+   async function askQuit({ box, choices }) {
+     quitting = true;
+     try {
+       app.focus({ steal: true }); // the question must not open behind the front app
+       const { response } = visible(mainWin) ? await dialog.showMessageBox(mainWin, box) : await dialog.showMessageBox(box);
+       const choice = choices[response] ?? 'cancel';
+-      if (choice === 'quit') return finalQuit();
+-      if (choice === 'stopAndQuit') return await stopAndQuit();
++      // Stop and Quit: straight to the normal quit; the engine's stop (stdin and SIGTERM to its
++      // group, in will-quit) ends every job. No job read, no per-job cancels to wait on.
++      if (choice === 'stopAndQuit') return finalQuit();
+       if (choice === 'whenDone') {
+         quitWhenDone = true;
+         for (const w of [mainWin, startWin]) if (visible(w)) w.hide();
+diff --git a/desktop/test/e2e.js b/desktop/test/e2e.js
+index 6048b66..53c5d4f 100644
+--- a/desktop/test/e2e.js
++++ b/desktop/test/e2e.js
+@@ -236,6 +236,39 @@ async function main() {
+   step('outside frames and redirects never load in the app; outside pages and popups open in the browser', `opened: ${opened().join(', ')}`);
+   app.kill('SIGTERM');
+   await exitOf(app);
++
++  // 10. Stop and Quit quits straight away (G7): no job read, no per-job cancel. The fake engine
++  // answers /api/jobs once with active jobs, then never again. The question's buttons are pressed
++  // by replacing dialog.showMessageBox in the main process with one that answers "Stop and Quit".
++  const jobsPython = path.join(BIN, 'fake-python-jobs');
++  const activeJobs = JSON.stringify([
++    { job_id: 'j1', url: 'https://example.invalid/a', status: 'running', stage: 'transcribe', title: 'A' },
++    { job_id: 'j2', url: 'https://example.invalid/b', status: 'pending', stage: null, title: null },
++  ]);
++  fs.writeFileSync(
++    jobsPython,
++    `#!/bin/sh\nFAKE_JOBS='${activeJobs}' FAKE_JOBS_ANSWERS=1 exec '${process.execPath}' '${path.join(__dirname, 'fake-engine.js')}' "$@"\n`,
++    { mode: 0o755 }
++  );
++  const readyBefore = readyPids().length;
++  app = launch([], jobsPython);
++  await waitFor(() => readyPids().length > readyBefore, 30_000, 'the fake engine to be ready');
++  const fakePid = readyPids().at(-1);
++  await sleep(5000); // one poll answered (two active jobs), later polls hang
++  // The stand-in records the question on stdout, so a quit that asked nothing cannot pass.
++  await inMain(
++    "require('electron').dialog.showMessageBox = async (...a) => { const box = a.at(-1); process.stdout.write('ASKED ' + box.buttons[1] + '\\n'); return { response: 1 }; }, true"
++  ); // "Stop and Quit"
++  const quitAt = Date.now();
++  await inMain("require('electron').app.quit()").catch(() => {});
++  await Promise.race([exitOf(app), sleep(5000)]);
++  const quitMs = Date.now() - quitAt;
++  assert.notEqual(app.exitCode ?? app.signalCode, null, 'the app quit');
++  assert.ok(quitMs < 1000, `Stop and Quit took ${quitMs} ms`);
++  await waitFor(() => !alive(fakePid), 3000, `engine pid ${fakePid} to stop`);
++  assert.match(app.output, /ASKED Stop and Quit/, 'the quit question was asked and answered Stop and Quit');
++  assert.ok(!/fake got POST/.test(logText()), 'no request was sent to the engine');
++  step('Stop and Quit quits at once; the engine stops; no job read or cancel was sent', `${quitMs} ms, pid ${fakePid} gone`);
+ }
+ 
+ main()
+diff --git a/desktop/test/engine.test.js b/desktop/test/engine.test.js
+index 4edc22d..1be81ac 100644
+--- a/desktop/test/engine.test.js
++++ b/desktop/test/engine.test.js
+@@ -530,3 +530,20 @@ test('guard: an engine that dies before it is ready leaves no helper behind (R2)
+     if (helper && alive(helper)) process.kill(helper, 'SIGKILL'); // the pid this test read
+   }
+ });
++
++test('guard: an explicit stop during a restart cancels its relaunch (S3-A1)', async () => {
++  const { engine, children, kills } = makeSeamEngine({ ignoreSignals: true });
++  assert.equal(await engine.start(), true);
++  const old = children[0];
++  const restarting = engine.restart();
++  await waitFor(() => kills.some(([pid, sig]) => pid === old.pid && sig === 'SIGTERM'));
++  const stopped = engine.stop();
++  old.exit(null, 'SIGTERM');
++  const result = await restarting;
++  await stopped;
++  await sleep(20);
++  assert.equal(result.ok, false, 'the overtaken restart reports it did not restart');
++  assert.equal(children.length, 1, 'no second engine');
++  assert.equal(engine.run, null);
++  assert.equal(engine.state, 'stopped');
++});
+diff --git a/desktop/test/fake-engine.js b/desktop/test/fake-engine.js
+index 0306b23..aea97c6 100644
+--- a/desktop/test/fake-engine.js
++++ b/desktop/test/fake-engine.js
+@@ -1,7 +1,8 @@
+ // A stand-in for `python -m anyscribe ui --port N --no-open [--watch-stdin]`, for the tests.
+ // FAKE_MODE: ok | exit-early | crash | silent | stubborn (ignores stdin and SIGTERM) | impostor (answers
+ // health with another pid) | die-before-ready (starts its helpers, then exits 1 without serving). FAKE_JOBS: JSON for /api/jobs
+-// (unset: 404). FAKE_GRANDCHILD=1: start a helper that ignores SIGTERM and print its pid.
++// (unset: 404). FAKE_JOBS_ANSWERS=N: answer /api/jobs N times, then never again. Any POST is
++// written to stderr ("fake got POST …"). FAKE_GRANDCHILD=1: start a helper that ignores SIGTERM and print its pid.
+ // FAKE_JOBS_STATUS: its HTTP status; FAKE_JOBS_DELAY_MS: answer that late.
+ 'use strict';
+ 
+@@ -17,6 +18,7 @@ if (mode === 'exit-early') {
+   process.exit(1);
+ }
+ 
++let answers = 0;
+ function serve(listenPort) {
+   const server = http.createServer((req, res) => {
+     if (req.url === '/api/health') {
+@@ -24,6 +26,10 @@ function serve(listenPort) {
+       const pid = mode === 'impostor' ? process.pid + 1 : process.pid;
+       return res.end(JSON.stringify({ app: 'anyscribe', ok: true, pid }));
+     }
++    if (req.method === 'POST') process.stderr.write(`fake got POST ${req.url}\n`);
++    if (req.url === '/api/jobs' && process.env.FAKE_JOBS_ANSWERS !== undefined && answers++ >= Number(process.env.FAKE_JOBS_ANSWERS)) {
++      return; // never answers again
++    }
+     if (req.url === '/api/jobs' && process.env.FAKE_JOBS) {
+       res.statusCode = Number(process.env.FAKE_JOBS_STATUS || 200);
+       res.setHeader('content-type', 'application/json');
+diff --git a/desktop/test/logic.test.js b/desktop/test/logic.test.js
+index ab59ecf..90bb93e 100644
+--- a/desktop/test/logic.test.js
++++ b/desktop/test/logic.test.js
+@@ -254,7 +254,7 @@ test('menu: finished-while-closed shows failed first, then the newest, 5 rows, t
+     { label: 'Job 5', stage: 'Saved' },
+     { label: 'Job 4', stage: 'Saved' },
+     { label: 'Job 3', stage: 'Saved' },
+-    { label: 'and 2 more', stage: null },
++    { label: 'and 2 more finished', stage: null },
+   ]);
+   assert.equal(logic.menuLayout(m).filter((x) => x === 'row').length, 6);
+ });
+@@ -266,7 +266,7 @@ test('menu: waiting rows are capped at 5 plus "and N more"; running rows always
+     { label: 'A', stage: 'Transcribing' },
+     { label: 'B', stage: 'Downloading' },
+     ...[0, 1, 2, 3, 4].map((i) => ({ label: `W${i}`, stage: 'Waiting' })),
+-    { label: 'and 5 more', stage: null },
++    { label: 'and 5 more waiting', stage: null },
+   ];
+   const m = logic.menuModel({ engineState: 'running', jobs });
+   assert.equal(m.header, 'Transcribing · 2 running, 10 waiting');
+@@ -278,6 +278,7 @@ test('menu: the header says "not answering" from the third failed read in a row
+   const jobs = [job('running', { title: 'A', stage: 'transcribe' })];
+   assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 2 }).header, 'Transcribing · 1 running');
+   assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 3 }).header, 'Transcribing · 1 running · not answering');
+-  assert.equal(logic.menuModel({ engineState: 'running', jobs: [], failedReads: 5 }).header, 'anyscribe · Ready · not answering');
++  assert.equal(logic.menuModel({ engineState: 'running', jobs: [], failedReads: 5 }).header, 'anyscribe · Not answering', 'G9: idle reads Not answering, not Ready');
++  assert.equal(logic.menuModel({ engineState: 'running', jobs, failedReads: 3, quitWhenDone: true }).header, 'Quitting when these finish · not answering');
+   assert.equal(logic.menuModel({ engineState: 'stopped', stoppedRestarting: true, failedReads: 5 }).header, "Engine stopped · couldn't restart");
+ });
+diff --git a/docs/building/journal/2026-11-20-mac-app-shell.md b/docs/building/journal/2026-11-20-mac-app-shell.md
+index 4ef68c5..76de8d7 100644
+--- a/docs/building/journal/2026-11-20-mac-app-shell.md
++++ b/docs/building/journal/2026-11-20-mac-app-shell.md
+@@ -117,6 +117,17 @@ The same round: failed jobs sort first in the "finished while closed" rows,
+ waiting and quitting rows are capped at 5 plus "and N more", and the menu
+ header ends "· not answering" after three failed job reads in a row.
+ 
++## Round 4
++
++An explicit stop now revokes a restart's pending relaunch. Stop and Quit quits
++straight away, with no job read and no per-job cancel requests: jobs live only
++in the engine's memory, a cancel is a flag read at the job's next progress
++event, and the engine's stop (stdin closed, SIGTERM to its group) ends every
++job moments later, so the cancels only added waiting (about 2 s per job when
++the engine is not answering). The cap lines now say "and N more waiting" or
++"and N more finished", and an idle engine that is not answering reads
++"anyscribe · Not answering" instead of "Ready · not answering".
++
+ ## Left for later
+ 
+ - Phase 3: packaging and the bundled Python; stamp the app version from

@@ -29,6 +29,8 @@ build/
 # Node.js (frontend build tooling)
 ui/node_modules/
 ui/dist/
+desktop/node_modules/
+desktop/test/.tmp/
 
 # IDE
 .vscode/

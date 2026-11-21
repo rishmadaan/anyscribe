@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'self'">
+<title>anyscribe</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0B0A0F; --surface: #13121A; --subtle: #1F1E2B; --border: #2A2937;
+    --text: #F0EEF6; --text2: #9895A7; --amber: #F0A050; --red: #F06060;
+    --font: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); -webkit-user-select: none; user-select: none; }
+  .drag { position: fixed; inset: 0 0 auto 0; height: 34px; -webkit-app-region: drag; }
+  main { min-height: 100%; display: grid; place-items: center; padding: 40px 28px 28px; }
+  .inner { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; max-width: 440px; }
+  .name { font-size: 20px; font-weight: 600; margin: 0; }
+  .sub { color: var(--text2); margin: 0; }
+  .bar { width: 160px; height: 3px; border-radius: 3px; background: var(--subtle); overflow: hidden; position: relative; }
+  .bar::after { content: ""; position: absolute; inset: 0; width: 40%; background: var(--amber); border-radius: 3px; animation: slide 1.4s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  @media (prefers-reduced-motion: reduce) { .bar::after { animation: none; width: 100%; opacity: 0.5; } }
+  #failed { align-items: stretch; text-align: left; }
+  .status { display: flex; gap: 8px; align-items: flex-start; }
+  .status svg { flex: none; margin-top: 2px; color: var(--red); }
+  h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: 600 13.5px var(--font); border-radius: 8px; padding: 8px 15px; border: 1px solid transparent; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+  button.main { background: var(--amber); color: #1a1208; }
+  button.link { background: none; color: var(--text2); padding: 8px 4px; text-decoration: underline; text-underline-offset: 3px; font-weight: 500; }
+  button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .logbox { background: #08070B; border: 1px solid var(--subtle); border-radius: 8px; padding: 10px 12px; font: 11.5px/1.6 var(--mono); color: var(--text2); overflow: auto; max-height: 180px; white-space: pre; margin: 0; -webkit-user-select: text; user-select: text; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="drag"></div>
+<main>
+  <div class="inner" id="starting">
+    <img src="../assets/app-icon.png" width="64" height="64" alt="">
+    <p class="name">anyscribe</p>
+    <div class="bar" role="progressbar" aria-label="Starting"></div>
+    <p class="sub">Starting</p>
+  </div>
+  <div class="inner" id="failed" hidden>
+    <div class="status">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <h1>anyscribe couldn't start</h1>
+    </div>
+    <p class="sub" id="message" role="alert"></p>
+    <div class="row">
+      <button class="main" id="retry"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>Try again</button>
+      <button class="link" id="copy">Copy details</button>
+      <button class="link" id="guide">Troubleshooting guide</button>
+    </div>
+    <pre class="logbox" id="log" hidden></pre>
+  </div>
+</main>
+<script src="start.js"></script>
+</body>
+</html>

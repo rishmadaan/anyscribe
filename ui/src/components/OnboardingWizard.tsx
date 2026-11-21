@@ -778,9 +778,10 @@ function StepOfflineOptIn({
   }, [busy, onRunning]);
 
   // A reply handed after mount counts only if nothing newer has spoken: no
-  // accepted read of this step's own and no start sent (review L1).
+  // accepted read of this step's own yet. That is enough, since a start needs
+  // one too: the cards and the pick come from that read (review L1).
   useEffect(() => {
-    if (!adopt || status !== null || startGenRef.current !== 0) return;
+    if (!adopt || status !== null) return;
     onSetEnabled(true);
     if (adopt.setup_last_model) onSelectSize(adopt.setup_last_model);
     setWatching(true);

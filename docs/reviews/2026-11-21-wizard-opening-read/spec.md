@@ -20,6 +20,7 @@ Read Sol's L1 section in full, and the lead's verdict line for L1 in that packet
    
    "Has been shown" is known when the reply lands, so read it from a ref or equivalent, never from a closure captured when the read was sent.
 2. **The step accepts a handed reply only if nothing newer has spoken.** Nothing newer means no accepted status read of its own yet (`status` is still null) and no start request sent in this mount (`startGenRef.current === 0`). On accepting, it does what its own running read does: turn local on, select `setup_last_model` when it is set, and start watching. Otherwise it ignores the reply. A reply present when the step mounts is accepted at mount, as today: watching starts true on the first render, with no render where closing doesn't ask.
+   - *Lead decision, 2026-11-21 (round 0):* the "no start sent" half is dropped. It was an equivalent mutant (Mii_start): a start needs a pick, and the pick comes only from the step's own accepted read, so `status` is already set. The check is `status === null` alone.
 3. **The step remains the one writer of `watched`.** The `onRunning` effect, its single call site and the start-generation counter stay as they are. Don't add a second path that sets `watched` or `confirmClose` from the shell.
 4. **Keep what exists.** Design B's behaviour, the S11, S12, S13 and S14 copy, the bounded sequential reads, Back and Skip, `goWorkspace` and Back clearing the handed reply, and the Mac app's `offerTerminal` path all stay as they are.
 

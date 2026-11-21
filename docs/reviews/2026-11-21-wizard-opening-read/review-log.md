@@ -24,3 +24,18 @@ Outside L1, from the fit report's observation (not a finding): a late opening re
 Round 2: the fit reviewer does not rejoin. The fixes change no copy or screen; the one behaviour change ("Close setup?" now also asks after a Back and return) is the code option the fit report itself gave for F1, and F3's records wording is checked by the correctness re-check.
 
 Round 2 status: C2, C3, F2, F3 FIXED; C1 and F1 PARTLY (R2C1). Cap reached (round 2 of 2 at M) with one UPHELD should-fix code defect: per step 7 at M, the owner chooses between extending to L and the last changes reported as unreviewed.
+Owner's choice (2026-11-21, asked at the cap): "Fix it, check it myself (Recommended)": the lead fixes R2C1 and the change is reported as lead-verified, not reviewed.
+Lead-made changes after the cap, UNREVIEWED, lead-verified (proof.md, "Lead-made change after the round 2 re-check"):
+- 294fb9e: `askOrClose` also asks while a running reply is held for the local step (`adopt && step !== "offline_opt_in"`). Cases R2P, R2K, R2W, R2D fail on 4b7232e and pass after; R2N1 and R2N2 (must not ask) pass on both; mutant without the step check killed by R2N1 and T5.
+- 1395710: Finish forgets a held reply, found by the builder while testing 294fb9e (without it the Mac app's Terminal step asked "Close setup?" after Finish had saved). Stubbed-bridge case fails on a184b18 and passes after; the 2c-ui kit's wizard last-step checks pass 5 of 5.
+- Full harness 43 of 43 on the final bundle index-CsnycLZe.js.
+
+## Cost (phlinux, 2026-11-21 17:27)
+
+| Round | Codex runs | Codex tokens used | Codex minutes | Claude agents | Claude fresh+out tokens | Claude minutes |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0.0 | 1 | 3,133,735 | 167.7 |
+| 1 | 1 | 132,655 | 4.1 | 1 | 135,102 | 3.2 |
+| 2 | 1 | 142,478 | 3.9 | 0 | 0 | 0.0 |
+
+A round run on the other machine is added by running this there. Claude usage counted once per message id; Codex tokens are the last figure Codex prints. A duration shown as ? could not be measured (no rollout file or no timestamps): unknown, not zero. Codex children in T3 and anything on the other machine are not counted here. The lead's own tokens are not separable and are not counted.

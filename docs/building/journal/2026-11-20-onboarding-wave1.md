@@ -203,6 +203,13 @@ the local step: drop", also dropped a reply nothing newer had contradicted
 (every read of the first visit failed, then Back and return), so it became
 "heard: drop".
 
+Round 2 (the cap) found that a reply held for the local step while another
+screen showed (Provider, API key, Workspace, All set) did not make closing
+ask. As the owner chose, the lead fixed it after the cap: closing also asks
+while a running reply is held for the step, and Finish forgets a held reply so
+the Mac app's Terminal step closes as before. These two changes are proven by
+cases that fail on the previous build but were not re-reviewed.
+
 Proof: tab-harness cases for each ordering above, for Back and return, and for
 two replies landing in the same moment, with the existing cases still
 passing; each guard was removed in turn and a named case failed, and a real
